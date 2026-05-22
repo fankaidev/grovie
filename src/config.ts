@@ -11,31 +11,31 @@ const repositoryNameSchema = z.string().regex(
   "must use the owner/repo format",
 );
 
-export const configSchema = z.object({
+export const configSchema = z.strictObject({
   version: z.literal(1),
-  repositories: z.object({
+  repositories: z.strictObject({
     allowed: z.array(repositoryNameSchema).min(1, "must include at least one repository"),
   }),
-  runtime: z.object({
+  runtime: z.strictObject({
     default: z.literal("codex"),
   }),
-  queue: z.object({
+  queue: z.strictObject({
     label: z.string().min(1, "must not be empty"),
   }),
-  branches: z.object({
+  branches: z.strictObject({
     prefix: z.string().min(1, "must not be empty"),
   }),
-  worktrees: z.object({
+  worktrees: z.strictObject({
     cleanup: z.enum(["on-success", "never"]),
   }),
-  pullRequests: z.object({
+  pullRequests: z.strictObject({
     create: z.boolean(),
     draft: z.boolean(),
   }),
-  comments: z.object({
+  comments: z.strictObject({
     mode: z.literal("concise"),
   }),
-  safety: z.object({
+  safety: z.strictObject({
     allowDefaultBranchPush: z.literal(false),
   }),
 });

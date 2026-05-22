@@ -60,6 +60,17 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("rejects unknown config fields through doctor", () => {
+    const cwd = createTmpDir();
+    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+    writeFileSync(join(cwd, ".grovie.yml"), `${readFileSync(join(cwd, ".grovie.yml"), "utf8")}unsupported: true\n`, "utf8");
+
+    expect(runCli(["doctor"], { cwd })).toEqual({
+      exitCode: 1,
+      stderr: expect.stringContaining("Unrecognized key: \"unsupported\""),
+    });
+  });
+
   it("validates the default config through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
