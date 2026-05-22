@@ -17,9 +17,9 @@ grovie run owner/repo#123 --agent codex
 grovie daemon --repo owner/repo --label grovie
 ```
 
-The current implementation includes the initial TypeScript CLI scaffold plus config initialization and validation. `run` and `daemon` remain stubs while later MVP issues fill in agent execution behavior.
+The current implementation includes the initial TypeScript CLI scaffold, config initialization and validation, GitHub access, local run state, and the first Codex runtime adapter. `run` and `daemon` remain stubs while later MVP issues wire those pieces into issue execution behavior.
 
-`grovie init` writes a documented `.grovie.yml` with safe local-runner defaults. Use `grovie init --repo owner/repo` when the repository cannot be inferred from the `origin` remote. `grovie doctor` validates the config and confirms the current `gh` login. Grovie stores local runner state under `~/.grovie/`.
+`grovie init` writes a documented `.grovie.yml` with safe local-runner defaults. Use `grovie init --repo owner/repo` when the repository cannot be inferred from the `origin` remote. `grovie doctor` validates the config and confirms the current `gh` login plus Codex CLI availability. Grovie stores local runner state under `~/.grovie/`.
 
 ## Development
 

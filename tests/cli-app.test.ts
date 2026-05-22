@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli } from "../src/cli-app.js";
 import type { GitHubGateway } from "../src/github.js";
+import type { AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
 
 const tmpDirs: string[] = [];
 
@@ -55,7 +56,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     writeFileSync(join(cwd, ".grovie.yml"), "version: 1\nsafety:\n  allowDefaultBranchPush: true\n", "utf8");
 
-    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway() })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime() })).toEqual({
       exitCode: 1,
       stderr: expect.stringContaining("Invalid .grovie.yml:"),
     });
@@ -66,7 +67,7 @@ describe("CLI command registration", () => {
     runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
     writeFileSync(join(cwd, ".grovie.yml"), `${readFileSync(join(cwd, ".grovie.yml"), "utf8")}unsupported: true\n`, "utf8");
 
-    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway() })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime() })).toEqual({
       exitCode: 1,
       stderr: expect.stringContaining("Unrecognized key: \"unsupported\""),
     });
@@ -76,7 +77,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
 
-    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway() })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime() })).toEqual({
       exitCode: 0,
       stdout: [
         "grovie doctor",
@@ -86,8 +87,37 @@ describe("CLI command registration", () => {
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
-        "Agent runtime checks will be implemented in #6.",
+        "Codex: available (codex-cli 0.133.0).",
       ].join("\n"),
+    });
+  });
+
+  it("reports unavailable Codex runtime through doctor", () => {
+    const cwd = createTmpDir();
+    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+
+    expect(
+      runCli(["doctor"], {
+        cwd,
+        github: fakeGitHubGateway(),
+        runtime: fakeRuntime({
+          available: false,
+          message: "codex command not found",
+        }),
+      }),
+    ).toEqual({
+      exitCode: 1,
+      stdout: [
+        "grovie doctor",
+        "",
+        `Config: ${join(cwd, ".grovie.yml")} is valid.`,
+        "Allowed repositories: fankaidev/grovie",
+        "Default runtime: codex",
+        "Queue label: grovie",
+        "GitHub: authenticated as fankaidev.",
+        "Codex: codex command not found.",
+      ].join("\n"),
+      stderr: "Codex runtime is not available. Install the Codex CLI or choose another runtime when one is supported.",
     });
   });
 
@@ -147,6 +177,23 @@ function createTmpDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "grovie-test-"));
   tmpDirs.push(dir);
   return dir;
+}
+
+function fakeRuntime(availability: Partial<RuntimeAvailability> = {}): AgentRuntime {
+  return {
+    name: "codex",
+    checkAvailability: () => ({
+      runtime: "codex",
+      command: "codex",
+      available: true,
+      version: "codex-cli 0.133.0",
+      message: "available (codex-cli 0.133.0)",
+      ...availability,
+    }),
+    run: () => {
+      throw new Error("runtime run was not expected");
+    },
+  };
 }
 
 function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGateway {
