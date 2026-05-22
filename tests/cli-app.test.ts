@@ -213,6 +213,62 @@ describe("CLI command registration", () => {
       ].join("\n"),
     });
   });
+
+  it("wires explicit daemon repository and label options", async () => {
+    const cwd = createTmpDir();
+    writeFileSync(
+      join(cwd, ".grovie.yml"),
+      [
+        "version: 1",
+        "repositories:",
+        "  allowed:",
+        "    - fankaidev/grovie",
+        "    - fankaidev/other",
+        "runtime:",
+        "  default: codex",
+        "queue:",
+        "  label: grovie",
+        "branches:",
+        "  prefix: grovie/",
+        "worktrees:",
+        "  cleanup: on-success",
+        "pullRequests:",
+        "  create: true",
+        "  draft: false",
+        "comments:",
+        "  mode: concise",
+        "safety:",
+        "  allowDefaultBranchPush: false",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(
+      await runCliAsync(["daemon", "--repo", "fankaidev/other", "--label", "ready", "--once"], {
+        cwd,
+        github: fakeGitHubGateway({
+          listOpenIssues: (repository, label) => {
+            expect(repository).toBe("fankaidev/other");
+            expect(label).toBe("ready");
+
+            return {
+              ok: true,
+              value: [],
+            };
+          },
+        }),
+        runtime: fakeRuntime(),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/other with label ready.",
+      ].join("\n"),
+    });
+  });
 });
 
 function createTmpDir(): string {

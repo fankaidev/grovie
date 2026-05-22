@@ -1,5 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { parseGitHubRemote, renderDefaultConfig } from "../src/config.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { loadConfig, parseGitHubRemote, renderDefaultConfig } from "../src/config.js";
+
+const tmpDirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of tmpDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 describe("config helpers", () => {
   it("parses supported GitHub origin URL formats", () => {
@@ -21,4 +32,44 @@ describe("config helpers", () => {
     expect(config).toContain("label: grovie");
     expect(config).toContain("allowDefaultBranchPush: false");
   });
+
+  it("rejects unsafe and unknown nested config values", () => {
+    const cwd = createTmpDir();
+    writeFileSync(
+      join(cwd, ".grovie.yml"),
+      [
+        "version: 1",
+        "repositories:",
+        "  allowed:",
+        "    - fankaidev/grovie",
+        "runtime:",
+        "  default: codex",
+        "queue:",
+        "  label: grovie",
+        "branches:",
+        "  prefix: grovie/",
+        "worktrees:",
+        "  cleanup: on-success",
+        "pullRequests:",
+        "  create: true",
+        "  draft: false",
+        "comments:",
+        "  mode: concise",
+        "safety:",
+        "  allowDefaultBranchPush: true",
+        "  forcePush: true",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => loadConfig(cwd)).toThrow("safety.allowDefaultBranchPush: Invalid input: expected false");
+    expect(() => loadConfig(cwd)).toThrow("safety: Unrecognized key: \"forcePush\"");
+  });
 });
+
+function createTmpDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "grovie-config-"));
+  tmpDirs.push(dir);
+  return dir;
+}
