@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -145,6 +145,48 @@ describe("CodexRuntime", () => {
     expect(readFileSync(run.stdoutPath, "utf8")).toBe("partial output\n");
     expect(readFileSync(run.stderrPath, "utf8")).toBe("codex failed\n");
     expect(readFileSync(run.eventsPath, "utf8")).toContain('"exitCode":2');
+  });
+
+  it("terminates a monitored Codex process when cancellation is requested", async () => {
+    const root = createTmpDir();
+    const binDir = join(root, "bin");
+    const oldPath = process.env.PATH;
+    const run = fakeRun(root);
+
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(
+      join(binDir, "codex"),
+      "#!/bin/sh\ntrap 'echo terminated >&2; exit 130' TERM\nwhile true; do sleep 1; done\n",
+      "utf8",
+    );
+    chmodSync(join(binDir, "codex"), 0o755);
+    process.env.PATH = `${binDir}:${oldPath ?? ""}`;
+
+    try {
+      const runtime = new CodexRuntime();
+      const result = await runtime.runAsync({
+        run,
+        issue: fakeIssue(),
+        monitor: {
+          heartbeatIntervalMs: 10,
+          shouldCancel: () => true,
+        },
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        canceled: true,
+        error: {
+          message: "Runtime canceled.",
+        },
+        execution: {
+          canceled: true,
+        },
+      });
+      expect(readFileSync(run.eventsPath, "utf8")).toContain('"canceled":true');
+    } finally {
+      process.env.PATH = oldPath;
+    }
   });
 });
 

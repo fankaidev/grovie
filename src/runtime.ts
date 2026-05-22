@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SpawnCommandRunner, type CommandRunner, type GitHubIssue } from "./github.js";
@@ -15,11 +16,26 @@ export type AgentRuntime = {
   name: "codex";
   checkAvailability(): RuntimeAvailability;
   run(input: AgentRunInput): RuntimeRunResult;
+  runAsync?(input: AgentRunInput): Promise<RuntimeRunResult>;
 };
 
 export type AgentRunInput = {
   run: PreparedRun;
   issue: GitHubIssue;
+  monitor?: RuntimeMonitor;
+};
+
+export type RuntimeMonitor = {
+  heartbeatIntervalMs?: number;
+  onHeartbeat?(event: RuntimeMonitorEvent): void | Promise<void>;
+  shouldCancel?(event: RuntimeMonitorEvent): boolean | Promise<boolean>;
+};
+
+export type RuntimeMonitorEvent = {
+  run: PreparedRun;
+  issue: GitHubIssue;
+  command: string[];
+  startedAt: string;
 };
 
 export type RuntimeExecution = {
@@ -34,6 +50,8 @@ export type RuntimeExecution = {
   worktreeTaskPath: string;
   stdoutPath: string;
   stderrPath: string;
+  signal?: string;
+  canceled?: boolean;
 };
 
 export type RuntimeRunResult =
@@ -44,6 +62,7 @@ export type RuntimeRunResult =
   | {
     ok: false;
     execution: RuntimeExecution;
+    canceled?: boolean;
     error: {
       message: string;
     };
@@ -77,6 +96,48 @@ export class CodexRuntime implements AgentRuntime {
   }
 
   run(input: AgentRunInput): RuntimeRunResult {
+    const preparedInput = prepareCodexInput(input);
+    const result = this.runner.run(preparedInput.command[0] ?? "codex", preparedInput.command.slice(1), preparedInput.prompt, {
+      cwd: input.run.worktreePath,
+      maxBuffer: 1024 * 1024 * 50,
+    });
+
+    return finishCodexRun(input, preparedInput, {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+  }
+
+  async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
+    if (input.monitor === undefined) {
+      return this.run(input);
+    }
+
+    const preparedInput = prepareCodexInput(input);
+    const result = await runMonitoredCommand(input, preparedInput);
+
+    return finishCodexRun(input, preparedInput, result);
+  }
+}
+
+type PreparedCodexInput = {
+  prompt: string;
+  command: string[];
+  worktreeTaskPath: string;
+  worktreePromptPath: string;
+  startedAt: string;
+};
+
+type CodexCommandResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  signal?: string;
+  canceled?: boolean;
+};
+
+function prepareCodexInput(input: AgentRunInput): PreparedCodexInput {
     const task = JSON.parse(readFileSync(input.run.taskPath, "utf8")) as unknown;
     const prompt = buildCodexPrompt({
       issue: input.issue,
@@ -105,7 +166,7 @@ export class CodexRuntime implements AgentRuntime {
     ];
     const startedAt = new Date().toISOString();
     appendRuntimeEvent(input.run, "runtime.started", {
-      runtime: this.name,
+      runtime: "codex",
       command,
       promptPath: input.run.promptPath,
       taskPath: input.run.taskPath,
@@ -113,38 +174,54 @@ export class CodexRuntime implements AgentRuntime {
       worktreeTaskPath,
       startedAt,
     });
-    const result = this.runner.run(command[0] ?? "codex", command.slice(1), prompt, {
-      cwd: input.run.worktreePath,
-      maxBuffer: 1024 * 1024 * 50,
-    });
-    const endedAt = new Date().toISOString();
+
+  return {
+    prompt,
+    command,
+    worktreeTaskPath,
+    worktreePromptPath,
+    startedAt,
+  };
+}
+
+function finishCodexRun(
+  input: AgentRunInput,
+  preparedInput: PreparedCodexInput,
+  result: CodexCommandResult,
+): RuntimeRunResult {
+  const endedAt = new Date().toISOString();
+
+    const execution: RuntimeExecution = {
+      runtime: "codex",
+      command: preparedInput.command,
+      startedAt: preparedInput.startedAt,
+      endedAt,
+      exitCode: result.exitCode,
+      promptPath: input.run.promptPath,
+      taskPath: input.run.taskPath,
+      worktreePromptPath: preparedInput.worktreePromptPath,
+      worktreeTaskPath: preparedInput.worktreeTaskPath,
+      stdoutPath: input.run.stdoutPath,
+      stderrPath: input.run.stderrPath,
+      signal: result.signal,
+      canceled: result.canceled,
+    };
 
     writeFileSync(input.run.stdoutPath, result.stdout, "utf8");
     writeFileSync(input.run.stderrPath, result.stderr, "utf8");
 
-    const execution: RuntimeExecution = {
-      runtime: this.name,
-      command,
-      startedAt,
-      endedAt,
-      exitCode: result.exitCode,
-      promptPath: input.run.promptPath,
-      taskPath: input.run.taskPath,
-      worktreePromptPath,
-      worktreeTaskPath,
-      stdoutPath: input.run.stdoutPath,
-      stderrPath: input.run.stderrPath,
-    };
     appendRuntimeEvent(input.run, "runtime.finished", {
-      runtime: this.name,
+      runtime: "codex",
       exitCode: result.exitCode,
-      startedAt,
+      signal: result.signal,
+      canceled: result.canceled,
+      startedAt: preparedInput.startedAt,
       endedAt,
       stdoutPath: input.run.stdoutPath,
       stderrPath: input.run.stderrPath,
     });
 
-    if (result.exitCode === 0) {
+    if (result.exitCode === 0 && result.canceled !== true) {
       return {
         ok: true,
         execution,
@@ -154,11 +231,97 @@ export class CodexRuntime implements AgentRuntime {
     return {
       ok: false,
       execution,
+      canceled: result.canceled,
       error: {
-        message: result.stderr.trim() || result.stdout.trim() || `codex exec failed with exit code ${result.exitCode}.`,
+        message:
+          result.canceled === true
+            ? "Runtime canceled."
+            : result.stderr.trim() || result.stdout.trim() || `codex exec failed with exit code ${result.exitCode}.`,
       },
     };
-  }
+}
+
+function runMonitoredCommand(input: AgentRunInput, preparedInput: PreparedCodexInput): Promise<CodexCommandResult> {
+  return new Promise((resolve) => {
+    const child = spawn(preparedInput.command[0] ?? "codex", preparedInput.command.slice(1), {
+      cwd: input.run.worktreePath,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    const event = {
+      run: input.run,
+      issue: input.issue,
+      command: preparedInput.command,
+      startedAt: preparedInput.startedAt,
+    };
+    let canceled = false;
+    let finished = false;
+    let checking = false;
+
+    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    child.stdin.end(preparedInput.prompt);
+
+    const cancelChild = () => {
+      if (finished || canceled) {
+        return;
+      }
+
+      canceled = true;
+      child.kill("SIGTERM");
+      setTimeout(() => {
+        if (!finished) {
+          child.kill("SIGKILL");
+        }
+      }, 5_000).unref();
+    };
+
+    const heartbeat = async () => {
+      if (checking || finished) {
+        return;
+      }
+
+      checking = true;
+
+      try {
+        await input.monitor?.onHeartbeat?.(event);
+
+        if ((await input.monitor?.shouldCancel?.(event)) === true) {
+          cancelChild();
+        }
+      } finally {
+        checking = false;
+      }
+    };
+
+    const timer = setInterval(() => {
+      void heartbeat();
+    }, input.monitor?.heartbeatIntervalMs ?? 10_000);
+
+    child.on("error", (error) => {
+      finished = true;
+      clearInterval(timer);
+      resolve({
+        exitCode: 1,
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stderr: error.message,
+        canceled,
+      });
+    });
+
+    child.on("close", (code, signal) => {
+      finished = true;
+      clearInterval(timer);
+      resolve({
+        exitCode: code ?? 130,
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stderr: Buffer.concat(stderrChunks).toString("utf8"),
+        signal: signal ?? undefined,
+        canceled,
+      });
+    });
+  });
 }
 
 export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; task: unknown }): string {

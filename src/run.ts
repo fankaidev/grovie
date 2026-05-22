@@ -8,7 +8,7 @@ import {
   type IssueReference,
 } from "./github.js";
 import { buildBranchName, buildRunId, LocalState, type LocalStatePaths, type PreparedRun } from "./local-state.js";
-import { CodexRuntime, type AgentRuntime, type RuntimeRunResult } from "./runtime.js";
+import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
 
 export type RunIssueInput = {
   issueReference: IssueReference;
@@ -24,6 +24,11 @@ export type RunIssueResult = {
   exitCode: number;
   stdout?: string;
   stderr?: string;
+  canceled?: boolean;
+};
+
+export type RunIssueAsyncInput = RunIssueInput & {
+  monitor?: RuntimeMonitor;
 };
 
 export type RunLocalState = {
@@ -40,7 +45,7 @@ export type RunLocalState = {
 };
 
 type RunSummary = {
-  status: "success" | "failure";
+  status: "success" | "failure" | "canceled";
   issue: GitHubIssue;
   runId: string;
   branchName: string;
@@ -51,12 +56,76 @@ type RunSummary = {
 };
 
 export function runIssue(input: RunIssueInput): RunIssueResult {
+  const prepared = prepareIssueRun(input);
+
+  if (!prepared.ok) {
+    return prepared.result;
+  }
+
+  return finishRun({
+    ...prepared,
+    issueReference: input.issueReference,
+    github: input.github,
+    agent: input.agent,
+    runtimeResult: prepared.runtime.run({
+      run: prepared.run,
+      issue: prepared.issue,
+    }),
+  });
+}
+
+export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssueResult> {
+  const prepared = prepareIssueRun(input);
+
+  if (!prepared.ok) {
+    return prepared.result;
+  }
+
+  const runtimeResult =
+    prepared.runtime.runAsync === undefined
+      ? prepared.runtime.run({
+        run: prepared.run,
+        issue: prepared.issue,
+        monitor: input.monitor,
+      })
+      : await prepared.runtime.runAsync({
+        run: prepared.run,
+        issue: prepared.issue,
+        monitor: input.monitor,
+      });
+
+  return finishRun({
+    ...prepared,
+    issueReference: input.issueReference,
+    github: input.github,
+    agent: input.agent,
+    runtimeResult,
+  });
+}
+
+type PreparedIssueRun =
+  | {
+    ok: true;
+    issue: GitHubIssue;
+    run: PreparedRun;
+    localState: RunLocalState;
+    runtime: AgentRuntime;
+  }
+  | {
+    ok: false;
+    result: RunIssueResult;
+  };
+
+function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   const repository = `${input.issueReference.owner}/${input.issueReference.repo}`;
 
   if (!input.config.repositories.allowed.includes(repository)) {
     return {
-      exitCode: 1,
-      stderr: `Repository ${repository} is not allowed by ${input.configPath}.`,
+      ok: false,
+      result: {
+        exitCode: 1,
+        stderr: `Repository ${repository} is not allowed by ${input.configPath}.`,
+      },
     };
   }
 
@@ -64,8 +133,11 @@ export function runIssue(input: RunIssueInput): RunIssueResult {
 
   if (!issueResult.ok) {
     return {
-      exitCode: 1,
-      stderr: issueResult.error.message,
+      ok: false,
+      result: {
+        exitCode: 1,
+        stderr: issueResult.error.message,
+      },
     };
   }
 
@@ -100,15 +172,21 @@ export function runIssue(input: RunIssueInput): RunIssueResult {
 
     if (!commentResult.ok) {
       return {
-        exitCode: 1,
-        stderr: `${summary.error}\nFailed to post result comment: ${commentResult.error.message}`,
+        ok: false,
+        result: {
+          exitCode: 1,
+          stderr: `${summary.error}\nFailed to post result comment: ${commentResult.error.message}`,
+        },
       };
     }
 
     return {
-      exitCode: 1,
-      stdout: renderCliRunOutput({ ...summary, comment: commentResult.value }),
-      stderr: summary.error,
+      ok: false,
+      result: {
+        exitCode: 1,
+        stdout: renderCliRunOutput({ ...summary, comment: commentResult.value }),
+        stderr: summary.error,
+      },
     };
   }
 
@@ -116,25 +194,39 @@ export function runIssue(input: RunIssueInput): RunIssueResult {
     runtime: input.agent,
   });
 
-  const runtimeResult = runtime.run({
-    run,
+  return {
+    ok: true,
     issue,
-  });
+    run,
+    localState,
+    runtime,
+  };
+}
+
+function finishRun(input: {
+  issue: GitHubIssue;
+  run: PreparedRun;
+  localState: RunLocalState;
+  issueReference: IssueReference;
+  github: GitHubGateway;
+  agent: "codex";
+  runtimeResult: RuntimeRunResult;
+}): RunIssueResult {
   const summary = runSummaryFromRuntimeResult({
-    issue,
-    run,
-    runtimeResult,
+    issue: input.issue,
+    run: input.run,
+    runtimeResult: input.runtimeResult,
   });
 
-  localState.appendEvent(run, runtimeResult.ok ? "run.succeeded" : "run.failed", {
+  input.localState.appendEvent(input.run, runEventType(input.runtimeResult), {
     runtime: input.agent,
-    exitCode: runtimeResult.execution.exitCode,
+    exitCode: input.runtimeResult.execution.exitCode,
   });
 
   const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
 
   if (!commentResult.ok) {
-    localState.appendEvent(run, "comment.failed", {
+    input.localState.appendEvent(input.run, "comment.failed", {
       message: commentResult.error.message,
     });
 
@@ -142,18 +234,20 @@ export function runIssue(input: RunIssueInput): RunIssueResult {
       exitCode: 1,
       stdout: renderCliRunOutput(summary),
       stderr: `Failed to post result comment: ${commentResult.error.message}`,
+      canceled: summary.status === "canceled" ? true : undefined,
     };
   }
 
-  localState.appendEvent(run, "comment.created", {
+  input.localState.appendEvent(input.run, "comment.created", {
     id: commentResult.value.id,
     url: commentResult.value.url,
   });
 
   return {
-    exitCode: summary.status === "success" ? 0 : 1,
+    exitCode: summary.status === "failure" ? 1 : 0,
     stdout: renderCliRunOutput({ ...summary, comment: commentResult.value }),
     stderr: summary.error,
+    canceled: summary.status === "canceled" ? true : undefined,
   };
 }
 
@@ -202,7 +296,7 @@ function runSummaryFromRuntimeResult(input: {
   runtimeResult: RuntimeRunResult;
 }): RunSummary {
   return {
-    status: input.runtimeResult.ok ? "success" : "failure",
+    status: input.runtimeResult.ok ? "success" : input.runtimeResult.canceled === true ? "canceled" : "failure",
     issue: input.issue,
     runId: input.run.runId,
     branchName: input.run.branchName,
@@ -214,7 +308,7 @@ function runSummaryFromRuntimeResult(input: {
 
 function renderRunComment(summary: RunSummary): string {
   const lines = [
-    `Grovie run ${summary.status === "success" ? "completed" : "failed"}.`,
+    `Grovie run ${runStatusVerb(summary.status)}.`,
     "",
     `- Result: ${summary.status}`,
     `- Runtime: ${summary.runtime}`,
@@ -229,6 +323,26 @@ function renderRunComment(summary: RunSummary): string {
   }
 
   return lines.join("\n");
+}
+
+function runEventType(runtimeResult: RuntimeRunResult): "run.succeeded" | "run.failed" | "run.canceled" {
+  if (runtimeResult.ok) {
+    return "run.succeeded";
+  }
+
+  return runtimeResult.canceled === true ? "run.canceled" : "run.failed";
+}
+
+function runStatusVerb(status: RunSummary["status"]): string {
+  if (status === "success") {
+    return "completed";
+  }
+
+  if (status === "failure") {
+    return "failed";
+  }
+
+  return status;
 }
 
 function renderCliRunOutput(summary: RunSummary): string {
