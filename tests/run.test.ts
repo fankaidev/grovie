@@ -8,6 +8,7 @@ import type {
 } from "../src/github.js";
 import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import { runIssue, runIssueAsync, type RunLocalState } from "../src/run.js";
+import type { HandleRunResultResult, ResultHandler } from "../src/result.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
 
 describe("runIssue", () => {
@@ -31,6 +32,11 @@ describe("runIssue", () => {
       github,
       localState,
       runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      }),
     });
 
     expect(result).toEqual({
@@ -44,6 +50,7 @@ describe("runIssue", () => {
         "Run id: fankaidev-grovie-issue-7",
         "Run directory: /tmp/grovie/runs/fankaidev-grovie-issue-7",
         "Comment: https://github.com/fankaidev/grovie/issues/7#issuecomment-1",
+        "Changes: none",
       ].join("\n"),
       stderr: undefined,
     });
@@ -60,8 +67,14 @@ describe("runIssue", () => {
     });
     expect(runtime.runInput?.run).toBe(localState.run);
     expect(github.comments[0]).toContain("Grovie run completed.");
+    expect(github.comments[0]).toContain("- Changes: none");
     expect(github.comments[0]).toContain("- Branch: `grovie/issue-7` (local; not pushed)");
-    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.succeeded", "comment.created"]);
+    expect(localState.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "result.handled",
+      "run.succeeded",
+      "comment.created",
+    ]);
   });
 
   it("posts a concise failure comment when the runtime fails", () => {
@@ -95,6 +108,49 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("Grovie run failed.");
     expect(github.comments[0]).toContain("- Error: codex failed");
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.failed", "comment.created"]);
+  });
+
+  it("includes pull request output when result handling creates one", () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "pull-request",
+        status: " M src/index.ts\n",
+        validationSummary: "pnpm check passed",
+        commitSha: "abc123",
+        pullRequest: {
+          number: 20,
+          url: "https://github.com/fankaidev/grovie/pull/20",
+        },
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Pull request: https://github.com/fankaidev/grovie/pull/20");
+    expect(github.comments[0]).toContain("- Pull request: https://github.com/fankaidev/grovie/pull/20");
+    expect(localState.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "result.handled",
+      "run.succeeded",
+      "comment.created",
+    ]);
   });
 
   it("posts a canceled comment when the async runtime is canceled", async () => {
@@ -309,6 +365,14 @@ class FakeRuntime implements AgentRuntime {
 
   run(input: AgentRunInput): RuntimeRunResult {
     this.runInput = input;
+    return this.result;
+  }
+}
+
+class FakeResultHandler implements ResultHandler {
+  constructor(private readonly result: HandleRunResultResult) {}
+
+  handle(): HandleRunResultResult {
     return this.result;
   }
 }

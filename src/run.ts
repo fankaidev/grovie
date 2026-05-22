@@ -8,6 +8,7 @@ import {
   type IssueReference,
 } from "./github.js";
 import { buildBranchName, buildRunId, LocalState, type LocalStatePaths, type PreparedRun } from "./local-state.js";
+import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
 
 export type RunIssueInput = {
@@ -18,6 +19,7 @@ export type RunIssueInput = {
   github: GitHubGateway;
   runtime?: AgentRuntime;
   localState?: RunLocalState;
+  resultHandler?: ResultHandler;
 };
 
 export type RunIssueResult = {
@@ -51,6 +53,7 @@ type RunSummary = {
   branchName: string;
   runDir: string;
   runtime: "codex";
+  result?: HandleRunResultResult;
   comment?: CreatedComment;
   error?: string;
 };
@@ -67,6 +70,9 @@ export function runIssue(input: RunIssueInput): RunIssueResult {
     issueReference: input.issueReference,
     github: input.github,
     agent: input.agent,
+    config: input.config,
+    configPath: input.configPath,
+    resultHandler: input.resultHandler,
     runtimeResult: prepared.runtime.run({
       run: prepared.run,
       issue: prepared.issue,
@@ -99,6 +105,9 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
     issueReference: input.issueReference,
     github: input.github,
     agent: input.agent,
+    config: input.config,
+    configPath: input.configPath,
+    resultHandler: input.resultHandler,
     runtimeResult,
   });
 }
@@ -210,12 +219,44 @@ function finishRun(input: {
   issueReference: IssueReference;
   github: GitHubGateway;
   agent: "codex";
+  config: GrovieConfig;
+  configPath: string;
+  resultHandler?: ResultHandler;
   runtimeResult: RuntimeRunResult;
 }): RunIssueResult {
+  let result: HandleRunResultResult | undefined;
+  let resultError: string | undefined;
+
+  if (input.runtimeResult.ok) {
+    const handler = input.resultHandler ?? new GitResultHandler(input.github);
+
+    try {
+      result = handler.handle({
+        run: input.run,
+        issue: input.issue,
+        config: input.config,
+        configPath: input.configPath,
+        repository: `${input.issue.reference.owner}/${input.issue.reference.repo}`,
+        runtime: input.agent,
+        execution: input.runtimeResult.execution,
+      });
+      input.localState.appendEvent(input.run, "result.handled", {
+        kind: result.kind,
+      });
+    } catch (error) {
+      resultError = toErrorMessage(error);
+      input.localState.appendEvent(input.run, "result.failed", {
+        message: resultError,
+      });
+    }
+  }
+
   const summary = runSummaryFromRuntimeResult({
     issue: input.issue,
     run: input.run,
     runtimeResult: input.runtimeResult,
+    result,
+    resultError,
   });
 
   input.localState.appendEvent(input.run, runEventType(input.runtimeResult), {
@@ -294,15 +335,26 @@ function runSummaryFromRuntimeResult(input: {
   issue: GitHubIssue;
   run: PreparedRun;
   runtimeResult: RuntimeRunResult;
+  result?: HandleRunResultResult;
+  resultError?: string;
 }): RunSummary {
+  const status = input.runtimeResult.ok
+    ? input.resultError === undefined
+      ? "success"
+      : "failure"
+    : input.runtimeResult.canceled === true
+      ? "canceled"
+      : "failure";
+
   return {
-    status: input.runtimeResult.ok ? "success" : input.runtimeResult.canceled === true ? "canceled" : "failure",
+    status,
     issue: input.issue,
     runId: input.run.runId,
     branchName: input.run.branchName,
     runDir: input.run.runDir,
     runtime: input.runtimeResult.execution.runtime,
-    error: input.runtimeResult.ok ? undefined : input.runtimeResult.error.message,
+    result: input.result,
+    error: input.resultError ?? (input.runtimeResult.ok ? undefined : input.runtimeResult.error.message),
   };
 }
 
@@ -320,6 +372,14 @@ function renderRunComment(summary: RunSummary): string {
 
   if (summary.error !== undefined) {
     lines.push(`- Error: ${summarizeError(summary.error)}`);
+  }
+
+  if (summary.result?.kind === "no-changes") {
+    lines.push("- Changes: none");
+  }
+
+  if (summary.result?.kind === "pull-request") {
+    lines.push(`- Pull request: ${summary.result.pullRequest.url}`);
   }
 
   return lines.join("\n");
@@ -358,6 +418,14 @@ function renderCliRunOutput(summary: RunSummary): string {
 
   if (summary.comment !== undefined) {
     lines.push(`Comment: ${summary.comment.url}`);
+  }
+
+  if (summary.result?.kind === "no-changes") {
+    lines.push("Changes: none");
+  }
+
+  if (summary.result?.kind === "pull-request") {
+    lines.push(`Pull request: ${summary.result.pullRequest.url}`);
   }
 
   return lines.join("\n");
