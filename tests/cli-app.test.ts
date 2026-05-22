@@ -44,6 +44,13 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("rejects malformed issue references with extra path segments", () => {
+    expect(runCli(["run", "fankaidev/grovie/extra#2"])).toEqual({
+      exitCode: 1,
+      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 --agent codex",
+    });
+  });
+
   it("accepts the issue reference after options", () => {
     expect(runCli(["run", "--agent", "codex", "fankaidev/grovie#2"])).toEqual({
       exitCode: 0,

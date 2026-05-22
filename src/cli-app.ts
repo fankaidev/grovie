@@ -126,5 +126,5 @@ function stubResult(commandName: string, message: string): CliResult {
 }
 
 function isIssueReference(value: string): boolean {
-  return /^[^/\s#]+\/[^#\s]+#[1-9]\d*$/.test(value);
+  return /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+#[1-9]\d*$/.test(value);
 }
