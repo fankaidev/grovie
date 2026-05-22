@@ -173,6 +173,38 @@ describe("runDaemonCycle", () => {
     ]);
   });
 
+  it("marks a claimed issue failed when the issue runner fails", async () => {
+    const github = new FakeGitHub([fakeIssue()]);
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      workerId: "worker-1",
+      now: () => NOW,
+      issueRunner: () => ({
+        exitCode: 1,
+        stderr: "runtime failed",
+      }),
+    });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      processed: true,
+      stderr: "runtime failed",
+    });
+    expect(github.updatedComments.map((comment) => comment.body)).toEqual([
+      expect.stringContaining("Grovie daemon running."),
+      expect.stringContaining("Grovie daemon failed."),
+    ]);
+    expect(github.updatedComments.at(-1)?.body).toContain(
+      "- Note: Run failed. See the Grovie result comment and local run logs.",
+    );
+  });
+
   it("reclaims a stale visible claim conservatively", async () => {
     const github = new FakeGitHub([
       fakeIssue({

@@ -22,6 +22,18 @@ describe("parseIssueReference", () => {
       },
     });
   });
+
+  it("rejects zero, missing, and non-numeric issue numbers", () => {
+    for (const value of ["fankaidev/grovie#0", "fankaidev/grovie#", "fankaidev/grovie#abc"]) {
+      expect(parseIssueReference(value)).toEqual({
+        ok: false,
+        error: {
+          code: "invalid_issue_reference",
+          message: `Invalid issue reference "${value}". Expected owner/repo#123.`,
+        },
+      });
+    }
+  });
 });
 
 describe("GhGitHubGateway", () => {
