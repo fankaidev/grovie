@@ -33,7 +33,7 @@ const commandDefinitions = [
     usage: "grovie run owner/repo#123 --agent codex",
     issue: "#7",
     run: (args: string[]) => {
-      const issueRef = args.find((arg) => !arg.startsWith("-"));
+      const issueRef = args.find(isIssueReference);
 
       if (issueRef === undefined) {
         return {
@@ -123,4 +123,8 @@ function stubResult(commandName: string, message: string): CliResult {
     exitCode: 0,
     stdout: [`grovie ${commandName}`, "", message].join("\n"),
   };
+}
+
+function isIssueReference(value: string): boolean {
+  return /^[^/\s#]+\/[^#\s]+#[1-9]\d*$/.test(value);
 }

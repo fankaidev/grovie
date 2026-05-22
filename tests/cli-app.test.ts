@@ -36,4 +36,18 @@ describe("CLI command registration", () => {
       stderr: "Missing issue reference. Usage: grovie run owner/repo#123 --agent codex",
     });
   });
+
+  it("does not treat option values as issue references", () => {
+    expect(runCli(["run", "--agent", "codex"])).toEqual({
+      exitCode: 1,
+      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 --agent codex",
+    });
+  });
+
+  it("accepts the issue reference after options", () => {
+    expect(runCli(["run", "--agent", "codex", "fankaidev/grovie#2"])).toEqual({
+      exitCode: 0,
+      stdout: "grovie run\n\nOne-shot execution for fankaidev/grovie#2 will be implemented in #7.",
+    });
+  });
 });
