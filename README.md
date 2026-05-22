@@ -17,7 +17,9 @@ grovie run owner/repo#123 --agent codex
 grovie daemon --repo owner/repo --label grovie
 ```
 
-The current implementation is the initial TypeScript CLI scaffold. The commands are wired as clear stubs while the implementation tasks under the MVP issue tree fill in real behavior.
+The current implementation includes the initial TypeScript CLI scaffold plus config initialization and validation. `run` and `daemon` remain stubs while later MVP issues fill in agent execution behavior.
+
+`grovie init` writes a documented `.grovie.yml` with safe local-runner defaults. Use `grovie init --repo owner/repo` when the repository cannot be inferred from the `origin` remote.
 
 ## Development
 
