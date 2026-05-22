@@ -1,7 +1,13 @@
+import { createConfigFile, inferGitHubRepository, loadConfig } from "./config.js";
+
 export type CliResult = {
   exitCode: number;
   stdout?: string;
   stderr?: string;
+};
+
+export type CliContext = {
+  cwd: string;
 };
 
 type CliCommand = {
@@ -9,23 +15,64 @@ type CliCommand = {
   description: string;
   usage: string;
   issue: string;
-  run: (args: string[]) => CliResult;
+  run: (args: string[], context: CliContext) => CliResult;
 };
 
 const commandDefinitions = [
   {
     name: "init",
     description: "Create the minimal Grovie project config.",
-    usage: "grovie init",
+    usage: "grovie init [--repo owner/repo]",
     issue: "#3",
-    run: () => stubResult("init", "Config initialization will be implemented in #3."),
+    run: (args: string[], context: CliContext) => {
+      const repositoryResult = resolveRepository(args, context.cwd);
+
+      if (!repositoryResult.ok) {
+        return repositoryResult.result;
+      }
+
+      try {
+        createConfigFile(context.cwd, repositoryResult.repository);
+      } catch (error) {
+        return errorResult(error);
+      }
+
+      return {
+        exitCode: 0,
+        stdout: [
+          "grovie init",
+          "",
+          `Created .grovie.yml for ${repositoryResult.repository}.`,
+          "Run `grovie doctor` to validate it.",
+        ].join("\n"),
+      };
+    },
   },
   {
     name: "doctor",
     description: "Check local prerequisites such as gh, git, and agent CLIs.",
     usage: "grovie doctor",
     issue: "#3",
-    run: () => stubResult("doctor", "Environment checks will be implemented in #3, #4, and #6."),
+    run: (_args: string[], context: CliContext) => {
+      try {
+        const loaded = loadConfig(context.cwd);
+
+        return {
+          exitCode: 0,
+          stdout: [
+            "grovie doctor",
+            "",
+            `Config: ${loaded.path} is valid.`,
+            `Allowed repositories: ${loaded.config.repositories.allowed.join(", ")}`,
+            `Default runtime: ${loaded.config.runtime.default}`,
+            `Queue label: ${loaded.config.queue.label}`,
+            "Environment checks will be implemented in #4 and #6.",
+          ].join("\n"),
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
   },
   {
     name: "run",
@@ -56,7 +103,10 @@ const commandDefinitions = [
 
 export const commands: readonly CliCommand[] = commandDefinitions;
 
-export function runCli(args: string[]): CliResult {
+export function runCli(args: string[], context: Partial<CliContext> = {}): CliResult {
+  const cliContext = {
+    cwd: context.cwd ?? process.cwd(),
+  };
   const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const [commandName, ...commandArgs] = normalizedArgs;
 
@@ -83,7 +133,7 @@ export function runCli(args: string[]): CliResult {
     };
   }
 
-  return command.run(commandArgs);
+  return command.run(commandArgs, cliContext);
 }
 
 export function renderHelp(): string {
@@ -127,4 +177,87 @@ function stubResult(commandName: string, message: string): CliResult {
 
 function isIssueReference(value: string): boolean {
   return /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+#[1-9]\d*$/.test(value);
+}
+
+type RepositoryResolution =
+  | {
+    ok: true;
+    repository: string;
+  }
+  | {
+    ok: false;
+    result: CliResult;
+  };
+
+function resolveRepository(args: string[], cwd: string): RepositoryResolution {
+  const repoOption = readStringOption(args, "--repo");
+
+  if (!repoOption.ok) {
+    return {
+      ok: false,
+      result: repoOption.result,
+    };
+  }
+
+  if (repoOption.value !== undefined) {
+    return {
+      ok: true,
+      repository: repoOption.value,
+    };
+  }
+
+  const inferredRepository = inferGitHubRepository(cwd);
+
+  if (inferredRepository === undefined) {
+    return {
+      ok: false,
+      result: {
+        exitCode: 1,
+        stderr: "Could not infer GitHub repository from origin remote. Use: grovie init --repo owner/repo",
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    repository: inferredRepository,
+  };
+}
+
+function readStringOption(
+  args: string[],
+  name: string,
+): { ok: true; value: string | undefined } | { ok: false; result: CliResult } {
+  const index = args.indexOf(name);
+
+  if (index === -1) {
+    return {
+      ok: true,
+      value: undefined,
+    };
+  }
+
+  const value = args[index + 1];
+
+  if (value === undefined || value.startsWith("-")) {
+    return {
+      ok: false,
+      result: {
+        exitCode: 1,
+        stderr: `Missing value for ${name}.`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    value,
+  };
+}
+
+function errorResult(error: unknown): CliResult {
+  return {
+    exitCode: 1,
+    stderr: error instanceof Error ? error.message : String(error),
+  };
 }
