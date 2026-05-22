@@ -94,13 +94,13 @@ export class CodexRuntime implements AgentRuntime {
 
     const command = [
       "codex",
+      "--ask-for-approval",
+      "never",
       "exec",
       "--cd",
       input.run.worktreePath,
       "--sandbox",
       "workspace-write",
-      "--ask-for-approval",
-      "never",
       "-",
     ];
     const startedAt = new Date().toISOString();

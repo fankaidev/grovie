@@ -97,13 +97,13 @@ describe("CodexRuntime", () => {
     expect(runner.calls[0]).toMatchObject({
       command: "codex",
       args: [
+        "--ask-for-approval",
+        "never",
         "exec",
         "--cd",
         run.worktreePath,
         "--sandbox",
         "workspace-write",
-        "--ask-for-approval",
-        "never",
         "-",
       ],
       options: {
