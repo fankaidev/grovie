@@ -110,6 +110,63 @@ describe("GhGitHubGateway", () => {
     ]);
   });
 
+  it("lists open issues by label and skips pull requests", () => {
+    const runner = new FakeRunner([
+      {
+        stdout: JSON.stringify([
+          [
+            {
+              number: 8,
+              title: "Run daemon",
+              labels: [{ name: "grovie" }],
+            },
+            {
+              number: 9,
+              title: "A pull request",
+              labels: [{ name: "grovie" }],
+              pull_request: {},
+            },
+          ],
+        ]),
+      },
+    ]);
+    const gateway = new GhGitHubGateway(runner);
+
+    expect(gateway.listOpenIssues("fankaidev/grovie", "grovie")).toEqual({
+      ok: true,
+      value: [
+        {
+          reference: {
+            owner: "fankaidev",
+            repo: "grovie",
+            number: 8,
+          },
+          title: "Run daemon",
+          labels: ["grovie"],
+        },
+      ],
+    });
+    expect(runner.calls).toEqual([
+      {
+        command: "gh",
+        args: ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/issues?state=open&labels=grovie"],
+        input: undefined,
+      },
+    ]);
+  });
+
+  it("rejects invalid repository names when listing issues", () => {
+    const gateway = new GhGitHubGateway(new FakeRunner([]));
+
+    expect(gateway.listOpenIssues("fankaidev/grovie/extra", "grovie")).toEqual({
+      ok: false,
+      error: {
+        code: "invalid_issue_reference",
+        message: 'Invalid repository "fankaidev/grovie/extra". Expected owner/repo.',
+      },
+    });
+  });
+
   it("adds and removes labels through gh api", () => {
     const runner = new FakeRunner([{ stdout: "[]" }, { stdout: "" }]);
     const gateway = new GhGitHubGateway(runner);

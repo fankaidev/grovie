@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { commands, renderHelp, runCli } from "../src/cli-app.js";
+import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
 import type { GitHubGateway } from "../src/github.js";
 import type { AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
 
@@ -183,6 +183,36 @@ describe("CLI command registration", () => {
       stderr: "Unsupported agent runtime: claude. Only codex is supported.",
     });
   });
+
+  it("runs one daemon polling cycle with the configured repository and label", async () => {
+    const cwd = createTmpDir();
+    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+
+    expect(
+      await runCliAsync(["daemon", "--once"], {
+        cwd,
+        github: fakeGitHubGateway({
+          listOpenIssues: (repository, label) => {
+            expect(repository).toBe("fankaidev/grovie");
+            expect(label).toBe("grovie");
+
+            return {
+              ok: true,
+              value: [],
+            };
+          },
+        }),
+        runtime: fakeRuntime(),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+      ].join("\n"),
+    });
+  });
 });
 
 function createTmpDir(): string {
@@ -218,6 +248,9 @@ function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGatewa
     }),
     readIssue: () => {
       throw new Error("readIssue was not expected");
+    },
+    listOpenIssues: () => {
+      throw new Error("listOpenIssues was not expected");
     },
     addLabels: () => {
       throw new Error("addLabels was not expected");

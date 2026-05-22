@@ -1,4 +1,5 @@
 import { createConfigFile, inferGitHubRepository, loadConfig } from "./config.js";
+import { runDaemon } from "./daemon.js";
 import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { LocalState } from "./local-state.js";
 import { runIssue, type RunLocalState } from "./run.js";
@@ -22,7 +23,7 @@ type CliCommand = {
   description: string;
   usage: string;
   issue: string;
-  run: (args: string[], context: CliContext) => CliResult;
+  run: (args: string[], context: CliContext) => CliResult | Promise<CliResult>;
 };
 
 const commandDefinitions = [
@@ -153,15 +154,66 @@ const commandDefinitions = [
   {
     name: "daemon",
     description: "Watch GitHub issues by label and run them locally.",
-    usage: "grovie daemon --repo owner/repo --label grovie",
+    usage: "grovie daemon --repo owner/repo --label grovie [--once]",
     issue: "#8",
-    run: () => stubResult("daemon", "Issue polling and claim handling will be implemented in #8."),
+    run: (args: string[], context: CliContext) => {
+      const repoOption = readStringOption(args, "--repo");
+
+      if (!repoOption.ok) {
+        return repoOption.result;
+      }
+
+      const labelOption = readStringOption(args, "--label");
+
+      if (!labelOption.ok) {
+        return labelOption.result;
+      }
+
+      try {
+        const loaded = loadConfig(context.cwd);
+        const repository = repoOption.value ?? inferSingleAllowedRepository(loaded.config.repositories.allowed);
+
+        if (repository === undefined) {
+          return {
+            exitCode: 1,
+            stderr: "Missing repository. Usage: grovie daemon --repo owner/repo --label grovie",
+          };
+        }
+
+        return runDaemon({
+          repository,
+          label: labelOption.value ?? loaded.config.queue.label,
+          config: loaded.config,
+          configPath: loaded.path,
+          github: context.github,
+          runtime: context.runtime,
+          localState: context.localState,
+          once: args.includes("--once"),
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
   },
 ] satisfies CliCommand[];
 
 export const commands: readonly CliCommand[] = commandDefinitions;
 
 export function runCli(args: string[], context: Partial<CliContext> = {}): CliResult {
+  const result = runCliInternal(args, context);
+
+  if (isPromise(result)) {
+    throw new Error("Command requires asynchronous execution. Use runCliAsync.");
+  }
+
+  return result;
+}
+
+export async function runCliAsync(args: string[], context: Partial<CliContext> = {}): Promise<CliResult> {
+  return runCliInternal(args, context);
+}
+
+function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliResult | Promise<CliResult> {
   const cliContext = {
     cwd: context.cwd ?? process.cwd(),
     github: context.github ?? new GhGitHubGateway(),
@@ -195,6 +247,10 @@ export function runCli(args: string[], context: Partial<CliContext> = {}): CliRe
   }
 
   return command.run(commandArgs, cliContext);
+}
+
+function isPromise(value: CliResult | Promise<CliResult>): value is Promise<CliResult> {
+  return typeof (value as Promise<CliResult>).then === "function";
 }
 
 export function renderHelp(): string {
@@ -279,6 +335,10 @@ function resolveRepository(args: string[], cwd: string): RepositoryResolution {
     ok: true,
     repository: inferredRepository,
   };
+}
+
+function inferSingleAllowedRepository(allowedRepositories: string[]): string | undefined {
+  return allowedRepositories.length === 1 ? allowedRepositories[0] : undefined;
 }
 
 function readStringOption(

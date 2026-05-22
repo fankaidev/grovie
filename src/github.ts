@@ -66,6 +66,12 @@ export type GitHubIssue = {
   defaultBranch: string;
 };
 
+export type GitHubIssueSummary = {
+  reference: IssueReference;
+  title: string;
+  labels: string[];
+};
+
 export type CreatedComment = {
   id: number;
   body: string;
@@ -88,6 +94,7 @@ export type CreatePullRequestInput = {
 
 export type GitHubGateway = {
   getAuthenticatedUser(): Result<GitHubUser>;
+  listOpenIssues(repository: string, label: string): Result<GitHubIssueSummary[]>;
   readIssue(reference: IssueReference): Result<GitHubIssue>;
   addLabels(reference: IssueReference, labels: string[]): Result<void>;
   removeLabel(reference: IssueReference, label: string): Result<void>;
@@ -111,6 +118,42 @@ export class GhGitHubGateway implements GitHubGateway {
       value: {
         login: result.value.login,
       },
+    };
+  }
+
+  listOpenIssues(repository: string, label: string): Result<GitHubIssueSummary[]> {
+    const parsedRepository = parseRepositoryName(repository);
+
+    if (!parsedRepository.ok) {
+      return parsedRepository;
+    }
+
+    const result = this.apiJson<GitHubIssueListItemResponse[][]>(
+      `repos/${repository}/issues?state=open&labels=${encodeURIComponent(label)}`,
+      {
+        paginate: true,
+        slurp: true,
+      },
+    );
+
+    if (!result.ok) {
+      return result;
+    }
+
+    return {
+      ok: true,
+      value: result.value
+        .flat()
+        .filter((issue) => issue.pull_request === undefined)
+        .map((issue) => ({
+          reference: {
+            owner: parsedRepository.value.owner,
+            repo: parsedRepository.value.repo,
+            number: issue.number,
+          },
+          title: issue.title,
+          labels: issue.labels.map((candidate) => candidate.name),
+        })),
     };
   }
 
@@ -385,6 +428,28 @@ export function formatRepository(reference: Pick<IssueReference, "owner" | "repo
   return `${reference.owner}/${reference.repo}`;
 }
 
+function parseRepositoryName(repository: string): Result<Pick<IssueReference, "owner" | "repo">> {
+  const match = /^(?<owner>[A-Za-z0-9.-]+)\/(?<repo>[A-Za-z0-9._-]+)$/.exec(repository);
+
+  if (match?.groups === undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid_issue_reference",
+        message: `Invalid repository "${repository}". Expected owner/repo.`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      owner: match.groups.owner,
+      repo: match.groups.repo,
+    },
+  };
+}
+
 type GitHubUserResponse = {
   login: string;
 };
@@ -398,6 +463,13 @@ type GitHubIssueResponse = {
   body: string | null;
   state: string;
   labels: GitHubLabel[];
+};
+
+type GitHubIssueListItemResponse = {
+  number: number;
+  title: string;
+  labels: GitHubLabel[];
+  pull_request?: unknown;
 };
 
 type GitHubCommentResponse = {

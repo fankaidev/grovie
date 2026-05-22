@@ -7,7 +7,7 @@ import type {
   IssueReference,
 } from "../src/github.js";
 import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
-import { runIssue, type RunLocalState } from "../src/run.js";
+import { runIssue, runIssueAsync, type RunLocalState } from "../src/run.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
 
 describe("runIssue", () => {
@@ -97,6 +97,43 @@ describe("runIssue", () => {
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.failed", "comment.created"]);
   });
 
+  it("posts a canceled comment when the async runtime is canceled", async () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: false,
+      canceled: true,
+      execution: {
+        ...fakeExecution(localState.run, 130),
+        canceled: true,
+        signal: "SIGTERM",
+      },
+      error: {
+        message: "Runtime canceled.",
+      },
+    });
+
+    const result = await runIssueAsync({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.canceled).toBe(true);
+    expect(result.stdout).toContain("Result: canceled");
+    expect(github.comments[0]).toContain("Grovie run canceled.");
+    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.canceled", "comment.created"]);
+  });
+
   it("posts a failure comment with the deterministic run directory when preparation fails", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState({
@@ -165,6 +202,10 @@ class FakeGitHub implements GitHubGateway {
       ok: true as const,
       value: fakeIssue(reference),
     };
+  }
+
+  listOpenIssues(): ReturnType<GitHubGateway["listOpenIssues"]> {
+    throw new Error("listOpenIssues was not expected");
   }
 
   addLabels(
