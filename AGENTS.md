@@ -18,6 +18,7 @@ Keep the project small:
 - Never push directly to `main`.
 - Open a pull request for every change, including small fixes.
 - Run `pnpm check` before opening a PR when possible.
+- After opening or materially updating a PR, automatically start an independent subagent review. The reviewer should read the linked issue and PR, inspect the diff, check that the implementation matches the issue intent, and submit the result with `gh pr review --comment`.
 - Treat green checks as necessary but not sufficient; compare the final diff against the issue intent.
 
 ## Pull Requests
