@@ -166,9 +166,21 @@ describe("CLI command registration", () => {
   });
 
   it("accepts the issue reference after options", () => {
-    expect(runCli(["run", "--agent", "codex", "fankaidev/grovie#2"])).toEqual({
-      exitCode: 0,
-      stdout: "grovie run\n\nOne-shot execution for fankaidev/grovie#2 will be implemented in #7.",
+    const cwd = createTmpDir();
+
+    expect(runCli(["run", "--agent", "codex", "fankaidev/grovie#2"], { cwd })).toEqual({
+      exitCode: 1,
+      stderr: "Missing .grovie.yml. Run `grovie init` first.",
+    });
+  });
+
+  it("rejects unsupported run agents", () => {
+    const cwd = createTmpDir();
+    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+
+    expect(runCli(["run", "fankaidev/grovie#2", "--agent", "claude"], { cwd })).toEqual({
+      exitCode: 1,
+      stderr: "Unsupported agent runtime: claude. Only codex is supported.",
     });
   });
 });
