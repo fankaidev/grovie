@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli } from "../src/cli-app.js";
+import type { GitHubGateway } from "../src/github.js";
 
 const tmpDirs: string[] = [];
 
@@ -54,7 +55,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     writeFileSync(join(cwd, ".grovie.yml"), "version: 1\nsafety:\n  allowDefaultBranchPush: true\n", "utf8");
 
-    expect(runCli(["doctor"], { cwd })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway() })).toEqual({
       exitCode: 1,
       stderr: expect.stringContaining("Invalid .grovie.yml:"),
     });
@@ -65,7 +66,7 @@ describe("CLI command registration", () => {
     runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
     writeFileSync(join(cwd, ".grovie.yml"), `${readFileSync(join(cwd, ".grovie.yml"), "utf8")}unsupported: true\n`, "utf8");
 
-    expect(runCli(["doctor"], { cwd })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway() })).toEqual({
       exitCode: 1,
       stderr: expect.stringContaining("Unrecognized key: \"unsupported\""),
     });
@@ -75,7 +76,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
 
-    expect(runCli(["doctor"], { cwd })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway() })).toEqual({
       exitCode: 0,
       stdout: [
         "grovie doctor",
@@ -84,8 +85,32 @@ describe("CLI command registration", () => {
         "Allowed repositories: fankaidev/grovie",
         "Default runtime: codex",
         "Queue label: grovie",
-        "Environment checks will be implemented in #4 and #6.",
+        "GitHub: authenticated as fankaidev.",
+        "Agent runtime checks will be implemented in #6.",
       ].join("\n"),
+    });
+  });
+
+  it("reports GitHub authentication errors through doctor", () => {
+    const cwd = createTmpDir();
+    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+
+    expect(
+      runCli(["doctor"], {
+        cwd,
+        github: fakeGitHubGateway({
+          getAuthenticatedUser: () => ({
+            ok: false,
+            error: {
+              code: "gh_failed",
+              message: "gh auth required",
+            },
+          }),
+        }),
+      }),
+    ).toEqual({
+      exitCode: 1,
+      stderr: "gh auth required",
     });
   });
 
@@ -122,4 +147,34 @@ function createTmpDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "grovie-test-"));
   tmpDirs.push(dir);
   return dir;
+}
+
+function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGateway {
+  return {
+    getAuthenticatedUser: () => ({
+      ok: true,
+      value: {
+        login: "fankaidev",
+      },
+    }),
+    readIssue: () => {
+      throw new Error("readIssue was not expected");
+    },
+    addLabels: () => {
+      throw new Error("addLabels was not expected");
+    },
+    removeLabel: () => {
+      throw new Error("removeLabel was not expected");
+    },
+    createIssueComment: () => {
+      throw new Error("createIssueComment was not expected");
+    },
+    updateIssueComment: () => {
+      throw new Error("updateIssueComment was not expected");
+    },
+    createPullRequest: () => {
+      throw new Error("createPullRequest was not expected");
+    },
+    ...overrides,
+  };
 }

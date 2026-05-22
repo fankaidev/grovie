@@ -1,4 +1,5 @@
 import { createConfigFile, inferGitHubRepository, loadConfig } from "./config.js";
+import { formatIssueReference, GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 
 export type CliResult = {
   exitCode: number;
@@ -8,6 +9,7 @@ export type CliResult = {
 
 export type CliContext = {
   cwd: string;
+  github: GitHubGateway;
 };
 
 type CliCommand = {
@@ -56,6 +58,11 @@ const commandDefinitions = [
     run: (_args: string[], context: CliContext) => {
       try {
         const loaded = loadConfig(context.cwd);
+        const authenticatedUser = context.github.getAuthenticatedUser();
+
+        if (!authenticatedUser.ok) {
+          return githubErrorResult(authenticatedUser.error);
+        }
 
         return {
           exitCode: 0,
@@ -66,7 +73,8 @@ const commandDefinitions = [
             `Allowed repositories: ${loaded.config.repositories.allowed.join(", ")}`,
             `Default runtime: ${loaded.config.runtime.default}`,
             `Queue label: ${loaded.config.queue.label}`,
-            "Environment checks will be implemented in #4 and #6.",
+            `GitHub: authenticated as ${authenticatedUser.value.login}.`,
+            "Agent runtime checks will be implemented in #6.",
           ].join("\n"),
         };
       } catch (error) {
@@ -80,7 +88,7 @@ const commandDefinitions = [
     usage: "grovie run owner/repo#123 --agent codex",
     issue: "#7",
     run: (args: string[]) => {
-      const issueRef = args.find(isIssueReference);
+      const issueRef = args.find((arg) => parseIssueReference(arg).ok);
 
       if (issueRef === undefined) {
         return {
@@ -89,7 +97,13 @@ const commandDefinitions = [
         };
       }
 
-      return stubResult("run", `One-shot execution for ${issueRef} will be implemented in #7.`);
+      const parsedIssueReference = parseIssueReference(issueRef);
+
+      if (!parsedIssueReference.ok) {
+        return githubErrorResult(parsedIssueReference.error);
+      }
+
+      return stubResult("run", `One-shot execution for ${formatIssueReference(parsedIssueReference.value)} will be implemented in #7.`);
     },
   },
   {
@@ -106,6 +120,7 @@ export const commands: readonly CliCommand[] = commandDefinitions;
 export function runCli(args: string[], context: Partial<CliContext> = {}): CliResult {
   const cliContext = {
     cwd: context.cwd ?? process.cwd(),
+    github: context.github ?? new GhGitHubGateway(),
   };
   const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const [commandName, ...commandArgs] = normalizedArgs;
@@ -173,10 +188,6 @@ function stubResult(commandName: string, message: string): CliResult {
     exitCode: 0,
     stdout: [`grovie ${commandName}`, "", message].join("\n"),
   };
-}
-
-function isIssueReference(value: string): boolean {
-  return /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+#[1-9]\d*$/.test(value);
 }
 
 type RepositoryResolution =
@@ -259,5 +270,12 @@ function errorResult(error: unknown): CliResult {
   return {
     exitCode: 1,
     stderr: error instanceof Error ? error.message : String(error),
+  };
+}
+
+function githubErrorResult(error: { message: string }): CliResult {
+  return {
+    exitCode: 1,
+    stderr: error.message,
   };
 }
