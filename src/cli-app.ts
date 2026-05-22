@@ -1,5 +1,7 @@
 import { createConfigFile, inferGitHubRepository, loadConfig } from "./config.js";
-import { formatIssueReference, GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
+import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
+import { LocalState } from "./local-state.js";
+import { runIssue, type RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
 
 export type CliResult = {
@@ -12,6 +14,7 @@ export type CliContext = {
   cwd: string;
   github: GitHubGateway;
   runtime: AgentRuntime;
+  localState: RunLocalState;
 };
 
 type CliCommand = {
@@ -100,7 +103,7 @@ const commandDefinitions = [
     description: "Run one GitHub issue through a local agent.",
     usage: "grovie run owner/repo#123 --agent codex",
     issue: "#7",
-    run: (args: string[]) => {
+    run: (args: string[], context: CliContext) => {
       const issueRef = args.find((arg) => parseIssueReference(arg).ok);
 
       if (issueRef === undefined) {
@@ -116,7 +119,35 @@ const commandDefinitions = [
         return githubErrorResult(parsedIssueReference.error);
       }
 
-      return stubResult("run", `One-shot execution for ${formatIssueReference(parsedIssueReference.value)} will be implemented in #7.`);
+      const agentOption = readStringOption(args, "--agent");
+
+      if (!agentOption.ok) {
+        return agentOption.result;
+      }
+
+      try {
+        const loaded = loadConfig(context.cwd);
+        const agent = agentOption.value ?? loaded.config.runtime.default;
+
+        if (agent !== "codex") {
+          return {
+            exitCode: 1,
+            stderr: `Unsupported agent runtime: ${agent}. Only codex is supported.`,
+          };
+        }
+
+        return runIssue({
+          issueReference: parsedIssueReference.value,
+          config: loaded.config,
+          configPath: loaded.path,
+          agent,
+          github: context.github,
+          runtime: context.runtime,
+          localState: context.localState,
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
     },
   },
   {
@@ -135,6 +166,7 @@ export function runCli(args: string[], context: Partial<CliContext> = {}): CliRe
     cwd: context.cwd ?? process.cwd(),
     github: context.github ?? new GhGitHubGateway(),
     runtime: context.runtime ?? new CodexRuntime(),
+    localState: context.localState ?? new LocalState(),
   };
   const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const [commandName, ...commandArgs] = normalizedArgs;
