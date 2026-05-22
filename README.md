@@ -19,7 +19,7 @@ grovie daemon --repo owner/repo --label grovie
 
 The current implementation includes the initial TypeScript CLI scaffold plus config initialization and validation. `run` and `daemon` remain stubs while later MVP issues fill in agent execution behavior.
 
-`grovie init` writes a documented `.grovie.yml` with safe local-runner defaults. Use `grovie init --repo owner/repo` when the repository cannot be inferred from the `origin` remote.
+`grovie init` writes a documented `.grovie.yml` with safe local-runner defaults. Use `grovie init --repo owner/repo` when the repository cannot be inferred from the `origin` remote. `grovie doctor` validates the config and confirms the current `gh` login.
 
 ## Development
 
