@@ -34,14 +34,14 @@ To install the current checkout as a real `grovie` command during development:
 ```sh
 pnpm install
 pnpm build
-npm link
+pnpm link --global
 grovie --help
 ```
 
 To remove the local global command:
 
 ```sh
-npm unlink -g grovie
+pnpm remove --global grovie
 ```
 
 ## Engineering Workflow
