@@ -1,5 +1,6 @@
 import { createConfigFile, inferGitHubRepository, loadConfig } from "./config.js";
 import { formatIssueReference, GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
+import { CodexRuntime, type AgentRuntime } from "./runtime.js";
 
 export type CliResult = {
   exitCode: number;
@@ -10,6 +11,7 @@ export type CliResult = {
 export type CliContext = {
   cwd: string;
   github: GitHubGateway;
+  runtime: AgentRuntime;
 };
 
 type CliCommand = {
@@ -64,18 +66,29 @@ const commandDefinitions = [
           return githubErrorResult(authenticatedUser.error);
         }
 
+        const runtimeAvailability = context.runtime.checkAvailability();
+        const doctorOutput = [
+          "grovie doctor",
+          "",
+          `Config: ${loaded.path} is valid.`,
+          `Allowed repositories: ${loaded.config.repositories.allowed.join(", ")}`,
+          `Default runtime: ${loaded.config.runtime.default}`,
+          `Queue label: ${loaded.config.queue.label}`,
+          `GitHub: authenticated as ${authenticatedUser.value.login}.`,
+          renderStatusLine("Codex", runtimeAvailability.message),
+        ];
+
+        if (!runtimeAvailability.available) {
+          return {
+            exitCode: 1,
+            stdout: doctorOutput.join("\n"),
+            stderr: "Codex runtime is not available. Install the Codex CLI or choose another runtime when one is supported.",
+          };
+        }
+
         return {
           exitCode: 0,
-          stdout: [
-            "grovie doctor",
-            "",
-            `Config: ${loaded.path} is valid.`,
-            `Allowed repositories: ${loaded.config.repositories.allowed.join(", ")}`,
-            `Default runtime: ${loaded.config.runtime.default}`,
-            `Queue label: ${loaded.config.queue.label}`,
-            `GitHub: authenticated as ${authenticatedUser.value.login}.`,
-            "Agent runtime checks will be implemented in #6.",
-          ].join("\n"),
+          stdout: doctorOutput.join("\n"),
         };
       } catch (error) {
         return errorResult(error);
@@ -121,6 +134,7 @@ export function runCli(args: string[], context: Partial<CliContext> = {}): CliRe
   const cliContext = {
     cwd: context.cwd ?? process.cwd(),
     github: context.github ?? new GhGitHubGateway(),
+    runtime: context.runtime ?? new CodexRuntime(),
   };
   const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const [commandName, ...commandArgs] = normalizedArgs;
@@ -278,4 +292,8 @@ function githubErrorResult(error: { message: string }): CliResult {
     exitCode: 1,
     stderr: error.message,
   };
+}
+
+function renderStatusLine(label: string, message: string): string {
+  return `${label}: ${message}${/[.!?]$/.test(message) ? "" : "."}`;
 }
