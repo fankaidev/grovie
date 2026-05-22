@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { runCli } from "./cli-app.js";
 
 export function main(args: string[]): number {
@@ -21,6 +22,6 @@ function writeOutput(stream: NodeJS.WriteStream, output: string | undefined): vo
 
 const entrypoint = process.argv[1];
 
-if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) {
+if (entrypoint !== undefined && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entrypoint)) {
   process.exitCode = main(process.argv.slice(2));
 }

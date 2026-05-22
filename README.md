@@ -27,6 +27,23 @@ pnpm dev -- --help
 pnpm check
 ```
 
+## Local CLI Install
+
+To install the current checkout as a real `grovie` command during development:
+
+```sh
+pnpm install
+pnpm build
+npm link
+grovie --help
+```
+
+To remove the local global command:
+
+```sh
+npm unlink -g grovie
+```
+
 ## Engineering Workflow
 
 See [AGENTS.md](AGENTS.md) for the lightweight Grovie workflow.
