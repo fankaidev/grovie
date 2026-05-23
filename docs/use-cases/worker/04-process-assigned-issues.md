@@ -24,3 +24,4 @@
 | UC-WORKER-04-S08 | P1 | A daemon watching multiple repositories checks each configured repository for assigned local agents. |
 | UC-WORKER-04-S09 | P1 | Runnable assigned issues are picked by `priority:p0`, then `priority:p1`, then `priority:p2`, then no priority label, with older activity first within the same priority. |
 | UC-WORKER-04-S10 | P1 | A skipped high-priority issue does not block a lower-priority runnable assigned issue. |
+| UC-WORKER-04-S11 | P1 | A daemon cycle with skipped assigned issues reports skipped issue references and reasons instead of only saying no queued issues were found. |
