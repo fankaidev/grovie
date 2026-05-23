@@ -58,6 +58,19 @@ describe("config helpers", () => {
     });
   });
 
+  it("[UC-EXECUTION-06-S04] accepts supported explicit runtime names", () => {
+    for (const runtime of ["cc", "pi", "opencode", "hermes"]) {
+      const cwd = createTmpDir();
+      writeFileSync(
+        join(cwd, ".grovie.yml"),
+        renderDefaultConfig().replace("default: codex", `default: ${runtime}`),
+        "utf8",
+      );
+
+      expect(loadConfig(cwd).config.runtime.default).toBe(runtime);
+    }
+  });
+
   it("rejects unsafe and unknown nested config values", () => {
     const cwd = createTmpDir();
     writeFileSync(

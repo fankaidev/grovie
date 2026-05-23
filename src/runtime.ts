@@ -5,15 +5,17 @@ import { SpawnCommandRunner, type CommandRunner, type GitHubIssue } from "./gith
 import type { PreparedRun } from "./local-state.js";
 
 export type RuntimeAvailability = {
-  runtime: "codex";
+  runtime: RuntimeName;
   command: string;
   available: boolean;
   version?: string;
   message: string;
 };
 
+export type RuntimeName = "codex" | "cc" | "pi" | "opencode" | "hermes";
+
 export type AgentRuntime = {
-  name: "codex";
+  name: RuntimeName;
   checkAvailability(): RuntimeAvailability;
   run(input: AgentRunInput): RuntimeRunResult;
   runAsync?(input: AgentRunInput): Promise<RuntimeRunResult>;
@@ -39,7 +41,7 @@ export type RuntimeMonitorEvent = {
 };
 
 export type RuntimeExecution = {
-  runtime: "codex";
+  runtime: RuntimeName;
   command: string[];
   startedAt: string;
   endedAt: string;
@@ -117,7 +119,45 @@ export class CodexRuntime implements AgentRuntime {
   }
 }
 
+export class LocalCliRuntime implements AgentRuntime {
+  readonly name: Exclude<RuntimeName, "codex">;
+
+  constructor(name: Exclude<RuntimeName, "codex">, private readonly runner: CommandRunner = new SpawnCommandRunner()) {
+    this.name = name;
+  }
+
+  checkAvailability(): RuntimeAvailability {
+    return checkCliAvailability(this.name, this.runner);
+  }
+
+  run(input: AgentRunInput): RuntimeRunResult {
+    const preparedInput = prepareGenericCliInput(input, this.name);
+    const result = this.runner.run(preparedInput.command[0] ?? this.name, preparedInput.command.slice(1), preparedInput.prompt, {
+      cwd: input.run.worktreePath,
+      maxBuffer: 1024 * 1024 * 50,
+    });
+
+    return finishCliRun(input, preparedInput, {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+  }
+
+  async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
+    const preparedInput = prepareGenericCliInput(input, this.name);
+    const result = await runStreamingCommand(input, preparedInput);
+
+    return finishCliRun(input, preparedInput, result);
+  }
+}
+
+export function createRuntime(name: RuntimeName): AgentRuntime {
+  return name === "codex" ? new CodexRuntime() : new LocalCliRuntime(name);
+}
+
 type PreparedCodexInput = {
+  runtime: RuntimeName;
   prompt: string;
   command: string[];
   worktreeTaskPath: string;
@@ -173,6 +213,44 @@ function prepareCodexInput(input: AgentRunInput): PreparedCodexInput {
     });
 
   return {
+    runtime: "codex",
+    prompt,
+    command,
+    worktreeTaskPath,
+    worktreePromptPath,
+    startedAt,
+  };
+}
+
+function prepareGenericCliInput(input: AgentRunInput, runtime: Exclude<RuntimeName, "codex">): PreparedCodexInput {
+  const task = JSON.parse(readFileSync(input.run.taskPath, "utf8")) as unknown;
+  const prompt = buildCodexPrompt({
+    issue: input.issue,
+    run: input.run,
+    task,
+  });
+  const handoffDir = join(input.run.worktreePath, ".grovie");
+  const worktreeTaskPath = join(handoffDir, "task.json");
+  const worktreePromptPath = join(handoffDir, "prompt.md");
+  const command = [runtime, "-"];
+  const startedAt = new Date().toISOString();
+
+  mkdirSync(handoffDir, { recursive: true });
+  writeFileSync(input.run.promptPath, prompt, "utf8");
+  writeFileSync(worktreePromptPath, prompt, "utf8");
+  writeFileSync(worktreeTaskPath, `${JSON.stringify(task, null, 2)}\n`, "utf8");
+  appendRuntimeEvent(input.run, "runtime.started", {
+    runtime,
+    command,
+    promptPath: input.run.promptPath,
+    taskPath: input.run.taskPath,
+    worktreePromptPath,
+    worktreeTaskPath,
+    startedAt,
+  });
+
+  return {
+    runtime,
     prompt,
     command,
     worktreeTaskPath,
@@ -186,10 +264,18 @@ function finishCodexRun(
   preparedInput: PreparedCodexInput,
   result: CodexCommandResult,
 ): RuntimeRunResult {
+  return finishCliRun(input, preparedInput, result);
+}
+
+function finishCliRun(
+  input: AgentRunInput,
+  preparedInput: PreparedCodexInput,
+  result: CodexCommandResult,
+): RuntimeRunResult {
   const endedAt = new Date().toISOString();
 
     const execution: RuntimeExecution = {
-      runtime: "codex",
+      runtime: preparedInput.runtime,
       command: preparedInput.command,
       startedAt: preparedInput.startedAt,
       endedAt,
@@ -213,7 +299,7 @@ function finishCodexRun(
     }
 
     appendRuntimeEvent(input.run, "runtime.finished", {
-      runtime: "codex",
+      runtime: preparedInput.runtime,
       exitCode: result.exitCode,
       signal: result.signal,
       canceled: result.canceled,
@@ -238,9 +324,31 @@ function finishCodexRun(
         message:
           result.canceled === true
             ? "Runtime canceled."
-            : result.stderr.trim() || result.stdout.trim() || `codex exec failed with exit code ${result.exitCode}.`,
+            : result.stderr.trim() || result.stdout.trim() || `${preparedInput.runtime} failed with exit code ${result.exitCode}.`,
       },
     };
+}
+
+function checkCliAvailability(runtime: RuntimeName, runner: CommandRunner): RuntimeAvailability {
+  const result = runner.run(runtime, ["--version"]);
+  const output = (result.stdout.trim() || result.stderr.trim()).trim();
+
+  if (result.exitCode === 0) {
+    return {
+      runtime,
+      command: runtime,
+      available: true,
+      version: output.length > 0 ? output : undefined,
+      message: output.length > 0 ? `available (${output})` : "available",
+    };
+  }
+
+  return {
+    runtime,
+    command: runtime,
+    available: false,
+    message: output.length > 0 ? output : `${runtime} --version failed with exit code ${result.exitCode}.`,
+  };
 }
 
 function runStreamingCommand(input: AgentRunInput, preparedInput: PreparedCodexInput): Promise<CodexCommandResult> {

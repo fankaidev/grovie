@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import { parseRepositoryName } from "./github.js";
+import type { RuntimeName } from "./runtime.js";
 
 export const CONFIG_FILE_NAME = ".grovie.yml";
 export const GLOBAL_CONFIG_FILE_NAME = "config.yml";
@@ -16,7 +17,7 @@ export const repositoryNameSchema = z.string().regex(
 export const configSchema = z.strictObject({
   version: z.literal(1),
   runtime: z.strictObject({
-    default: z.literal("codex"),
+    default: z.enum(["codex", "cc", "pi", "opencode", "hermes"] satisfies RuntimeName[]),
   }),
   queue: z.strictObject({
     label: z.string().min(1, "must not be empty"),

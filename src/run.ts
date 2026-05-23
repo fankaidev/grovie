@@ -18,7 +18,7 @@ import {
 import { resolveLocalIdentity, type AgentMetadata } from "./identity.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type RunCancellation, type RunRequest } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
-import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
+import { createRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeName, type RuntimeRunResult } from "./runtime.js";
 import type { SessionStatus } from "./task.js";
 
 export type RunIssueInput = {
@@ -26,7 +26,7 @@ export type RunIssueInput = {
   repository: string;
   config: GrovieConfig;
   configPath: string;
-  agent: "codex";
+  agent: RuntimeName;
   github: GitHubGateway;
   runtime?: AgentRuntime;
   localState?: RunLocalState;
@@ -97,7 +97,7 @@ type RunSummary = {
   runId: string;
   branchName: string;
   runDir: string;
-  runtime: "codex";
+  runtime: RuntimeName;
   agentId: string;
   machineId: string;
   result?: HandleRunResultResult;
@@ -119,7 +119,6 @@ export function runIssue(input: RunIssueInput): RunIssueResult {
     ...prepared,
     issueReference: input.issueReference,
     github: input.github,
-    agent: input.agent,
     config: input.config,
     configPath: input.configPath,
     resultHandler: input.resultHandler,
@@ -154,7 +153,6 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
     ...prepared,
     issueReference: input.issueReference,
     github: input.github,
-    agent: input.agent,
     config: input.config,
     configPath: input.configPath,
     resultHandler: input.resultHandler,
@@ -343,7 +341,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   }
 
   const localState = input.localState ?? new LocalState();
-  const runtime = input.runtime ?? new CodexRuntime();
+  const runtime = input.runtime ?? createRuntime(input.config.runtime.default);
   const now = new Date();
   const agentId = input.agentId ?? input.agent;
   const machineId = resolveSummaryMachineId(agentId);
@@ -352,7 +350,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
     issue,
     relatedPullRequests: relatedPullRequestsResult.value,
     configPath: input.configPath,
-    agent: input.agent,
+    runtime: runtime.name,
     runRequest: input.runRequest,
   });
 
@@ -379,6 +377,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
       runId: buildRunId(sessionId, buildRunTimestamp(now)),
       agentId,
       machineId,
+      runtime: runtime.name,
       error: toErrorMessage(error),
       errorSource: "prepare",
     });
@@ -405,7 +404,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   }
 
   localState.appendEvent(run, "run.started", {
-    runtime: input.agent,
+    runtime: runtime.name,
   });
 
   return {
@@ -423,7 +422,6 @@ function finishRun(input: {
   localState: RunLocalState;
   issueReference: IssueReference;
   github: GitHubGateway;
-  agent: "codex";
   config: GrovieConfig;
   configPath: string;
   resultHandler?: ResultHandler;
@@ -442,7 +440,7 @@ function finishRun(input: {
         config: input.config,
         configPath: input.configPath,
         repository: `${input.issue.reference.owner}/${input.issue.reference.repo}`,
-        runtime: input.agent,
+        runtime: input.runtimeResult.execution.runtime,
         execution: input.runtimeResult.execution,
       });
       input.localState.appendEvent(input.run, "result.handled", {
@@ -467,7 +465,7 @@ function finishRun(input: {
   });
 
   input.localState.appendEvent(input.run, runEventType(summary.status), {
-    runtime: input.agent,
+    runtime: input.runtimeResult.execution.runtime,
     exitCode: input.runtimeResult.execution.exitCode,
   });
 
@@ -503,14 +501,14 @@ function buildTaskContext(input: {
   issue: GitHubIssue;
   relatedPullRequests: GitHubRelatedPullRequest[];
   configPath: string;
-  agent: "codex";
+  runtime: RuntimeName;
   runRequest?: RunIssueInput["runRequest"];
 }): Record<string, unknown> {
   return {
     schemaVersion: 1,
     source: "grovie run",
     configPath: input.configPath,
-    runtime: input.agent,
+    runtime: input.runtime,
     repository: `${input.issue.reference.owner}/${input.issue.reference.repo}`,
     runRequest: input.runRequest,
     issue: {
@@ -548,6 +546,7 @@ function fallbackRunSummary(input: {
   runId: string;
   agentId: string;
   machineId: string;
+  runtime: RuntimeName;
   error: string;
   errorSource: "prepare";
 }): RunSummary {
@@ -557,7 +556,7 @@ function fallbackRunSummary(input: {
     runId: input.runId,
     branchName: buildBranchName(input.config.branches.prefix, input.sessionId),
     runDir: join(input.localState.getPaths().runsDir, input.runId),
-    runtime: "codex",
+    runtime: input.runtime,
     agentId: input.agentId,
     machineId: input.machineId,
     error: input.error,

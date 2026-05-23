@@ -19,7 +19,7 @@ import { resolveLocalIdentity } from "./identity.js";
 import { LocalState } from "./local-state.js";
 import { inspectQueue, renderQueueInspection } from "./queue.js";
 import type { RunLocalState } from "./run.js";
-import { CodexRuntime, type AgentRuntime } from "./runtime.js";
+import { createRuntime, type AgentRuntime } from "./runtime.js";
 import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail, renderRunsList } from "./status.js";
 import { GROVIE_VERSION } from "./version.js";
 
@@ -32,7 +32,7 @@ export type CliResult = {
 export type CliContext = {
   cwd: string;
   github: GitHubGateway;
-  runtime: AgentRuntime;
+  runtime?: AgentRuntime;
   localState: RunLocalState;
   daemonLifecycle: DaemonLifecycle;
 };
@@ -85,7 +85,8 @@ const commandDefinitions = [
           return githubErrorResult(authenticatedUser.error);
         }
 
-        const runtimeAvailability = context.runtime.checkAvailability();
+        const runtime = resolveRuntime(context, loaded.config);
+        const runtimeAvailability = runtime.checkAvailability();
         context.localState.registerAgent?.(identity.defaultAgent);
         const doctorOutput = [
           "grovie doctor",
@@ -97,14 +98,14 @@ const commandDefinitions = [
           `Default runtime: ${loaded.config.runtime.default}`,
           `Queue label: ${loaded.config.queue.label}`,
           `GitHub: authenticated as ${authenticatedUser.value.login}.`,
-          renderStatusLine("Codex", runtimeAvailability.message),
+          renderStatusLine(renderRuntimeLabel(loaded.config.runtime.default), runtimeAvailability.message),
         ];
 
         if (!runtimeAvailability.available) {
           return {
             exitCode: 1,
             stdout: doctorOutput.join("\n"),
-            stderr: "Codex runtime is not available. Install the Codex CLI or choose another runtime when one is supported.",
+            stderr: renderRuntimeUnavailableError(loaded.config.runtime.default),
           };
         }
 
@@ -616,7 +617,7 @@ const commandDefinitions = [
             config,
             configPath: "built-in defaults",
             github: context.github,
-            runtime: context.runtime,
+            runtime: resolveRuntime(context, config),
             localState: context.localState,
             once: runArgs.includes("--once"),
           });
@@ -632,7 +633,7 @@ const commandDefinitions = [
           config,
           configPath: "built-in defaults",
           github: context.github,
-          runtime: context.runtime,
+          runtime: resolveRuntime(context, config),
           localState: context.localState,
           once: runArgs.includes("--once"),
         });
@@ -664,7 +665,7 @@ const commandDefinitions = [
           server: createAdminConsoleServer({
             paths: context.localState.getPaths(),
             daemonLifecycle: context.daemonLifecycle,
-            runtime: context.runtime,
+            runtime: resolveRuntime(context, defaultConfig()),
           }),
         });
 
@@ -797,7 +798,7 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
   const cliContext = {
     cwd: context.cwd ?? process.cwd(),
     github: context.github ?? new GhGitHubGateway(),
-    runtime: context.runtime ?? new CodexRuntime(),
+    runtime: context.runtime,
     localState: context.localState ?? new LocalState(),
     daemonLifecycle: context.daemonLifecycle ?? new LocalDaemonLifecycle(),
   };
@@ -835,6 +836,22 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
   }
 
   return command.run(commandArgs, cliContext);
+}
+
+function resolveRuntime(context: CliContext, config: { runtime: { default: Parameters<typeof createRuntime>[0] } }): AgentRuntime {
+  return context.runtime ?? createRuntime(config.runtime.default);
+}
+
+function renderRuntimeLabel(runtime: Parameters<typeof createRuntime>[0]): string {
+  return runtime === "codex" ? "Codex" : runtime;
+}
+
+function renderRuntimeUnavailableError(runtime: Parameters<typeof createRuntime>[0]): string {
+  if (runtime === "codex") {
+    return "Codex runtime is not available. Install the Codex CLI or choose another runtime when one is supported.";
+  }
+
+  return `${runtime} runtime is not available. Install that CLI or choose another configured runtime.`;
 }
 
 function isPromise(value: CliResult | Promise<CliResult>): value is Promise<CliResult> {

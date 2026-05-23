@@ -1,3 +1,6 @@
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { GrovieConfig } from "../src/config.js";
 import type {
@@ -9,7 +12,7 @@ import type {
 } from "../src/github.js";
 import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import { runIssue, runIssueAsync, type RunLocalState } from "../src/run.js";
-import type { HandleRunResultResult, ResultHandler } from "../src/result.js";
+import type { HandleRunResultInput, HandleRunResultResult, ResultHandler } from "../src/result.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
 
 describe("runIssue", () => {
@@ -83,6 +86,64 @@ describe("runIssue", () => {
       "run.succeeded",
       "comment.created",
     ]);
+  });
+
+  it("[UC-EXECUTION-06-S02] uses the configured non-Codex default runtime for run handoff and result metadata", () => {
+    const root = mkdtempSync(join(tmpdir(), "grovie-run-"));
+    const binDir = join(root, "bin");
+    const opencodePath = join(binDir, "opencode");
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(opencodePath, "#!/bin/sh\ncat >/dev/null\necho opencode done\n", "utf8");
+    chmodSync(opencodePath, 0o755);
+
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${binDir}:${previousPath ?? ""}`;
+
+    try {
+      const github = new FakeGitHub();
+      const localState = new FakeLocalState({ root, fileBacked: true });
+      const resultHandler = new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      });
+      const config = {
+        ...defaultConfig(),
+        runtime: {
+          default: "opencode" as const,
+        },
+      };
+
+      const result = runIssue({
+        issueReference: {
+          owner: "fankaidev",
+          repo: "grovie",
+          number: 7,
+        },
+        repository: "fankaidev/grovie",
+        config,
+        configPath: "/project/.grovie.yml",
+        agent: "opencode",
+        github,
+        localState,
+        resultHandler,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(localState.prepareInput?.task).toMatchObject({
+        runtime: "opencode",
+        repository: "fankaidev/grovie",
+      });
+      expect(resultHandler.input?.runtime).toBe("opencode");
+      expect(resultHandler.input?.execution.runtime).toBe("opencode");
+      expect(readFileSync(localState.run.taskPath, "utf8")).toContain('"runtime": "opencode"');
+      expect(readFileSync(localState.run.stdoutPath, "utf8")).toContain("opencode done");
+      expect(readFileSync(localState.run.eventsPath, "utf8")).toContain('"runtime":"opencode"');
+      expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"opencode"} -->');
+      expect(github.comments[0]).toContain("- Runtime: opencode");
+    } finally {
+      process.env.PATH = previousPath;
+    }
   });
 
   it("[UC-GITHUB-01-S01] [UC-GITHUB-01-S04] posts a concise failure comment when the runtime fails", () => {
@@ -557,35 +618,39 @@ class FakeGitHub implements GitHubGateway {
 }
 
 class FakeLocalState implements RunLocalState {
-  readonly paths: LocalStatePaths = {
-    root: "/tmp/grovie",
-    reposDir: "/tmp/grovie/repos",
-    worktreesDir: "/tmp/grovie/worktrees",
-    runsDir: "/tmp/grovie/runs",
-    agentsDir: "/tmp/grovie/agents",
-    locksDir: "/tmp/grovie/locks",
-    requestsDir: "/tmp/grovie/requests",
-    sessionsDir: "/tmp/grovie/sessions",
-  };
-  readonly run: PreparedRun = {
-    sessionId: "fankaidev-grovie-issue-7-codex",
-    runId: "fankaidev-grovie-issue-7",
-    agentId: "codex",
-    branchName: "grovie/issue-7",
-    sessionDir: "/tmp/grovie/sessions/fankaidev-grovie-issue-7-codex",
-    repositoryCachePath: "/tmp/grovie/repos/fankaidev-grovie.git",
-    worktreePath: "/tmp/grovie/worktrees/fankaidev-grovie-issue-7",
-    runDir: "/tmp/grovie/runs/fankaidev-grovie-issue-7",
-    taskPath: "/tmp/grovie/runs/fankaidev-grovie-issue-7/task.json",
-    promptPath: "/tmp/grovie/runs/fankaidev-grovie-issue-7/prompt.md",
-    eventsPath: "/tmp/grovie/runs/fankaidev-grovie-issue-7/events.jsonl",
-    stdoutPath: "/tmp/grovie/runs/fankaidev-grovie-issue-7/stdout.log",
-    stderrPath: "/tmp/grovie/runs/fankaidev-grovie-issue-7/stderr.log",
-  };
+  readonly paths: LocalStatePaths;
+  readonly run: PreparedRun;
   readonly events: Array<{ type: string; data: Record<string, unknown> | undefined }> = [];
   prepareInput: Parameters<RunLocalState["prepareRun"]>[0] | undefined;
 
-  constructor(private readonly options: { prepareError?: Error; cancellationRequested?: boolean } = {}) {}
+  constructor(private readonly options: { prepareError?: Error; cancellationRequested?: boolean; root?: string; fileBacked?: boolean } = {}) {
+    const root = options.root ?? "/tmp/grovie";
+    this.paths = {
+      root,
+      reposDir: join(root, "repos"),
+      worktreesDir: join(root, "worktrees"),
+      runsDir: join(root, "runs"),
+      agentsDir: join(root, "agents"),
+      locksDir: join(root, "locks"),
+      requestsDir: join(root, "requests"),
+      sessionsDir: join(root, "sessions"),
+    };
+    this.run = {
+      sessionId: "fankaidev-grovie-issue-7-codex",
+      runId: "fankaidev-grovie-issue-7",
+      agentId: "codex",
+      branchName: "grovie/issue-7",
+      sessionDir: join(root, "sessions", "fankaidev-grovie-issue-7-codex"),
+      repositoryCachePath: join(root, "repos", "fankaidev-grovie.git"),
+      worktreePath: join(root, "worktrees", "fankaidev-grovie-issue-7"),
+      runDir: join(root, "runs", "fankaidev-grovie-issue-7"),
+      taskPath: join(root, "runs", "fankaidev-grovie-issue-7", "task.json"),
+      promptPath: join(root, "runs", "fankaidev-grovie-issue-7", "prompt.md"),
+      eventsPath: join(root, "runs", "fankaidev-grovie-issue-7", "events.jsonl"),
+      stdoutPath: join(root, "runs", "fankaidev-grovie-issue-7", "stdout.log"),
+      stderrPath: join(root, "runs", "fankaidev-grovie-issue-7", "stderr.log"),
+    };
+  }
 
   getPaths(): LocalStatePaths {
     return this.paths;
@@ -598,11 +663,29 @@ class FakeLocalState implements RunLocalState {
       throw this.options.prepareError;
     }
 
+    if (this.options.fileBacked === true) {
+      mkdirSync(this.run.sessionDir, { recursive: true });
+      mkdirSync(this.run.worktreePath, { recursive: true });
+      mkdirSync(this.run.runDir, { recursive: true });
+      writeFileSync(this.run.taskPath, `${JSON.stringify(input.task, null, 2)}\n`, "utf8");
+      writeFileSync(this.run.promptPath, input.prompt, "utf8");
+      writeFileSync(this.run.eventsPath, "", "utf8");
+      writeFileSync(this.run.stdoutPath, "", "utf8");
+      writeFileSync(this.run.stderrPath, "", "utf8");
+    }
+
     return input.agentId === this.run.agentId ? this.run : { ...this.run, agentId: input.agentId };
   }
 
-  appendEvent(_run: PreparedRun, type: string, data?: Record<string, unknown>): void {
+  appendEvent(run: PreparedRun, type: string, data?: Record<string, unknown>): void {
     this.events.push({ type, data });
+
+    if (this.options.fileBacked === true) {
+      writeFileSync(run.eventsPath, `${JSON.stringify({ type, data })}\n`, {
+        encoding: "utf8",
+        flag: "a",
+      });
+    }
   }
 
   isRunCancellationRequested(): boolean {
@@ -633,9 +716,12 @@ class FakeRuntime implements AgentRuntime {
 }
 
 class FakeResultHandler implements ResultHandler {
+  input: HandleRunResultInput | undefined;
+
   constructor(private readonly result: HandleRunResultResult) {}
 
-  handle(): HandleRunResultResult {
+  handle(input: HandleRunResultInput): HandleRunResultResult {
+    this.input = input;
     return this.result;
   }
 }
