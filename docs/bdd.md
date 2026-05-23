@@ -10,10 +10,12 @@
 - Use cases describe product behavior, not source files.
 - Scenarios are representative, not exhaustive.
 - Keep scenario wording short and concrete. Do not turn a scenario into a test implementation checklist.
+- Scenarios should map to one or a few real automated tests. Include enough state, action, and observable result that a test author does not have to guess the fixture.
 
-## Rules
+## Optional Rules
 
-Rules are workflow invariants that apply across scenarios.
+Rules are optional workflow invariants that apply across scenarios. Use them only
+for foundational constraints that would be costly to repeat or easy to miss.
 
 Good examples:
 
@@ -21,7 +23,8 @@ Good examples:
 - A visible active claim prevents duplicate execution.
 - Local logs remain inspectable after execution finishes.
 
-Avoid rules that only restate implementation details or one-off assertions.
+Do not try to capture every rule. Avoid rules that only restate implementation
+details, repeat one scenario, or turn the use case into a full specification.
 
 ## Priority
 
@@ -49,9 +52,9 @@ Each file contains one use case:
 Scenario table format:
 
 ```text
-| ID | Priority | Scenario | Rules |
-|----|----------|----------|-------|
-| UC-DOMAIN-001-S01 | P0 | Running the main workflow produces the expected user-visible result. | R1 |
+| ID | Priority | Scenario |
+|----|----------|----------|
+| UC-DOMAIN-001-S01 | P0 | A ready issue with no active claim runs once and posts a succeeded run comment. |
 ```
 
 ## ID Naming Convention

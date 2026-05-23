@@ -8,17 +8,15 @@
 |----|------|
 | R1 | The daemon only starts work for issues selected by its configured queue. |
 | R2 | A visible active claim prevents duplicate execution. |
-| R3 | Cancellation before runtime start prevents agent execution. |
-| R4 | Cancellation during runtime is detected through heartbeat checks. |
-| R5 | Stale claims can be reclaimed conservatively. |
+| R3 | Cancellation prevents a run from being reported as successful. |
 
 ## Scenarios
 
-| ID | Priority | Scenario | Rules |
-|----|----------|----------|-------|
-| UC-DAEMON-001-S01 | P0 | One claimable queued issue is claimed, run once, and released with a visible result. | R1 |
-| UC-DAEMON-001-S02 | P0 | An issue with another active Grovie claim is skipped without starting a run. | R2 |
-| UC-DAEMON-001-S03 | P0 | A cancellation comment seen before runtime start cancels the claimed run before Codex starts. | R3 |
-| UC-DAEMON-001-S04 | P0 | A cancellation comment seen during runtime terminates the active run and records cancellation. | R4 |
-| UC-DAEMON-001-S05 | P1 | A stale visible claim can be reclaimed so the issue is not permanently stuck. | R5 |
-| UC-DAEMON-001-S06 | P1 | With multiple watched repositories, the daemon checks them sequentially until it finds queued work. | R1 |
+| ID | Priority | Scenario |
+|----|----------|----------|
+| UC-DAEMON-001-S01 | P0 | A daemon cycle with one claimable queued issue claims it, runs it once, and releases it with a visible result. |
+| UC-DAEMON-001-S02 | P0 | A daemon cycle that sees another active Grovie claim skips that issue and starts no run. |
+| UC-DAEMON-001-S03 | P0 | A claimed issue with a cancellation comment before runtime start is canceled before Codex starts. |
+| UC-DAEMON-001-S04 | P0 | A running issue with a new cancellation comment terminates the active Codex run and records cancellation. |
+| UC-DAEMON-001-S05 | P1 | A queued issue with a stale visible claim can be reclaimed and run by the current daemon. |
+| UC-DAEMON-001-S06 | P1 | A daemon cycle with multiple watched repositories checks them sequentially until it finds queued work. |

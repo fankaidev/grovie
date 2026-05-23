@@ -13,6 +13,10 @@ Keep the project small:
 - Use `pnpm` for dependency management and script execution.
 - Use the `gh` CLI for GitHub operations.
 - Use GitHub issues for non-trivial work.
+- For non-trivial behavior changes, update the relevant BDD use cases under `docs/use-cases/`.
+- BDD Rules are optional. Use them only for foundational invariants shared across scenarios, not for every rule or edge case.
+- BDD Scenarios should be short, user-visible behavior statements and should not reference Rules by ID.
+- BDD Scenarios should map to one or a few real automated tests. Include enough state, action, and observable result that a test author does not have to guess the fixture, without documenting mocks or implementation mechanics.
 - Mark active issues with `in-progress` and `worker:grovie`.
 - Create branches from `origin/main` with the format `issue-{number}`.
 - Never push directly to `main`.
