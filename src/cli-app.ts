@@ -75,7 +75,7 @@ const commandDefinitions = [
           "grovie doctor",
           "",
           `Config: ${loaded.path} is valid.`,
-          `Allowed repositories: ${loaded.config.repositories.allowed.join(", ")}`,
+          `Repository: ${loaded.config.repository}`,
           `Default runtime: ${loaded.config.runtime.default}`,
           `Queue label: ${loaded.config.queue.label}`,
           `GitHub: authenticated as ${authenticatedUser.value.login}.`,
@@ -154,7 +154,7 @@ const commandDefinitions = [
   {
     name: "daemon",
     description: "Watch GitHub issues by label and run them locally.",
-    usage: "grovie daemon --repo owner/repo --label grovie [--once]",
+    usage: "grovie daemon [--repo owner/repo] [--label grovie] [--once]",
     issue: "#8",
     run: (args: string[], context: CliContext) => {
       const repoOption = readStringOption(args, "--repo");
@@ -171,14 +171,7 @@ const commandDefinitions = [
 
       try {
         const loaded = loadConfig(context.cwd);
-        const repository = repoOption.value ?? inferSingleAllowedRepository(loaded.config.repositories.allowed);
-
-        if (repository === undefined) {
-          return {
-            exitCode: 1,
-            stderr: "Missing repository. Usage: grovie daemon --repo owner/repo --label grovie",
-          };
-        }
+        const repository = repoOption.value ?? loaded.config.repository;
 
         return runDaemon({
           repository,
@@ -335,10 +328,6 @@ function resolveRepository(args: string[], cwd: string): RepositoryResolution {
     ok: true,
     repository: inferredRepository,
   };
-}
-
-function inferSingleAllowedRepository(allowedRepositories: string[]): string | undefined {
-  return allowedRepositories.length === 1 ? allowedRepositories[0] : undefined;
 }
 
 function readStringOption(

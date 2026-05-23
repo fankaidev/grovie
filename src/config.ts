@@ -11,11 +11,8 @@ const repositoryNameSchema = z.string().regex(
   "must use the owner/repo format",
 );
 
-export const configSchema = z.strictObject({
+const baseConfigSchema = {
   version: z.literal(1),
-  repositories: z.strictObject({
-    allowed: z.array(repositoryNameSchema).min(1, "must include at least one repository"),
-  }),
   runtime: z.strictObject({
     default: z.literal("codex"),
   }),
@@ -38,6 +35,11 @@ export const configSchema = z.strictObject({
   safety: z.strictObject({
     allowDefaultBranchPush: z.literal(false),
   }),
+};
+
+export const configSchema = z.strictObject({
+  ...baseConfigSchema,
+  repository: repositoryNameSchema,
 });
 
 export type GrovieConfig = z.infer<typeof configSchema>;
@@ -84,7 +86,8 @@ export function loadConfig(cwd: string): LoadedConfig {
     throw new Error(`Could not parse ${CONFIG_FILE_NAME}: ${message}`);
   }
 
-  const result = configSchema.safeParse(parsed);
+  const normalized = normalizeConfig(parsed);
+  const result = configSchema.safeParse(normalized);
 
   if (!result.success) {
     throw new Error(renderValidationError(result.error));
@@ -136,10 +139,8 @@ export function renderDefaultConfig(repository: string): string {
 # GitHub remains the source of truth; this file defines local runner policy.
 version: 1
 
-repositories:
-  # Grovie refuses to run issues outside this allowlist.
-  allowed:
-    - ${repository}
+# Grovie refuses to run issues outside this repository.
+repository: ${repository}
 
 runtime:
   default: codex
@@ -165,6 +166,37 @@ safety:
   # This must stay false. Grovie should never push directly to the default branch.
   allowDefaultBranchPush: false
 `;
+}
+
+function normalizeConfig(parsed: unknown): unknown {
+  const record = parsed;
+
+  if (!isRecord(record) || "repository" in record || !("repositories" in record)) {
+    return parsed;
+  }
+
+  const repositories = record.repositories;
+
+  if (!isRecord(repositories) || !Array.isArray(repositories.allowed)) {
+    return parsed;
+  }
+
+  if (repositories.allowed.length !== 1) {
+    throw new Error(
+      `Invalid ${CONFIG_FILE_NAME}: legacy repositories.allowed must contain exactly one repository. Replace it with repository: owner/repo.`,
+    );
+  }
+
+  const { repositories: _repositories, ...rest } = record;
+
+  return {
+    ...rest,
+    repository: repositories.allowed[0],
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function renderValidationError(error: z.ZodError): string {

@@ -128,12 +128,12 @@ type PreparedIssueRun =
 function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   const repository = `${input.issueReference.owner}/${input.issueReference.repo}`;
 
-  if (!input.config.repositories.allowed.includes(repository)) {
+  if (input.config.repository !== repository) {
     return {
       ok: false,
       result: {
         exitCode: 1,
-        stderr: `Repository ${repository} is not allowed by ${input.configPath}.`,
+        stderr: `Repository ${repository} does not match ${input.configPath} repository ${input.config.repository}.`,
       },
     };
   }

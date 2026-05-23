@@ -43,30 +43,37 @@ grovie run owner/repo#123 --agent codex
 Run a local daemon for queued issues:
 
 ```sh
-grovie daemon --repo owner/repo --label grovie
+grovie daemon --label grovie
 ```
 
 Use `--once` when you want exactly one polling cycle:
 
 ```sh
-grovie daemon --repo owner/repo --label grovie --once
+grovie daemon --label grovie --once
 ```
 
 ## How It Works
 
 The current implementation includes config initialization and validation, GitHub access through `gh`, local run state under `~/.grovie/`, the first Codex runtime adapter, one-shot issue execution, daemon polling and claiming, cancellation, and result push/PR handling.
 
-`grovie init` writes a documented `.grovie.yml` with safe local-runner defaults. Use `grovie init --repo owner/repo` when the repository cannot be inferred from the `origin` remote. `grovie doctor` validates the config and confirms the current `gh` login plus Codex CLI availability. Grovie stores local runner state under `~/.grovie/`.
+`grovie init` writes a documented `.grovie.yml` with safe local-runner defaults and a single repo identity:
+
+```yaml
+version: 1
+repository: owner/repo
+```
+
+Use `grovie init --repo owner/repo` when the repository cannot be inferred from the `origin` remote. `grovie doctor` validates the config, shows the configured repository, and confirms the current `gh` login plus Codex CLI availability. Grovie stores local runner state under `~/.grovie/`.
 
 `grovie run owner/repo#123 --agent codex` reads the issue, prepares an isolated local worktree, runs Codex there, and comments back with the result, local branch, and run id. If files changed, Grovie commits the worktree, pushes the Grovie branch, and opens a pull request. No-change runs comment back without opening an empty PR.
 
-`grovie daemon --repo owner/repo --label grovie` polls open issues with the queue label, claims one visible issue at a time with an editable comment marker, and runs the same one-shot path. Use `--once` for a single polling cycle. A `/grovie cancel` comment or `<label>:cancel` label cancels a claimed run; while Codex is running, the daemon checks cancellation on each heartbeat and terminates the child process.
+`grovie daemon --label grovie` polls open issues in the configured repository, claims one visible issue at a time with an editable comment marker, and runs the same one-shot path. Use `--repo owner/repo` only when you want to be explicit; Grovie rejects it if it does not match `.grovie.yml`. Use `--once` for a single polling cycle. A `/grovie cancel` comment or `<label>:cancel` label cancels a claimed run; while Codex is running, the daemon checks cancellation on each heartbeat and terminates the child process.
 
 ## Safety Model
 
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The MVP keeps the safety boundary simple:
 
-- It only runs repositories listed in `.grovie.yml`.
+- It only runs the repository named by `.grovie.yml`.
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
 - It refuses config that enables default-branch pushes.
@@ -95,7 +102,7 @@ Use this checklist before trusting a new machine or repository:
 6. Confirm the issue receives a Grovie result comment with a run id and local run directory.
 7. Confirm changed runs push a Grovie branch and open a pull request against the default branch.
 8. Confirm no direct push was made to the default branch.
-9. Run `grovie daemon --repo owner/repo --label grovie --once` against another labeled issue.
+9. Run `grovie daemon --label grovie --once` against another labeled issue.
 10. Add `/grovie cancel` to a claimed issue and confirm the daemon marks it canceled.
 
 ## Development

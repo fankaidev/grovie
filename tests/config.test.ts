@@ -26,14 +26,21 @@ describe("config helpers", () => {
   it("renders safe defaults", () => {
     const config = renderDefaultConfig("fankaidev/grovie");
 
-    expect(config).toContain("allowed:");
-    expect(config).toContain("- fankaidev/grovie");
+    expect(config).toContain("repository: fankaidev/grovie");
+    expect(config).not.toContain("repositories:");
     expect(config).toContain("default: codex");
     expect(config).toContain("label: grovie");
     expect(config).toContain("allowDefaultBranchPush: false");
   });
 
-  it("rejects unsafe and unknown nested config values", () => {
+  it("loads the repo-local repository field", () => {
+    const cwd = createTmpDir();
+    writeFileSync(join(cwd, ".grovie.yml"), renderDefaultConfig("fankaidev/grovie"), "utf8");
+
+    expect(loadConfig(cwd).config.repository).toBe("fankaidev/grovie");
+  });
+
+  it("migrates a legacy single-entry repositories allowlist", () => {
     const cwd = createTmpDir();
     writeFileSync(
       join(cwd, ".grovie.yml"),
@@ -42,6 +49,71 @@ describe("config helpers", () => {
         "repositories:",
         "  allowed:",
         "    - fankaidev/grovie",
+        "runtime:",
+        "  default: codex",
+        "queue:",
+        "  label: grovie",
+        "branches:",
+        "  prefix: grovie/",
+        "worktrees:",
+        "  cleanup: on-success",
+        "pullRequests:",
+        "  create: true",
+        "  draft: false",
+        "comments:",
+        "  mode: concise",
+        "safety:",
+        "  allowDefaultBranchPush: false",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(loadConfig(cwd).config.repository).toBe("fankaidev/grovie");
+  });
+
+  it("rejects legacy multi-entry repositories allowlists", () => {
+    const cwd = createTmpDir();
+    writeFileSync(
+      join(cwd, ".grovie.yml"),
+      [
+        "version: 1",
+        "repositories:",
+        "  allowed:",
+        "    - fankaidev/grovie",
+        "    - fankaidev/other",
+        "runtime:",
+        "  default: codex",
+        "queue:",
+        "  label: grovie",
+        "branches:",
+        "  prefix: grovie/",
+        "worktrees:",
+        "  cleanup: on-success",
+        "pullRequests:",
+        "  create: true",
+        "  draft: false",
+        "comments:",
+        "  mode: concise",
+        "safety:",
+        "  allowDefaultBranchPush: false",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => loadConfig(cwd)).toThrow(
+      "Invalid .grovie.yml: legacy repositories.allowed must contain exactly one repository. Replace it with repository: owner/repo.",
+    );
+  });
+
+  it("rejects unsafe and unknown nested config values", () => {
+    const cwd = createTmpDir();
+    writeFileSync(
+      join(cwd, ".grovie.yml"),
+      [
+        "version: 1",
+        "repository: fankaidev/grovie",
         "runtime:",
         "  default: codex",
         "queue:",

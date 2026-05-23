@@ -12,7 +12,7 @@ import type { HandleRunResultResult, ResultHandler } from "../src/result.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
 
 describe("runIssue", () => {
-  it("runs an allowed issue and posts a success comment", () => {
+  it("runs a configured-repository issue and posts a success comment", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -220,7 +220,7 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 
-  it("rejects repositories outside the allowlist before reading from GitHub", () => {
+  it("rejects repositories outside the configured repository before reading from GitHub", () => {
     const github = new FakeGitHub();
 
     const result = runIssue({
@@ -237,7 +237,7 @@ describe("runIssue", () => {
 
     expect(result).toEqual({
       exitCode: 1,
-      stderr: "Repository other/repo is not allowed by /project/.grovie.yml.",
+      stderr: "Repository other/repo does not match /project/.grovie.yml repository fankaidev/grovie.",
     });
     expect(github.reads).toBe(0);
   });
@@ -380,9 +380,7 @@ class FakeResultHandler implements ResultHandler {
 function defaultConfig(): GrovieConfig {
   return {
     version: 1,
-    repositories: {
-      allowed: ["fankaidev/grovie"],
-    },
+    repository: "fankaidev/grovie",
     runtime: {
       default: "codex",
     },

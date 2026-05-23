@@ -45,10 +45,10 @@ const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_STALE_CLAIM_MS = 60 * 60 * 1000;
 
 export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
-  if (!input.config.repositories.allowed.includes(input.repository)) {
+  if (input.config.repository !== input.repository) {
     return {
       exitCode: 1,
-      stderr: `Repository ${input.repository} is not allowed by ${input.configPath}.`,
+      stderr: `Repository ${input.repository} does not match ${input.configPath} repository ${input.config.repository}.`,
     };
   }
 
