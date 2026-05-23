@@ -32,22 +32,17 @@ The main flow is:
 3. Run an agent manually, or let the daemon pick eligible work.
 4. Grovie prepares isolated local state and runs the configured runtime.
 5. Grovie posts a concise issue result.
-6. If files changed, Grovie pushes a branch and opens a pull request instead of pushing to the default branch.
+6. Grovie publishes the result back to GitHub without pushing to the default branch.
 
 ## Quick Start
 
-Core prerequisites:
+Prerequisites:
 
 - Git
 - GitHub CLI authenticated with `gh auth login`
+- A local agent runtime; the current default runtime uses the Codex CLI as `codex`
 
-Development prerequisites for this checkout:
-
-- Node.js 20 or newer
-- pnpm 10.26.1
-- Codex CLI available as `codex` for the current default runtime
-
-Install this checkout as a local development command:
+Install the current source checkout:
 
 ```sh
 pnpm install
@@ -98,7 +93,7 @@ The current implementation includes config initialization and validation, GitHub
 
 `grovie init` writes an optional repo-local `.grovie.yml` with safe local-runner policy defaults. This file is policy configuration, not repository identity or daemon scheduling. The current global `run` and `daemon` paths use built-in policy defaults and do not read `.grovie.yml` from the caller's current directory. `grovie doctor` validates the global worker config and any `.grovie.yml` in the current directory, then confirms the current `gh` login plus Codex CLI availability.
 
-`grovie run owner/repo#123 --agent codex` derives the repository from the issue reference. It reads the issue, refuses to start when another active Grovie task claim owns the issue, prepares an isolated per-attempt local worktree under `~/.grovie/`, runs Codex there, and comments back with the session result, local branch, and run id. If files changed, Grovie commits the worktree, pushes the deterministic issue branch, and opens a pull request. No-change sessions comment back without opening an empty PR.
+`grovie run owner/repo#123 --agent codex` derives the repository from the issue reference. It reads the issue, refuses to start when another active Grovie task claim owns the issue, prepares an isolated per-attempt local worktree under `~/.grovie/`, runs Codex there, and comments back with the session result, local branch, and run id. In the current code-change path, Grovie commits the worktree, pushes the deterministic issue branch, and opens a pull request. No-change sessions comment back without opening an empty pull request.
 
 `grovie daemon` polls watched repositories from `~/.grovie/config.yml`, claims one visible issue at a time with an editable task-claim comment marker, and runs the same one-shot path. The claim is an advisory GitHub issue comment, not a hard distributed lock; session results are recorded separately in Grovie result comments. The final fixed issue branch push remains the race detector, and Grovie does not force-push over remote work. Use `--repo owner/repo` for an explicit single-repository debugging cycle. A `/grovie cancel` comment or `<label>:cancel` label cancels a claimed run; while Codex is running, the daemon checks cancellation on each heartbeat and terminates the child process.
 
@@ -157,33 +152,8 @@ Use this checklist before trusting a new machine or repository:
 10. Run `grovie daemon --once` against another labeled issue.
 11. Add `/grovie cancel` to a claimed issue and confirm the daemon marks it canceled.
 
-## Development
+## Contributing
 
-```sh
-pnpm install
-pnpm dev -- --help
-pnpm dev -- --version
-pnpm check
-```
+Grovie is open source, and contributions are welcome. Issues, ideas, documentation improvements, and pull requests are all useful.
 
-To install the current checkout as a real `grovie` command during development:
-
-```sh
-pnpm install
-pnpm build
-pnpm link --global
-grovie --version
-grovie --help
-```
-
-To remove the local global command:
-
-```sh
-pnpm remove --global grovie
-```
-
-CI runs `pnpm check` on pull requests and pushes to `main`.
-
-## Engineering Workflow
-
-See [AGENTS.md](AGENTS.md) for the lightweight Grovie workflow.
+See [AGENTS.md](AGENTS.md) for development commands, validation, and the lightweight Grovie engineering workflow.
