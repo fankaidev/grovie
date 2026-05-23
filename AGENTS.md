@@ -23,6 +23,35 @@ Keep the project small:
 - After opening or materially updating a PR, automatically start an independent subagent review. The reviewer should read the linked issue and PR, inspect the diff, check that the implementation matches the issue intent, and submit the result with `gh pr review --comment`.
 - Treat green checks as necessary but not sufficient; compare the final diff against the issue intent.
 
+## Development Commands
+
+Use these commands while working in this checkout:
+
+```sh
+pnpm install
+pnpm dev -- --help
+pnpm dev -- --version
+pnpm check
+```
+
+To install the current checkout as a real `grovie` command during development:
+
+```sh
+pnpm install
+pnpm build
+pnpm link --global
+grovie --version
+grovie --help
+```
+
+To remove the local global command:
+
+```sh
+pnpm remove --global grovie
+```
+
+CI runs `pnpm check` on pull requests and pushes to `main`.
+
 ## Pull Requests
 
 PR titles should use Conventional Commits:
