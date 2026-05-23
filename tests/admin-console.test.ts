@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -369,8 +369,9 @@ describe("admin console server", () => {
     expect(payload.content).not.toContain("stdout line");
   });
 
-  it("[UC-ADMIN-04-S03] returns an SSE snapshot for the selected log stream", async () => {
+  it("[UC-ADMIN-04-S03] streams appended log output for the selected log stream", async () => {
     const root = createTmpDir();
+    const paths = pathsForRoot(root);
     writeRun(pathsForRoot(root).runsDir, "run-1", {
       metadata: {
         runId: "run-1",
@@ -382,12 +383,31 @@ describe("admin console server", () => {
       stderr: "live stderr\n",
     });
     const started = await startTestServer(root);
-    const response = await fetch(`${started.url}/api/runs/run-1/logs/stream?stream=stdout`);
-    const body = await response.text();
+    const controller = new AbortController();
+    const response = await fetch(`${started.url}/api/runs/run-1/logs/stream?stream=stdout`, {
+      signal: controller.signal,
+    });
+    const reader = response.body?.getReader();
+
+    if (reader === undefined) {
+      throw new Error("SSE response body was not readable");
+    }
+
+    const firstChunk = await reader.read();
+    appendFileSync(join(paths.runsDir, "run-1", "stdout.log"), "appended stdout\n", "utf8");
+    const secondChunk = await reader.read();
+    controller.abort();
+    await reader.cancel().catch(() => undefined);
+    const body = [
+      firstChunk.value === undefined ? "" : new TextDecoder().decode(firstChunk.value),
+      secondChunk.value === undefined ? "" : new TextDecoder().decode(secondChunk.value),
+    ].join("");
 
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(body).toContain("event: snapshot");
+    expect(body).toContain("event: append");
     expect(body).toContain("live stdout");
+    expect(body).toContain("appended stdout");
     expect(body).not.toContain("live stderr");
   });
 
@@ -407,6 +427,7 @@ describe("admin console server", () => {
     const html = await (await fetch(`${started.url}/runs/run-1`)).text();
 
     expect(html).toContain("<h3>stdout</h3>");
+    expect(html).toContain("ansi-red");
     expect(html).toContain("red stdout");
     expect(html).toContain("<h3>stderr</h3>");
     expect(html).toContain("plain stderr");

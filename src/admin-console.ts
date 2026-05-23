@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { createServer, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import { resolveLocalIdentity } from "./identity.js";
@@ -166,14 +166,7 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
           return;
         }
 
-        const log = readRunLog(run, stream);
-
-        writeServerSentEvent(response, {
-          runId: run.runId,
-          stream,
-          path: log.path,
-          content: log.content,
-        });
+        startRunLogStream(request, response, run, stream);
         return;
       }
 
@@ -365,6 +358,7 @@ function renderDocument(title: string, body: string): string {
     "table{width:100%;border-collapse:collapse;background:#fff}",
     "th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;vertical-align:top}",
     "code{background:#eef2f5;padding:2px 4px;border-radius:4px}",
+    ".ansi-red{color:#b91c1c}.ansi-green{color:#15803d}.ansi-yellow{color:#a16207}.ansi-blue{color:#1d4ed8}",
     "a{color:#075985}",
     "</style>",
     "</head>",
@@ -437,12 +431,12 @@ function renderEvents(run: LocalRunSummary): string {
 
 function renderLogPreview(run: LocalRunSummary, stream: "stdout" | "stderr"): string {
   const log = readRunLog(run, stream);
-  const content = log.content.length === 0 ? "(no output)" : stripAnsi(log.content);
+  const content = log.content.length === 0 ? "(no output)" : renderAnsiHtml(log.content);
 
   return [
     `<h3>${stream}</h3>`,
     `<p><a href="/api/runs/${encodeURIComponent(run.runId)}/logs/${stream}">Raw ${stream}</a></p>`,
-    `<pre><code>${escapeHtml(content)}</code></pre>`,
+    `<pre><code>${content}</code></pre>`,
   ].join("\n");
 }
 
@@ -466,17 +460,98 @@ function isLogStream(value: string | undefined): value is "stdout" | "stderr" {
   return value === "stdout" || value === "stderr";
 }
 
-function writeServerSentEvent(response: ServerResponse, value: unknown): void {
+function startRunLogStream(
+  request: IncomingMessage,
+  response: ServerResponse,
+  run: LocalRunSummary,
+  stream: "stdout" | "stderr",
+): void {
+  const initialLog = readRunLog(run, stream);
+  let offset = Buffer.byteLength(initialLog.content, "utf8");
+
   response.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
     "cache-control": "no-cache",
     connection: "keep-alive",
   });
-  response.end(`event: snapshot\ndata: ${JSON.stringify(value)}\n\n`);
+  writeServerSentEvent(response, "snapshot", {
+    runId: run.runId,
+    stream,
+    path: initialLog.path,
+    content: initialLog.content,
+  });
+
+  const interval = setInterval(() => {
+    const nextLog = readRunLog(run, stream);
+    const nextBuffer = Buffer.from(nextLog.content, "utf8");
+
+    if (nextBuffer.length <= offset) {
+      return;
+    }
+
+    const content = nextBuffer.subarray(offset).toString("utf8");
+    offset = nextBuffer.length;
+    writeServerSentEvent(response, "append", {
+      runId: run.runId,
+      stream,
+      path: nextLog.path,
+      content,
+    });
+  }, 100);
+
+  request.on("close", () => {
+    clearInterval(interval);
+  });
 }
 
-function stripAnsi(value: string): string {
-  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+function writeServerSentEvent(response: ServerResponse, event: string, value: unknown): void {
+  response.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`);
+}
+
+function renderAnsiHtml(value: string): string {
+  let output = "";
+  let index = 0;
+  const pattern = /\x1B\[(?<code>\d+)m/g;
+  let match;
+
+  while ((match = pattern.exec(value)) !== null) {
+    output += escapeHtml(value.slice(index, match.index));
+
+    if (match.groups?.code === "0") {
+      output += "</span>";
+    } else {
+      const className = ansiClass(match.groups?.code);
+
+      if (className !== undefined) {
+        output += `<span class="${className}">`;
+      }
+    }
+
+    index = pattern.lastIndex;
+  }
+
+  output += escapeHtml(value.slice(index));
+  return output;
+}
+
+function ansiClass(code: string | undefined): string | undefined {
+  if (code === "31") {
+    return "ansi-red";
+  }
+
+  if (code === "32") {
+    return "ansi-green";
+  }
+
+  if (code === "33") {
+    return "ansi-yellow";
+  }
+
+  if (code === "34") {
+    return "ansi-blue";
+  }
+
+  return undefined;
 }
 
 function renderNotFoundPage(message: string): string {
