@@ -121,7 +121,7 @@ describe("config helpers", () => {
     expect(() => loadConfig(cwd)).toThrow("Unrecognized key: \"repositories\"");
   });
 
-  it("loads an empty global worker config when config.yml is absent", () => {
+  it("[UC-ADMIN-01-S01] loads an empty global worker config with the admin console disabled when config.yml is absent", () => {
     const root = createTmpDir();
 
     expect(loadGlobalConfig(root)).toEqual({
@@ -162,7 +162,7 @@ describe("config helpers", () => {
     expect(() => loadGlobalConfig(root)).toThrow("adminConsole.host: Invalid input: expected \"127.0.0.1\"");
   });
 
-  it("saves and updates watched repositories in the global worker config", () => {
+  it("[UC-WORKER-02-S01] [UC-WORKER-02-S02] [UC-ADMIN-01-S01] saves watched repositories without enabling the admin console", () => {
     const root = createTmpDir();
     const added = addWatchedRepository(loadGlobalConfig(root).config, {
       repository: "fankaidev/grovie",
