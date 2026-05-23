@@ -2,6 +2,7 @@ import {
   addWatchedRepository,
   CONFIG_FILE_NAME,
   createConfigFile,
+  defaultConfig,
   loadConfig,
   loadGlobalConfig,
   removeWatchedRepository,
@@ -132,9 +133,9 @@ const commandDefinitions = [
 
       try {
         const targetRepository = formatIssueRepository(parsedIssueReference.value);
-        const loaded = loadConfig(context.cwd);
+        const config = defaultConfig();
 
-        const agent = agentOption.value ?? loaded.config.runtime.default;
+        const agent = agentOption.value ?? config.runtime.default;
 
         if (agent !== "codex") {
           return {
@@ -146,8 +147,8 @@ const commandDefinitions = [
         return runClaimedIssueAsync({
           issueReference: parsedIssueReference.value,
           repository: targetRepository,
-          config: loaded.config,
-          configPath: renderConfigPath(loaded),
+          config,
+          configPath: "built-in defaults",
           agent,
           github: context.github,
           runtime: context.runtime,
@@ -177,14 +178,14 @@ const commandDefinitions = [
       }
 
       try {
-        const loaded = loadConfig(context.cwd);
+        const config = defaultConfig();
 
         if (repoOption.value !== undefined) {
           return runDaemon({
             repository: repoOption.value,
-            label: labelOption.value ?? loaded.config.queue.label,
-            config: loaded.config,
-            configPath: renderConfigPath(loaded),
+            label: labelOption.value ?? config.queue.label,
+            config,
+            configPath: "built-in defaults",
             github: context.github,
             runtime: context.runtime,
             localState: context.localState,
@@ -197,10 +198,10 @@ const commandDefinitions = [
         return runDaemonForRepositories({
           repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => ({
             repository: watchedRepository.repository,
-            label: labelOption.value ?? watchedRepository.label ?? loaded.config.queue.label,
+            label: labelOption.value ?? watchedRepository.label ?? config.queue.label,
           })),
-          config: loaded.config,
-          configPath: renderConfigPath(loaded),
+          config,
+          configPath: "built-in defaults",
           github: context.github,
           runtime: context.runtime,
           localState: context.localState,
@@ -397,10 +398,6 @@ function renderCommandHelp(command: CliCommand): string {
 
 function formatIssueRepository(reference: { owner: string; repo: string }): string {
   return `${reference.owner}/${reference.repo}`;
-}
-
-function renderConfigPath(loaded: LoadedConfig): string {
-  return loaded.path ?? "built-in defaults";
 }
 
 function renderConfigSource(loaded: LoadedConfig): string {

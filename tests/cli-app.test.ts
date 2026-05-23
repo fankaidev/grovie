@@ -222,7 +222,7 @@ describe("CLI command registration", () => {
     const localState = new FakeLocalState();
     let runtimeInput: AgentRunInput | undefined;
     const issueComments: GitHubIssue["comments"] = [];
-    runCli(["init"], { cwd });
+    writeInvalidPolicyConfig(cwd);
 
     const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "codex"], {
       cwd,
@@ -333,7 +333,7 @@ describe("CLI command registration", () => {
   it("runs one daemon polling cycle from global watched repositories and explicit label", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
-    runCli(["init"], { cwd });
+    writeInvalidPolicyConfig(cwd);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
     expect(
@@ -363,9 +363,42 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("uses built-in queue defaults for global daemon without reading cwd policy config", async () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    writeInvalidPolicyConfig(cwd);
+    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+
+    expect(
+      await runCliAsync(["daemon", "--once"], {
+        cwd,
+        localState,
+        github: fakeGitHubGateway({
+          listOpenIssues: (repository, label) => {
+            expect(repository).toBe("fankaidev/grovie");
+            expect(label).toBe("grovie");
+
+            return {
+              ok: true,
+              value: [],
+            };
+          },
+        }),
+        runtime: fakeRuntime(),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+      ].join("\n"),
+    });
+  });
+
   it("runs an explicit daemon repository without reading the current checkout repository", async () => {
     const cwd = createTmpDir();
-    runCli(["init"], { cwd });
+    writeInvalidPolicyConfig(cwd);
 
     expect(
       await runCliAsync(["daemon", "--repo", "fankaidev/other", "--label", "ready", "--once"], {
@@ -426,6 +459,10 @@ function createTmpDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "grovie-test-"));
   tmpDirs.push(dir);
   return dir;
+}
+
+function writeInvalidPolicyConfig(cwd: string): void {
+  writeFileSync(join(cwd, ".grovie.yml"), "version: 1\nunsupported: true\n", "utf8");
 }
 
 function fakeRuntime(availability: Partial<RuntimeAvailability> = {}): AgentRuntime {
