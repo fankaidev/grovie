@@ -11,6 +11,7 @@
 - Scenarios are representative, not exhaustive.
 - Keep scenario wording short and concrete. Do not turn a scenario into a test implementation checklist.
 - Scenarios should map to one or a few real automated tests. Include enough state, action, and observable result that a test author does not have to guess the fixture.
+- Use cases may describe accepted target behavior before the implementation exists. When they do, keep the scenario testable and let implementation issues close the gap.
 
 ## Optional Rules
 
@@ -20,7 +21,7 @@ for foundational constraints that would be costly to repeat or easy to miss.
 Good examples:
 
 - Grovie never pushes directly to the default branch.
-- A visible active claim prevents duplicate execution.
+- A local execution lock prevents duplicate execution for the same issue and agent.
 - Local logs remain inspectable after execution finishes.
 
 Do not try to capture every rule. Avoid rules that only restate implementation
@@ -54,7 +55,7 @@ Scenario table format:
 ```text
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-DOMAIN-001-S01 | P0 | A ready issue with no active claim runs once and posts a succeeded run comment. |
+| UC-DOMAIN-001-S01 | P0 | A ready issue with no active execution lock runs once and posts a succeeded run comment. |
 ```
 
 ## ID Naming Convention
