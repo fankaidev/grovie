@@ -6,7 +6,7 @@ import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
 import { type AgentMetadata, resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
-import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
+import type { HandledCursor, LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import type { RunLocalState } from "../src/run.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
 
@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe("CLI command registration", () => {
   it("[UC-WORKER-03-S01] registers the issue assignment command", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "daemon", "watch"]);
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "watch"]);
   });
 
   it("renders help with the MVP commands", () => {
@@ -33,6 +33,7 @@ describe("CLI command registration", () => {
     expect(help).toContain("status");
     expect(help).toContain("runs");
     expect(help).toContain("run");
+    expect(help).toContain("queue");
     expect(help).toContain("daemon");
     expect(help).toContain("watch");
   });
@@ -498,6 +499,261 @@ describe("CLI command registration", () => {
     ]);
   });
 
+  it("[UC-WORKER-05-S01] [UC-WORKER-05-S03] lists global watched assigned issues in daemon pick order", async () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    const machineId = resolveMachineId(hostname());
+    writeInvalidPolicyConfig(cwd);
+    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+
+    const result = runCli(["queue", "list"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: (repository, label) => {
+          expect(repository).toBe("fankaidev/grovie");
+          expect(label).toBe("grovie");
+
+          return {
+            ok: true,
+            value: [
+              {
+                reference: fakeReference(8),
+                title: "Normal priority",
+                labels: ["grovie", `agent:coder@${machineId}`, "priority:p2"],
+              },
+              {
+                reference: fakeReference(9),
+                title: "Highest priority",
+                labels: ["grovie", `agent:coder@${machineId}`, "priority:p0"],
+              },
+            ],
+          };
+        },
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            title: reference.number === 9 ? "Highest priority" : "Normal priority",
+            labels: reference.number === 9
+              ? ["grovie", `agent:coder@${machineId}`, "priority:p0"]
+              : ["grovie", `agent:coder@${machineId}`, "priority:p2"],
+          },
+        }),
+        readRelatedPullRequests: () => ({
+          ok: true,
+          value: [],
+        }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("grovie queue list");
+    expect(result.stdout).toContain("fankaidev/grovie label=grovie");
+    expect(result.stdout).toContain(`#1 fankaidev/grovie#9 agent=coder@${machineId} priority=p0`);
+    expect(result.stdout).toContain(`#2 fankaidev/grovie#8 agent=coder@${machineId} priority=p2`);
+    expect(result.stdout?.indexOf("fankaidev/grovie#9")).toBeLessThan(result.stdout?.indexOf("fankaidev/grovie#8") ?? 0);
+  });
+
+  it("[UC-WORKER-05-S02] inspects an explicit repository without global watched repositories", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    const machineId = resolveMachineId(hostname());
+
+    const result = runCli(["queue", "list", "--repo", "fankaidev/other"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: (repository, label) => {
+          expect(repository).toBe("fankaidev/other");
+          expect(label).toBe("grovie");
+
+          return {
+            ok: true,
+            value: [
+              {
+                reference: {
+                  owner: "fankaidev",
+                  repo: "other",
+                  number: 3,
+                },
+                title: "Other repo issue",
+                labels: ["grovie", `agent:coder@${machineId}`],
+              },
+            ],
+          };
+        },
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            labels: ["grovie", `agent:coder@${machineId}`],
+          },
+        }),
+        readRelatedPullRequests: () => ({
+          ok: true,
+          value: [],
+        }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("fankaidev/other label=grovie");
+    expect(result.stdout).toContain(`#1 fankaidev/other#3 agent=coder@${machineId}`);
+  });
+
+  it("[UC-WORKER-05-S04] lists skipped assigned issues with clear reasons", () => {
+    const cwd = createTmpDir();
+    const machineId = resolveMachineId(hostname());
+    const lockedAgent = `locked@${machineId}`;
+    const localState = new FakeLocalState(createTmpDir(), { lockedAgents: [lockedAgent] });
+
+    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: () => ({
+          ok: true,
+          value: [
+            {
+              reference: fakeReference(2),
+              title: "Other machine",
+              labels: ["grovie", "agent:coder@other-machine"],
+            },
+            {
+              reference: fakeReference(30),
+              title: "Handled",
+              labels: ["grovie", `agent:coder@${machineId}`],
+            },
+            {
+              reference: fakeReference(4),
+              title: "Locked",
+              labels: ["grovie", `agent:${lockedAgent}`],
+            },
+            {
+              reference: fakeReference(5),
+              title: "Canceled",
+              labels: ["grovie", `agent:cancel@${machineId}`, "grovie:cancel"],
+            },
+          ],
+        }),
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            title: reference.number === 2
+              ? "Other machine"
+              : reference.number === 30
+                ? "Handled"
+                : reference.number === 4
+                  ? "Locked"
+                  : "Canceled",
+            labels: reference.number === 2
+              ? ["grovie", "agent:coder@other-machine"]
+              : reference.number === 30
+                ? ["grovie", `agent:coder@${machineId}`]
+                : reference.number === 4
+                  ? ["grovie", `agent:${lockedAgent}`]
+                  : ["grovie", `agent:cancel@${machineId}`, "grovie:cancel"],
+            updatedAt: "2026-05-22T00:00:00.000Z",
+          },
+        }),
+        readRelatedPullRequests: () => ({
+          ok: true,
+          value: [],
+        }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("skip fankaidev/grovie#2 agent=coder@other-machine");
+    expect(result.stdout).toContain("reason=assigned to another machine");
+    expect(result.stdout).toContain("skip fankaidev/grovie#30");
+    expect(result.stdout).toContain("reason=no unhandled activity");
+    expect(result.stdout).toContain("skip fankaidev/grovie#4");
+    expect(result.stdout).toContain("reason=active local execution lock");
+    expect(result.stdout).toContain("skip fankaidev/grovie#5");
+    expect(result.stdout).toContain("reason=canceled");
+  });
+
+  it("[UC-WORKER-05-S05] queue inspection does not mutate GitHub state or enqueue runs", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+
+    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: () => ({
+          ok: true,
+          value: [],
+        }),
+        createIssueComment: () => {
+          throw new Error("queue list must not create comments");
+        },
+        addLabels: () => {
+          throw new Error("queue list must not add labels");
+        },
+      }),
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie queue list",
+        "",
+        "No assigned issues found.",
+      ].join("\n"),
+    });
+    expect(localState.requests).toEqual([]);
+  });
+
+  it("[UC-WORKER-05-S06] prints queue inspection as JSON", () => {
+    const cwd = createTmpDir();
+    const machineId = resolveMachineId(hostname());
+    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie", "--json"], {
+      cwd,
+      github: fakeGitHubGateway({
+        listOpenIssues: () => ({
+          ok: true,
+          value: [
+            {
+              reference: fakeReference(8),
+              title: "JSON issue",
+              labels: ["grovie", `agent:coder@${machineId}`],
+            },
+          ],
+        }),
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            title: "JSON issue",
+            labels: ["grovie", `agent:coder@${machineId}`],
+          },
+        }),
+        readRelatedPullRequests: () => ({
+          ok: true,
+          value: [],
+        }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout ?? "")).toEqual([
+      expect.objectContaining({
+        repository: "fankaidev/grovie",
+        candidates: [
+          expect.objectContaining({
+            status: "runnable",
+            pickOrder: 1,
+            agentId: `coder@${machineId}`,
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it("[UC-WORKER-03-S01] assigns an issue to an agent label", () => {
     const addedLabels: Array<{ reference: IssueReference; labels: string[] }> = [];
 
@@ -794,6 +1050,20 @@ class FakeLocalState implements RunLocalState {
     return this.options.lockedAgents?.includes(input.agentId) === true;
   }
 
+  readHandledCursor(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined {
+    if (input.issueNumber === 30 && input.agentId.startsWith("coder@")) {
+      return {
+        repository: input.repository,
+        issueNumber: input.issueNumber,
+        agentId: input.agentId,
+        handledThrough: "2026-05-22T00:00:00.000Z",
+        updatedAt: "2026-05-23T00:00:00.000Z",
+      };
+    }
+
+    return undefined;
+  }
+
   enqueueRunRequest(input: { repository: string; issueNumber: number; agentId: string }): { id: string; repository: string; issueNumber: number; agentId: string; createdAt: string; path: string } {
     const request = {
       id: `request-${this.requests.length + 1}`,
@@ -818,6 +1088,14 @@ function fakeIssue(reference: IssueReference): GitHubIssue {
     labels: ["mvp", "type:task"],
     comments: [],
     defaultBranch: "main",
+  };
+}
+
+function fakeReference(number: number): IssueReference {
+  return {
+    owner: "fankaidev",
+    repo: "grovie",
+    number,
   };
 }
 
