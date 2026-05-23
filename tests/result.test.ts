@@ -14,7 +14,7 @@ import { GitResultHandler } from "../src/result.js";
 import type { RuntimeExecution } from "../src/runtime.js";
 
 describe("GitResultHandler", () => {
-  it("comments no changes without committing or opening a PR", () => {
+  it("[UC-EXECUTION-05-S01] comments no changes without committing or opening a PR", () => {
     const runner = new FakeRunner([
       {
         stdout: "",
@@ -44,7 +44,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
-  it("commits changed files, pushes the Grovie branch, and opens a PR", () => {
+  it("[UC-EXECUTION-05-S02] commits changed files, pushes the Grovie branch, and opens a PR", () => {
     const runner = new FakeRunner([
       {
         stdout: " M src/index.ts\n",
@@ -111,7 +111,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests[0]?.body).toContain("No validation output captured.");
   });
 
-  it("reports deterministic branch push conflicts without opening a PR", () => {
+  it("[UC-EXECUTION-05-S03] reports deterministic branch push conflicts without opening a PR", () => {
     const runner = new FakeRunner([
       {
         stdout: " M src/index.ts\n",
@@ -163,7 +163,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
-  it("refuses to push the default branch", () => {
+  it("[UC-EXECUTION-05-S04] refuses to push the default branch", () => {
     const runner = new FakeRunner([]);
     const handler = new GitResultHandler(new FakeGitHub(), runner);
 
@@ -288,6 +288,7 @@ function fakeRun(): PreparedRun {
   return {
     sessionId: "fankaidev-grovie-issue-9-codex",
     runId: "fankaidev-grovie-issue-9",
+    agentId: "codex",
     branchName: "grovie/issue-9",
     sessionDir: "/tmp/grovie/sessions/fankaidev-grovie-issue-9-codex",
     repositoryCachePath: "/tmp/grovie/repos/fankaidev-grovie.git",

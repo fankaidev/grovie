@@ -17,5 +17,5 @@
 | UC-GITHUB-01-S01 | P0 | A completed run posts a concise issue comment with agent id, run id, run status, and local machine id. |
 | UC-GITHUB-01-S02 | P0 | A run that opens a PR includes the PR link in the issue summary comment. |
 | UC-GITHUB-01-S03 | P1 | A run with state repo sync configured includes a state repo path or link in the issue summary comment. |
-| UC-GITHUB-01-S04 | P1 | A run with long stdout or stderr keeps raw logs out of the issue comment and points to local or synced state instead. |
+| UC-GITHUB-01-S04 | P1 | A runtime failure with stdout or stderr keeps raw logs out of the issue comment and points to local or synced state instead. |
 | UC-GITHUB-01-S05 | P1 | A daemon restart reads execution locks from local state rather than treating GitHub summary comments as claims. |

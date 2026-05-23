@@ -17,4 +17,4 @@
 | UC-EXECUTION-05-S02 | P0 | A coder run with worktree changes commits them, pushes the agent's session branch, opens a PR, and links it from the issue. |
 | UC-EXECUTION-05-S03 | P0 | A run whose result branch already exists remotely reports a publish conflict instead of overwriting it. |
 | UC-EXECUTION-05-S04 | P0 | A run whose computed result branch is the default branch is rejected before any push. |
-| UC-EXECUTION-05-S05 | P1 | A reviewer run with no intended code changes can post review output without modifying the coder branch. |
+| UC-EXECUTION-05-S05 | P1 | A reviewer run with no intended code changes posts concise review output without modifying the coder branch or opening a PR. |

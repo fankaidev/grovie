@@ -29,6 +29,7 @@ export type PrepareRunInput = {
 export type PreparedRun = {
   sessionId: string;
   runId: string;
+  agentId: string;
   branchName: string;
   sessionDir: string;
   repositoryCachePath: string;
@@ -316,6 +317,7 @@ export class LocalState {
     const preparedRun = {
       sessionId,
       runId,
+      agentId: input.agentId,
       branchName,
       sessionDir,
       repositoryCachePath,
