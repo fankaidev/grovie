@@ -108,7 +108,7 @@ const commandDefinitions = [
   },
   {
     name: "status",
-    description: "Show active and recent local Grovie runs.",
+    description: "Show running and recent local Grovie runs.",
     usage: "grovie status",
     issue: "#36",
     run: (_args: string[], context: CliContext) => {

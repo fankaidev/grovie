@@ -7,7 +7,7 @@ import {
 } from "./github.js";
 
 export type ClaimActor = "daemon" | "run";
-export type ClaimStatus = "claimed" | "running" | "completed" | "failed" | "canceled" | "skipped";
+export type ClaimStatus = "active" | "released";
 
 export type ActiveClaim = {
   id: number;
@@ -40,7 +40,7 @@ export function createIssueClaim(input: {
   const result = input.github.createIssueComment(
     input.issueReference,
     renderClaimComment({
-      status: "claimed",
+      status: "active",
       actor: input.actor,
       workerId: input.workerId,
       claimedAt,
@@ -154,18 +154,11 @@ function parseClaim(comment: GitHubComment): ActiveClaim | undefined {
 }
 
 function isClaimStatus(value: unknown): value is ClaimStatus {
-  return (
-    value === "claimed" ||
-    value === "running" ||
-    value === "completed" ||
-    value === "failed" ||
-    value === "canceled" ||
-    value === "skipped"
-  );
+  return value === "active" || value === "released";
 }
 
 function isActiveClaim(claim: ActiveClaim, now: Date, staleClaimMs: number): boolean {
-  if (claim.status !== "claimed" && claim.status !== "running") {
+  if (claim.status !== "active") {
     return false;
   }
 
@@ -193,7 +186,7 @@ function renderClaimComment(input: {
   })} -->`;
   const lines = [
     marker,
-    `Grovie ${input.actor} ${input.status}.`,
+    `Grovie ${input.actor} task claim ${input.status}.`,
     "",
     `- Worker: \`${input.workerId}\``,
     `- Status: ${input.status}`,
