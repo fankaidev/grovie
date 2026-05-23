@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
+import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
 import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import type { RunLocalState } from "../src/run.js";
@@ -25,6 +26,7 @@ describe("CLI command registration", () => {
     const help = renderHelp();
 
     expect(help).toContain("grovie <command>");
+    expect(help).toContain("-v, --version");
     expect(help).toContain("init");
     expect(help).toContain("doctor");
     expect(help).toContain("run");
@@ -36,6 +38,20 @@ describe("CLI command registration", () => {
     expect(runCli(["--", "--help"])).toEqual({
       exitCode: 0,
       stdout: renderHelp(),
+    });
+  });
+
+  it("reports the package version through long and short flags", () => {
+    const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+
+    expect(GROVIE_VERSION).toBe(packageVersion.version);
+    expect(runCli(["--version"])).toEqual({
+      exitCode: 0,
+      stdout: "0.1.0",
+    });
+    expect(runCli(["-v"])).toEqual({
+      exitCode: 0,
+      stdout: "0.1.0",
     });
   });
 

@@ -24,6 +24,7 @@ Install this checkout as a local development command:
 pnpm install
 pnpm build
 pnpm link --global
+grovie --version
 grovie --help
 ```
 
@@ -115,6 +116,7 @@ Use this checklist before trusting a new machine or repository:
 ```sh
 pnpm install
 pnpm dev -- --help
+pnpm dev -- --version
 pnpm check
 ```
 
@@ -126,6 +128,7 @@ To install the current checkout as a real `grovie` command during development:
 pnpm install
 pnpm build
 pnpm link --global
+grovie --version
 grovie --help
 ```
 

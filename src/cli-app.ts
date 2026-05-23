@@ -14,6 +14,7 @@ import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./gith
 import { LocalState } from "./local-state.js";
 import { runClaimedIssueAsync, type RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
+import { GROVIE_VERSION } from "./version.js";
 
 export type CliResult = {
   exitCode: number;
@@ -341,6 +342,13 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
     };
   }
 
+  if (commandName === "--version" || commandName === "-v") {
+    return {
+      exitCode: 0,
+      stdout: GROVIE_VERSION,
+    };
+  }
+
   const command = commands.find((candidate) => candidate.name === commandName);
 
   if (command === undefined) {
@@ -375,6 +383,10 @@ export function renderHelp(): string {
     "",
     "Usage:",
     "  grovie <command> [options]",
+    "",
+    "Options:",
+    "  -v, --version  Print the Grovie version.",
+    "  -h, --help     Print help.",
     "",
     "Commands:",
     commandLines,
