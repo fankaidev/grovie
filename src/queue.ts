@@ -23,6 +23,14 @@ export type QueueCandidate = {
   pickOrder?: number;
 };
 
+type IssueSkipCheck = {
+  skipped: true;
+  candidates: QueueCandidate[];
+} | {
+  skipped: false;
+  agentIds: string[];
+};
+
 export type QueueInspectionResult = {
   repository: string;
   label: string;
@@ -75,6 +83,19 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
         };
       }
 
+      const cheapCheck = evaluateCheapIssueSkips({
+        repository: repository.repository,
+        label: repository.label,
+        issue: issueResult.value,
+        machineId: input.machineId,
+        localState: input.localState,
+      });
+
+      if (cheapCheck.skipped) {
+        candidates.push(...cheapCheck.candidates);
+        continue;
+      }
+
       const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(summary.reference) ?? {
         ok: true as const,
         value: [],
@@ -87,12 +108,11 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
         };
       }
 
-      candidates.push(...evaluateIssueCandidates({
+      candidates.push(...evaluateActivityCandidates({
         repository: repository.repository,
-        label: repository.label,
         issue: issueResult.value,
         relatedPullRequests: relatedPullRequestsResult.value,
-        machineId: input.machineId,
+        agentIds: cheapCheck.agentIds,
         localState: input.localState,
       }));
     }
@@ -152,41 +172,78 @@ export function getIssuePriority(labels: string[]): IssuePriority {
   return "none";
 }
 
-function evaluateIssueCandidates(input: {
+function evaluateCheapIssueSkips(input: {
   repository: string;
   label: string;
   issue: GitHubIssue;
-  relatedPullRequests: GitHubRelatedPullRequest[];
   machineId: string;
   localState?: RunLocalState;
-}): QueueCandidate[] {
+}): IssueSkipCheck {
   const priority = getIssuePriority(input.issue.labels);
-  const activity = getIssueActivity(input.issue, input.relatedPullRequests);
+  const activity = getIssueActivity(input.issue, []);
   const assignedAgentIds = getAssignedAgentIds(input.issue.labels);
 
   if (assignedAgentIds.length === 0) {
-    return [];
+    return {
+      skipped: true,
+      candidates: [],
+    };
   }
 
   if (hasCancelRequest(input.issue, input.label)) {
-    return assignedAgentIds.map((agentId) => skippedCandidate(input, priority, activity, agentId, "canceled"));
+    return {
+      skipped: true,
+      candidates: assignedAgentIds.map((agentId) => skippedCandidate(input, priority, activity, agentId, "canceled")),
+    };
   }
 
   if (!isAssignedToLocalMachine(input.issue.labels, input.machineId)) {
-    return assignedAgentIds.map((agentId) => skippedCandidate(input, priority, activity, agentId, "assigned to another machine"));
+    return {
+      skipped: true,
+      candidates: assignedAgentIds.map((agentId) => skippedCandidate(input, priority, activity, agentId, "assigned to another machine")),
+    };
   }
 
   const localAgentIds = assignedAgentIds.filter((agentId) => agentId.endsWith(`@${input.machineId}`));
+  const lockedCandidates: QueueCandidate[] = [];
+  const unlockedAgentIds: string[] = [];
 
-  return localAgentIds.map((agentId) => {
+  for (const agentId of localAgentIds) {
     if (input.localState?.hasExecutionLock?.({
       repository: input.repository,
       issueNumber: input.issue.reference.number,
       agentId,
     }) === true) {
-      return skippedCandidate(input, priority, activity, agentId, "active local execution lock");
+      lockedCandidates.push(skippedCandidate(input, priority, activity, agentId, "active local execution lock"));
+    } else {
+      unlockedAgentIds.push(agentId);
     }
+  }
 
+  if (unlockedAgentIds.length === 0) {
+    return {
+      skipped: true,
+      candidates: lockedCandidates,
+    };
+  }
+
+  return {
+    skipped: false,
+    agentIds: unlockedAgentIds,
+  };
+}
+
+function evaluateActivityCandidates(input: {
+  repository: string;
+  issue: GitHubIssue;
+  relatedPullRequests: GitHubRelatedPullRequest[];
+  agentIds: string[];
+  localState?: RunLocalState;
+}): QueueCandidate[] {
+  const priority = getIssuePriority(input.issue.labels);
+  const activity = getIssueActivity(input.issue, input.relatedPullRequests);
+
+  return input.agentIds.map((agentId) => {
     const handledCursor = input.localState?.readHandledCursor?.({
       repository: input.repository,
       issueNumber: input.issue.reference.number,

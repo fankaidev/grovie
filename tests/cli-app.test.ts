@@ -19,11 +19,11 @@ afterEach(() => {
 });
 
 describe("CLI command registration", () => {
-  it("[UC-WORKER-03-S01] registers the issue assignment command", () => {
+  it("[UC-WORKER-03-S01] [UC-WORKER-05-S01] registers issue assignment and queue commands", () => {
     expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "watch"]);
   });
 
-  it("renders help with the MVP commands", () => {
+  it("[UC-WORKER-05-S01] renders help with the queue command", () => {
     const help = renderHelp();
 
     expect(help).toContain("grovie <command>");
@@ -674,6 +674,63 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("reason=active local execution lock");
     expect(result.stdout).toContain("skip fankaidev/grovie#5");
     expect(result.stdout).toContain("reason=canceled");
+  });
+
+  it("[UC-WORKER-05-S04] does not read related pull requests for cheap skipped candidates", () => {
+    const cwd = createTmpDir();
+    const machineId = resolveMachineId(hostname());
+    const lockedAgent = `locked@${machineId}`;
+    const localState = new FakeLocalState(createTmpDir(), { lockedAgents: [lockedAgent] });
+    const relatedReads: number[] = [];
+
+    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: () => ({
+          ok: true,
+          value: [
+            {
+              reference: fakeReference(4),
+              title: "Locked",
+              labels: ["grovie", `agent:${lockedAgent}`, "priority:p0"],
+            },
+            {
+              reference: fakeReference(8),
+              title: "Runnable",
+              labels: ["grovie", `agent:coder@${machineId}`, "priority:p1"],
+            },
+          ],
+        }),
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            title: reference.number === 4 ? "Locked" : "Runnable",
+            labels: reference.number === 4
+              ? ["grovie", `agent:${lockedAgent}`, "priority:p0"]
+              : ["grovie", `agent:coder@${machineId}`, "priority:p1"],
+          },
+        }),
+        readRelatedPullRequests: (reference) => {
+          relatedReads.push(reference.number);
+
+          if (reference.number === 4) {
+            throw new Error("locked candidate related PR lookup was not expected");
+          }
+
+          return {
+            ok: true,
+            value: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(`#1 fankaidev/grovie#8 agent=coder@${machineId}`);
+    expect(result.stdout).toContain("skip fankaidev/grovie#4");
+    expect(relatedReads).toEqual([8]);
   });
 
   it("[UC-WORKER-05-S05] queue inspection does not mutate GitHub state or enqueue runs", () => {
