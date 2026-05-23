@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
+import { resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
 import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
@@ -94,11 +95,12 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("validates the default config through doctor", () => {
+  it("[UC-WORKER-01-S04] validates the default local agent through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
 
     const globalRoot = createTmpDir();
+    const machineId = resolveMachineId(hostname());
 
     expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState: new FakeLocalState(globalRoot) })).toEqual({
       exitCode: 0,
@@ -107,6 +109,8 @@ describe("CLI command registration", () => {
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
+        `Machine id: ${machineId}`,
+        `Default agent: default@${machineId} (codex)`,
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
@@ -115,10 +119,11 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("reports unavailable Codex runtime through doctor", () => {
+  it("[UC-WORKER-01-S04] [UC-EXECUTION-03-S02] reports unavailable Codex runtime through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
     const globalRoot = createTmpDir();
+    const machineId = resolveMachineId(hostname());
 
     expect(
       runCli(["doctor"], {
@@ -137,6 +142,8 @@ describe("CLI command registration", () => {
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
+        `Machine id: ${machineId}`,
+        `Default agent: default@${machineId} (codex)`,
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",

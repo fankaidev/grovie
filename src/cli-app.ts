@@ -11,6 +11,7 @@ import {
 } from "./config.js";
 import { runDaemon, runDaemonForRepositories } from "./daemon.js";
 import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
+import { resolveLocalIdentity } from "./identity.js";
 import { LocalState } from "./local-state.js";
 import { runClaimedIssueAsync, type RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
@@ -72,6 +73,7 @@ const commandDefinitions = [
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
         const loaded = loadConfig(context.cwd);
         const authenticatedUser = context.github.getAuthenticatedUser();
+        const identity = resolveLocalIdentity();
 
         if (!authenticatedUser.ok) {
           return githubErrorResult(authenticatedUser.error);
@@ -83,6 +85,8 @@ const commandDefinitions = [
           "",
           `Global config: ${renderGlobalConfigSource(globalConfig.path, globalConfig.config.watchedRepositories.length)}`,
           `Local policy config: ${renderConfigSource(loaded)}`,
+          `Machine id: ${identity.machineId}`,
+          `Default agent: ${identity.defaultAgent.agentId} (${identity.defaultAgent.runtime})`,
           `Default runtime: ${loaded.config.runtime.default}`,
           `Queue label: ${loaded.config.queue.label}`,
           `GitHub: authenticated as ${authenticatedUser.value.login}.`,
