@@ -101,6 +101,29 @@ describe("admin console server", () => {
     });
   });
 
+  it("[UC-ADMIN-02-S01] does not expose daemon verification tokens through the health API", async () => {
+    const root = createTmpDir();
+    const started = await startTestServer(root, {
+      status: () => ({
+        status: "running",
+        state: {
+          pid: 1234,
+          command: ["node", "dist/cli.js", "daemon", "run"],
+          startedAt: "2026-05-23T00:00:00.000Z",
+          stdoutPath: join(root, "daemon", "stdout.log"),
+          stderrPath: join(root, "daemon", "stderr.log"),
+          statePath: join(root, "daemon", "daemon.json"),
+          token: "secret-daemon-token",
+        },
+      }),
+    });
+    const body = await (await fetch(`${started.url}/api/health`)).text();
+
+    expect(body).toContain('"status":"running"');
+    expect(body).not.toContain("secret-daemon-token");
+    expect(body).not.toContain("token");
+  });
+
   it("[UC-ADMIN-02-S02] exposes global config without environment values or secrets", async () => {
     const root = createTmpDir();
     saveGlobalConfig(root, {
@@ -255,7 +278,7 @@ function getAvailablePort(): Promise<number> {
   });
 }
 
-async function startTestServer(root = createTmpDir()): Promise<StartedAdminConsole> {
+async function startTestServer(root = createTmpDir(), daemonLifecycleOverrides: Partial<DaemonLifecycle> = {}): Promise<StartedAdminConsole> {
   const port = await getAvailablePort();
   const started = await startAdminConsoleServer({
     config: {
@@ -265,7 +288,7 @@ async function startTestServer(root = createTmpDir()): Promise<StartedAdminConso
     },
     server: createAdminConsoleServer({
       paths: pathsForRoot(root),
-      daemonLifecycle: fakeDaemonLifecycle(root),
+      daemonLifecycle: fakeDaemonLifecycle(root, daemonLifecycleOverrides),
       runtime: fakeRuntime(),
     }),
   });
@@ -286,7 +309,7 @@ function pathsForRoot(root: string): LocalStatePaths {
   };
 }
 
-function fakeDaemonLifecycle(root: string): DaemonLifecycle {
+function fakeDaemonLifecycle(root: string, overrides: Partial<DaemonLifecycle> = {}): DaemonLifecycle {
   return {
     start: () => ({
       ok: false,
@@ -300,6 +323,7 @@ function fakeDaemonLifecycle(root: string): DaemonLifecycle {
       status: "stopped",
       daemonDir: join(root, "daemon"),
     }),
+    ...overrides,
   };
 }
 

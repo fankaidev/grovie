@@ -1,6 +1,6 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
-import type { DaemonLifecycle } from "./daemon-lifecycle.js";
+import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import type { LocalStatePaths } from "./local-state.js";
 import type { AgentRuntime } from "./runtime.js";
 import { findLocalRun, listLocalRuns } from "./status.js";
@@ -48,7 +48,7 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
       if (url.pathname === "/api/health") {
         writeJson(response, 200, {
           ok: true,
-          daemon: context.daemonLifecycle.status({ root: context.paths.root }),
+          daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
           runtime: context.runtime.checkAvailability(),
         });
         return;
@@ -169,4 +169,22 @@ function writeJson(response: ServerResponse, statusCode: number, value: unknown)
 
 function parseRequestUrl(url: string | undefined): URL {
   return new URL(url ?? "/", "http://127.0.0.1");
+}
+
+function renderApiDaemonStatus(status: DaemonLifecycleStatus): unknown {
+  if (status.status === "stopped") {
+    return status;
+  }
+
+  return {
+    status: status.status,
+    state: {
+      pid: status.state.pid,
+      command: status.state.command,
+      startedAt: status.state.startedAt,
+      stdoutPath: status.state.stdoutPath,
+      stderrPath: status.state.stderrPath,
+      statePath: status.state.statePath,
+    },
+  };
 }
