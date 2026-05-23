@@ -752,6 +752,7 @@ class FakeLocalState implements RunLocalState {
       runsDir: `${root}/runs`,
       agentsDir: `${root}/agents`,
       locksDir: `${root}/locks`,
+      sessionsDir: `${root}/sessions`,
     };
   }
 

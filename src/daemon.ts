@@ -8,6 +8,7 @@ import {
 import {
   formatIssueReference,
   type GitHubGateway,
+  type GitHubIssue,
   type IssueReference,
 } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
@@ -197,10 +198,22 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
         continue;
       }
 
+      const activityTimestamp = getIssueActivityTimestamp(issueResult.value);
+      const handledCursor = input.localState?.readHandledCursor?.({
+        repository: input.repository,
+        issueNumber: summary.reference.number,
+        agentId,
+      });
+
+      if (handledCursor !== undefined && Date.parse(handledCursor.handledThrough) >= Date.parse(activityTimestamp)) {
+        continue;
+      }
+
       return claimAndRun({
         ...input,
         issueReference: summary.reference,
         workerId: agentId,
+        activityTimestamp,
         now,
         issueRunner,
       });
@@ -221,6 +234,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
 async function claimAndRun(input: DaemonInput & {
   issueReference: IssueReference;
   workerId: string;
+  activityTimestamp: string;
   now: () => Date;
   issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
 }): Promise<DaemonCycleResult> {
@@ -336,6 +350,13 @@ async function claimAndRun(input: DaemonInput & {
           ? "Session succeeded."
           : "Session failed. See the Grovie result comment and local run logs.",
     );
+    input.localState?.writeHandledCursor?.({
+      repository: input.repository,
+      issueNumber: input.issueReference.number,
+      agentId: input.workerId,
+      handledThrough: input.activityTimestamp,
+      now: input.now(),
+    });
 
     return {
       ...result,
@@ -362,6 +383,18 @@ function getCandidateAgentIds(input: {
   }
 
   return assignedAgentIds.filter((agentId) => agentId.endsWith(`@${input.machineId}`));
+}
+
+function getIssueActivityTimestamp(issue: GitHubIssue): string {
+  const timestamps = issue.comments
+    .map((comment) => comment.updatedAt)
+    .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)));
+
+  if (timestamps.length === 0) {
+    return "1970-01-01T00:00:00.000Z";
+  }
+
+  return timestamps.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? "1970-01-01T00:00:00.000Z";
 }
 
 function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {

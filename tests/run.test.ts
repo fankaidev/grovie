@@ -361,6 +361,7 @@ class FakeLocalState implements RunLocalState {
     runsDir: "/tmp/grovie/runs",
     agentsDir: "/tmp/grovie/agents",
     locksDir: "/tmp/grovie/locks",
+    sessionsDir: "/tmp/grovie/sessions",
   };
   readonly run: PreparedRun = {
     runId: "fankaidev-grovie-issue-7",

@@ -15,7 +15,7 @@ import {
   type IssueReference,
 } from "./github.js";
 import type { AgentMetadata } from "./identity.js";
-import { buildAttemptId, buildBranchName, buildRunId, LocalState, type DaemonLock, type ExecutionLock, type LocalStatePaths, type LockResult, type PreparedRun } from "./local-state.js";
+import { buildAttemptId, buildBranchName, buildRunId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
 import type { SessionStatus } from "./task.js";
@@ -57,6 +57,8 @@ export type RunLocalState = {
   acquireExecutionLock?(input: { repository: string; issueNumber: number; agentId: string; now?: Date }): LockResult<ExecutionLock>;
   hasExecutionLock?(input: { repository: string; issueNumber: number; agentId: string }): boolean;
   releaseExecutionLock?(lock: ExecutionLock): void;
+  readHandledCursor?(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined;
+  writeHandledCursor?(input: { repository: string; issueNumber: number; agentId: string; handledThrough: string; now?: Date }): HandledCursor;
   prepareRun(input: {
     repository: string;
     issueNumber: number;

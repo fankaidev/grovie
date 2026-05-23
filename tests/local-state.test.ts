@@ -120,6 +120,35 @@ describe("LocalState", () => {
     }).ok).toBe(true);
   });
 
+  it("[UC-EXECUTION-02-S05] keeps handled cursors separate per agent", () => {
+    const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
+
+    state.writeHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "coder@fankai-mac",
+      handledThrough: "2026-05-23T00:00:00.000Z",
+      now: new Date("2026-05-23T00:00:01.000Z"),
+    });
+
+    expect(state.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "coder@fankai-mac",
+    })).toEqual({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "coder@fankai-mac",
+      handledThrough: "2026-05-23T00:00:00.000Z",
+      updatedAt: "2026-05-23T00:00:01.000Z",
+    });
+    expect(state.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "reviewer@fankai-mac",
+    })).toBeUndefined();
+  });
+
   it("creates repo cache, worktree, and run artifacts without touching the checkout", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();

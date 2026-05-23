@@ -12,6 +12,7 @@ export type LocalStatePaths = {
   runsDir: string;
   agentsDir: string;
   locksDir: string;
+  sessionsDir: string;
 };
 
 export type PrepareRunInput = {
@@ -57,6 +58,14 @@ export type ExecutionLock = {
   path: string;
 };
 
+export type HandledCursor = {
+  repository: string;
+  issueNumber: number;
+  agentId: string;
+  handledThrough: string;
+  updatedAt: string;
+};
+
 export type LockResult<T> =
   | {
     ok: true;
@@ -88,6 +97,7 @@ export class LocalState {
     mkdirSync(this.paths.runsDir, { recursive: true });
     mkdirSync(this.paths.agentsDir, { recursive: true });
     mkdirSync(this.paths.locksDir, { recursive: true });
+    mkdirSync(this.paths.sessionsDir, { recursive: true });
   }
 
   registerAgent(metadata: AgentMetadata): void {
@@ -167,6 +177,30 @@ export class LocalState {
 
   releaseExecutionLock(lock: ExecutionLock): void {
     removeFileIfExists(lock.path);
+  }
+
+  readHandledCursor(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined {
+    return readJsonFile<HandledCursor>(this.getHandledCursorPath(input.repository, input.issueNumber, input.agentId));
+  }
+
+  writeHandledCursor(input: {
+    repository: string;
+    issueNumber: number;
+    agentId: string;
+    handledThrough: string;
+    now?: Date;
+  }): HandledCursor {
+    this.ensureBaseDirectories();
+    const cursor = {
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      agentId: input.agentId,
+      handledThrough: input.handledThrough,
+      updatedAt: (input.now ?? new Date()).toISOString(),
+    };
+
+    writeJsonFile(this.getHandledCursorPath(input.repository, input.issueNumber, input.agentId), cursor);
+    return cursor;
   }
 
   prepareRun(input: PrepareRunInput): PreparedRun {
@@ -324,6 +358,13 @@ export class LocalState {
     );
   }
 
+  private getHandledCursorPath(repository: string, issueNumber: number, agentId: string): string {
+    return join(
+      this.paths.sessionsDir,
+      `${sanitizePathPart(repository)}-issue-${issueNumber}-${sanitizePathPart(agentId)}.json`,
+    );
+  }
+
   private ensureWorktree(input: {
     repositoryCachePath: string;
     worktreePath: string;
@@ -384,6 +425,7 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
     runsDir: overrides.runsDir ?? join(root, "runs"),
     agentsDir: overrides.agentsDir ?? join(root, "agents"),
     locksDir: overrides.locksDir ?? join(root, "locks"),
+    sessionsDir: overrides.sessionsDir ?? join(root, "sessions"),
   };
 }
 
