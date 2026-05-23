@@ -381,9 +381,6 @@ class FakeGitHub implements GitHubGateway {
 function defaultConfig(): GrovieConfig {
   return {
     version: 1,
-    repositories: {
-      allowed: ["fankaidev/grovie"],
-    },
     runtime: {
       default: "codex",
     },

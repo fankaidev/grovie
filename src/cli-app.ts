@@ -1,4 +1,4 @@
-import { createConfigFile, inferGitHubRepository, loadConfig } from "./config.js";
+import { CONFIG_FILE_NAME, createConfigFile, inferGitHubRepository, loadConfig, type LoadedConfig } from "./config.js";
 import { runDaemon } from "./daemon.js";
 import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { LocalState } from "./local-state.js";
@@ -30,17 +30,11 @@ const commandDefinitions = [
   {
     name: "init",
     description: "Create the minimal Grovie project config.",
-    usage: "grovie init [--repo owner/repo]",
+    usage: "grovie init",
     issue: "#3",
-    run: (args: string[], context: CliContext) => {
-      const repositoryResult = resolveRepository(args, context.cwd);
-
-      if (!repositoryResult.ok) {
-        return repositoryResult.result;
-      }
-
+    run: (_args: string[], context: CliContext) => {
       try {
-        createConfigFile(context.cwd, repositoryResult.repository);
+        createConfigFile(context.cwd);
       } catch (error) {
         return errorResult(error);
       }
@@ -50,7 +44,7 @@ const commandDefinitions = [
         stdout: [
           "grovie init",
           "",
-          `Created .grovie.yml for ${repositoryResult.repository}.`,
+          "Created .grovie.yml.",
           "Run `grovie doctor` to validate it.",
         ].join("\n"),
       };
@@ -64,6 +58,12 @@ const commandDefinitions = [
     run: (_args: string[], context: CliContext) => {
       try {
         const loaded = loadConfig(context.cwd);
+        const repositoryResult = resolveCurrentRepository(context.cwd);
+
+        if (!repositoryResult.ok) {
+          return repositoryResult.result;
+        }
+
         const authenticatedUser = context.github.getAuthenticatedUser();
 
         if (!authenticatedUser.ok) {
@@ -74,8 +74,8 @@ const commandDefinitions = [
         const doctorOutput = [
           "grovie doctor",
           "",
-          `Config: ${loaded.path} is valid.`,
-          `Allowed repositories: ${loaded.config.repositories.allowed.join(", ")}`,
+          `Config: ${renderConfigSource(loaded)}`,
+          `Repository: ${repositoryResult.repository}`,
           `Default runtime: ${loaded.config.runtime.default}`,
           `Queue label: ${loaded.config.queue.label}`,
           `GitHub: authenticated as ${authenticatedUser.value.login}.`,
@@ -128,6 +128,21 @@ const commandDefinitions = [
 
       try {
         const loaded = loadConfig(context.cwd);
+        const repositoryResult = resolveCurrentRepository(context.cwd);
+
+        if (!repositoryResult.ok) {
+          return repositoryResult.result;
+        }
+
+        const targetRepository = formatIssueRepository(parsedIssueReference.value);
+
+        if (targetRepository !== repositoryResult.repository) {
+          return {
+            exitCode: 1,
+            stderr: `Repository ${targetRepository} does not match current checkout repository ${repositoryResult.repository}.`,
+          };
+        }
+
         const agent = agentOption.value ?? loaded.config.runtime.default;
 
         if (agent !== "codex") {
@@ -139,8 +154,9 @@ const commandDefinitions = [
 
         return runIssueAsync({
           issueReference: parsedIssueReference.value,
+          repository: repositoryResult.repository,
           config: loaded.config,
-          configPath: loaded.path,
+          configPath: renderConfigPath(loaded),
           agent,
           github: context.github,
           runtime: context.runtime,
@@ -154,7 +170,7 @@ const commandDefinitions = [
   {
     name: "daemon",
     description: "Watch GitHub issues by label and run them locally.",
-    usage: "grovie daemon --repo owner/repo --label grovie [--once]",
+    usage: "grovie daemon [--repo owner/repo] [--label grovie] [--once]",
     issue: "#8",
     run: (args: string[], context: CliContext) => {
       const repoOption = readStringOption(args, "--repo");
@@ -171,12 +187,18 @@ const commandDefinitions = [
 
       try {
         const loaded = loadConfig(context.cwd);
-        const repository = repoOption.value ?? inferSingleAllowedRepository(loaded.config.repositories.allowed);
+        const repositoryResult = resolveCurrentRepository(context.cwd);
 
-        if (repository === undefined) {
+        if (!repositoryResult.ok) {
+          return repositoryResult.result;
+        }
+
+        const repository = repoOption.value ?? repositoryResult.repository;
+
+        if (repository !== repositoryResult.repository) {
           return {
             exitCode: 1,
-            stderr: "Missing repository. Usage: grovie daemon --repo owner/repo --label grovie",
+            stderr: `Repository ${repository} does not match current checkout repository ${repositoryResult.repository}.`,
           };
         }
 
@@ -184,7 +206,7 @@ const commandDefinitions = [
           repository,
           label: labelOption.value ?? loaded.config.queue.label,
           config: loaded.config,
-          configPath: loaded.path,
+          configPath: renderConfigPath(loaded),
           github: context.github,
           runtime: context.runtime,
           localState: context.localState,
@@ -302,23 +324,7 @@ type RepositoryResolution =
     result: CliResult;
   };
 
-function resolveRepository(args: string[], cwd: string): RepositoryResolution {
-  const repoOption = readStringOption(args, "--repo");
-
-  if (!repoOption.ok) {
-    return {
-      ok: false,
-      result: repoOption.result,
-    };
-  }
-
-  if (repoOption.value !== undefined) {
-    return {
-      ok: true,
-      repository: repoOption.value,
-    };
-  }
-
+function resolveCurrentRepository(cwd: string): RepositoryResolution {
   const inferredRepository = inferGitHubRepository(cwd);
 
   if (inferredRepository === undefined) {
@@ -326,7 +332,7 @@ function resolveRepository(args: string[], cwd: string): RepositoryResolution {
       ok: false,
       result: {
         exitCode: 1,
-        stderr: "Could not infer GitHub repository from origin remote. Use: grovie init --repo owner/repo",
+        stderr: "Could not infer GitHub repository from origin remote.",
       },
     };
   }
@@ -337,8 +343,16 @@ function resolveRepository(args: string[], cwd: string): RepositoryResolution {
   };
 }
 
-function inferSingleAllowedRepository(allowedRepositories: string[]): string | undefined {
-  return allowedRepositories.length === 1 ? allowedRepositories[0] : undefined;
+function formatIssueRepository(reference: { owner: string; repo: string }): string {
+  return `${reference.owner}/${reference.repo}`;
+}
+
+function renderConfigPath(loaded: LoadedConfig): string {
+  return loaded.path ?? "built-in defaults";
+}
+
+function renderConfigSource(loaded: LoadedConfig): string {
+  return loaded.path === undefined ? `defaults (no ${CONFIG_FILE_NAME} found)` : `${loaded.path} is valid.`;
 }
 
 function readStringOption(

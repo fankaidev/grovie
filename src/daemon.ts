@@ -45,13 +45,6 @@ const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_STALE_CLAIM_MS = 60 * 60 * 1000;
 
 export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
-  if (!input.config.repositories.allowed.includes(input.repository)) {
-    return {
-      exitCode: 1,
-      stderr: `Repository ${input.repository} is not allowed by ${input.configPath}.`,
-    };
-  }
-
   if (input.once) {
     return toRunIssueResult(await runDaemonCycle(input));
   }
@@ -212,6 +205,7 @@ async function claimAndRun(input: DaemonInput & {
 
   const result = await input.issueRunner({
     issueReference: input.issueReference,
+    repository: input.repository,
     config: input.config,
     configPath: input.configPath,
     agent: "codex",
