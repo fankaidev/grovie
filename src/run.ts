@@ -383,7 +383,7 @@ function finishRun(input: {
     resultError,
   });
 
-  input.localState.appendEvent(input.run, runEventType(input.runtimeResult), {
+  input.localState.appendEvent(input.run, runEventType(summary.status), {
     runtime: input.agent,
     exitCode: input.runtimeResult.execution.exitCode,
   });
@@ -516,12 +516,12 @@ function renderRunComment(summary: RunSummary): string {
   return lines.join("\n");
 }
 
-function runEventType(runtimeResult: RuntimeRunResult): "run.succeeded" | "run.failed" | "run.canceled" {
-  if (runtimeResult.ok) {
+function runEventType(status: SessionStatus): "run.succeeded" | "run.failed" | "run.canceled" {
+  if (status === "succeeded") {
     return "run.succeeded";
   }
 
-  return runtimeResult.canceled === true ? "run.canceled" : "run.failed";
+  return status === "canceled" ? "run.canceled" : "run.failed";
 }
 
 function renderCliRunOutput(summary: RunSummary): string {

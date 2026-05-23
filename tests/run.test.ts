@@ -159,6 +159,46 @@ describe("runIssue", () => {
     ]);
   });
 
+  it("marks the session failed when result handling fails after a successful runtime", () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      resultHandler: {
+        handle: () => {
+          throw new Error("pull request failed");
+        },
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("pull request failed");
+    expect(result.stdout).toContain("Session status: failed");
+    expect(github.comments[0]).toContain("Grovie session failed.");
+    expect(localState.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "result.failed",
+      "run.failed",
+      "comment.created",
+    ]);
+  });
+
   it("posts a canceled comment when the async runtime is canceled", async () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
