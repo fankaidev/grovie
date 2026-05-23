@@ -2,7 +2,7 @@ import { createConfigFile, inferGitHubRepository, loadConfig } from "./config.js
 import { runDaemon } from "./daemon.js";
 import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { LocalState } from "./local-state.js";
-import { runIssue, type RunLocalState } from "./run.js";
+import { runIssueAsync, type RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
 
 export type CliResult = {
@@ -137,7 +137,7 @@ const commandDefinitions = [
           };
         }
 
-        return runIssue({
+        return runIssueAsync({
           issueReference: parsedIssueReference.value,
           config: loaded.config,
           configPath: loaded.path,
