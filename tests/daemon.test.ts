@@ -184,7 +184,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("skips issues with a visible active claim", async () => {
+  it("[UC-GITHUB-01-S05] ignores visible claim comments when choosing local execution", async () => {
     const github = new FakeGitHub([
       fakeIssue({
         comments: [
@@ -204,27 +204,66 @@ describe("runDaemonCycle", () => {
       configPath: "/project/.grovie.yml",
       github,
       once: true,
-      workerId: "worker-1",
       now: () => NOW,
       issueRunner: (input) => {
         runs.push(input);
         return {
           exitCode: 0,
+          stdout: "ran despite visible claim",
         };
       },
     });
 
     expect(result).toEqual({
       exitCode: 0,
-      processed: false,
-      stdout: [
-        "grovie daemon",
-        "",
-        "No queued issues found for fankaidev/grovie with label grovie.",
-      ].join("\n"),
+      processed: true,
+      stdout: "ran despite visible claim",
     });
-    expect(runs).toHaveLength(0);
-    expect(github.createdComments).toHaveLength(0);
+    expect(runs).toHaveLength(1);
+    expect(github.createdComments[0]).toContain(`- Worker: \`default@${resolveMachineId(hostname())}\``);
+  });
+
+  it("[UC-WORKER-04-S06] uses independent local agent locks for assigned agents on one issue", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.acquireExecutionLock({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `coder@${machineId}`,
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`, `agent:reviewer@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran reviewer",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran reviewer",
+    });
+    expect(runs).toHaveLength(1);
+    expect(github.createdComments[0]).toContain(`- Worker: \`reviewer@${machineId}\``);
   });
 
   it("marks a claimed issue canceled when a cancel comment is visible before runtime start", async () => {
@@ -337,7 +376,7 @@ describe("runDaemonCycle", () => {
     );
   });
 
-  it("reclaims a stale visible claim conservatively", async () => {
+  it("[UC-GITHUB-01-S05] treats stale visible claims as non-authoritative summaries", async () => {
     const github = new FakeGitHub([
       fakeIssue({
         comments: [
@@ -360,7 +399,6 @@ describe("runDaemonCycle", () => {
       once: true,
       workerId: "worker-1",
       now: () => NOW,
-      staleClaimMs: 1_000,
       issueRunner: (input) => {
         runs.push(input);
         return {

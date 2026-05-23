@@ -2,10 +2,7 @@ import type { GrovieConfig } from "./config.js";
 import { getAssignedAgentIds, isAssignedToLocalMachine } from "./assignment.js";
 import {
   createIssueClaim,
-  DEFAULT_STALE_CLAIM_MS,
   hasCancelRequest,
-  isIssueClaimable,
-  selectActiveClaim,
   updateIssueClaim,
 } from "./claim.js";
 import {
@@ -30,7 +27,6 @@ export type DaemonInput = {
   once: boolean;
   workerId?: string;
   pollIntervalMs?: number;
-  staleClaimMs?: number;
   now?: () => Date;
   sleep?: (ms: number) => void | Promise<void>;
   issueRunner?: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
@@ -156,7 +152,6 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const now = input.now ?? (() => new Date());
   const identity = resolveLocalIdentity();
   input.localState?.registerAgent?.(identity.defaultAgent);
-  const workerId = input.workerId ?? identity.defaultAgent.agentId;
   const issueRunner = input.issueRunner ?? runIssueAsync;
   const listResult = input.github.listOpenIssues(input.repository, input.label);
 
@@ -179,32 +174,37 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       };
     }
 
-    if (!isIssueClaimable(issueResult.value, input.label, now(), input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS)) {
+    if (hasCancelRequest(issueResult.value, input.label)) {
       continue;
     }
 
-    if (
-      getAssignedAgentIds(issueResult.value.labels).length > 0 &&
-      !isAssignedToLocalMachine(issueResult.value.labels, identity.machineId)
-    ) {
-      continue;
-    }
-
-    if (input.localState?.hasExecutionLock?.({
-      repository: input.repository,
-      issueNumber: summary.reference.number,
-      agentId: workerId,
-    })) {
-      continue;
-    }
-
-    return claimAndRun({
-      ...input,
-      issueReference: summary.reference,
-      workerId,
-      now,
-      issueRunner,
+    const candidateAgentIds = getCandidateAgentIds({
+      labels: issueResult.value.labels,
+      machineId: identity.machineId,
+      fallbackAgentId: input.workerId ?? identity.defaultAgent.agentId,
     });
+
+    if (candidateAgentIds.length === 0) {
+      continue;
+    }
+
+    for (const agentId of candidateAgentIds) {
+      if (input.localState?.hasExecutionLock?.({
+        repository: input.repository,
+        issueNumber: summary.reference.number,
+        agentId,
+      })) {
+        continue;
+      }
+
+      return claimAndRun({
+        ...input,
+        issueReference: summary.reference,
+        workerId: agentId,
+        now,
+        issueRunner,
+      });
+    }
   }
 
   return {
@@ -274,26 +274,6 @@ async function claimAndRun(input: DaemonInput & {
   }
 
   const rereadIssue = rereadResult.value;
-  const claimOwner = selectActiveClaim(
-    rereadIssue,
-    input.now(),
-    input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS,
-  );
-
-  if (claimOwner?.id !== claimResult.claim.commentId) {
-    updateIssueClaim(input.github, claimResult.claim, "released", input.now(), "Another visible task claim owns this issue.");
-    releaseExecutionLock(input, executionLockResult?.lock);
-
-    return Promise.resolve({
-      exitCode: 0,
-      processed: false,
-      stdout: [
-        "grovie daemon",
-        "",
-        `Skipped ${formatIssueReference(input.issueReference)} because another claim is visible.`,
-      ].join("\n"),
-    });
-  }
 
   if (hasCancelRequest(rereadIssue, input.label)) {
     updateIssueClaim(
@@ -364,6 +344,24 @@ async function claimAndRun(input: DaemonInput & {
   } finally {
     releaseExecutionLock(input, executionLockResult?.lock);
   }
+}
+
+function getCandidateAgentIds(input: {
+  labels: string[];
+  machineId: string;
+  fallbackAgentId: string;
+}): string[] {
+  const assignedAgentIds = getAssignedAgentIds(input.labels);
+
+  if (assignedAgentIds.length === 0) {
+    return [input.fallbackAgentId];
+  }
+
+  if (!isAssignedToLocalMachine(input.labels, input.machineId)) {
+    return [];
+  }
+
+  return assignedAgentIds.filter((agentId) => agentId.endsWith(`@${input.machineId}`));
 }
 
 function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {
