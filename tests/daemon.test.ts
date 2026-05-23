@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { describe, expect, it } from "vitest";
 import type { GrovieConfig } from "../src/config.js";
 import { runDaemonCycle, runDaemonForRepositories } from "../src/daemon.js";
@@ -8,6 +9,7 @@ import type {
   GitHubIssueSummary,
   IssueReference,
 } from "../src/github.js";
+import { resolveMachineId } from "../src/identity.js";
 import type { RunIssueAsyncInput, RunIssueResult } from "../src/run.js";
 
 const NOW = new Date("2026-05-22T00:00:00Z");
@@ -51,6 +53,26 @@ describe("runDaemonCycle", () => {
       expect.stringContaining("Grovie daemon task claim active."),
       expect.stringContaining("Grovie daemon task claim released."),
     ]);
+  });
+
+  it("[UC-WORKER-01-S04] uses the default local agent id as the daemon worker id", async () => {
+    const github = new FakeGitHub([fakeIssue()]);
+    const machineId = resolveMachineId(hostname());
+
+    await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      now: () => NOW,
+      issueRunner: () => ({
+        exitCode: 0,
+      }),
+    });
+
+    expect(github.createdComments[0]).toContain(`- Worker: \`default@${machineId}\``);
   });
 
   it("skips issues with a visible active claim", async () => {

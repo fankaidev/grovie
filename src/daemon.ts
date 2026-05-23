@@ -12,6 +12,7 @@ import {
   type GitHubGateway,
   type IssueReference,
 } from "./github.js";
+import { resolveLocalIdentity } from "./identity.js";
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
 import { runIssueAsync } from "./run.js";
 import type { AgentRuntime } from "./runtime.js";
@@ -115,7 +116,7 @@ function toRunIssueResult(result: DaemonCycleResult): RunIssueResult {
 
 export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleResult> {
   const now = input.now ?? (() => new Date());
-  const workerId = input.workerId ?? `grovie-${process.pid}`;
+  const workerId = input.workerId ?? resolveLocalIdentity().defaultAgent.agentId;
   const issueRunner = input.issueRunner ?? runIssueAsync;
   const listResult = input.github.listOpenIssues(input.repository, input.label);
 

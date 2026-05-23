@@ -3,7 +3,7 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
-import { resolveMachineId } from "../src/identity.js";
+import { type AgentMetadata, resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
 import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
@@ -100,9 +100,10 @@ describe("CLI command registration", () => {
     runCli(["init"], { cwd });
 
     const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
     const machineId = resolveMachineId(hostname());
 
-    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState: new FakeLocalState(globalRoot) })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState })).toEqual({
       exitCode: 0,
       stdout: [
         "grovie doctor",
@@ -117,6 +118,14 @@ describe("CLI command registration", () => {
         "Codex: available (codex-cli 0.133.0).",
       ].join("\n"),
     });
+    expect(localState.registeredAgents).toEqual([
+      expect.objectContaining({
+        agentId: `default@${machineId}`,
+        machineId,
+        runtime: "codex",
+        envKeys: ["OPENAI_API_KEY"],
+      }),
+    ]);
   });
 
   it("[UC-WORKER-01-S04] [UC-EXECUTION-03-S02] reports unavailable Codex runtime through doctor", () => {
@@ -643,6 +652,7 @@ function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGatewa
 
 class FakeLocalState implements RunLocalState {
   readonly paths: LocalStatePaths;
+  readonly registeredAgents: AgentMetadata[] = [];
   readonly run: PreparedRun = {
     runId: "fankaidev-grovie-issue-2",
     branchName: "grovie/issue-2",
@@ -662,6 +672,7 @@ class FakeLocalState implements RunLocalState {
       reposDir: `${root}/repos`,
       worktreesDir: `${root}/worktrees`,
       runsDir: `${root}/runs`,
+      agentsDir: `${root}/agents`,
     };
   }
 
@@ -674,6 +685,10 @@ class FakeLocalState implements RunLocalState {
   }
 
   appendEvent(): void {}
+
+  registerAgent(metadata: AgentMetadata): void {
+    this.registeredAgents.push(metadata);
+  }
 }
 
 function fakeIssue(reference: IssueReference): GitHubIssue {

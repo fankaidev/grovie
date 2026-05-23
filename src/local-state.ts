@@ -3,12 +3,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
+import type { AgentMetadata } from "./identity.js";
 
 export type LocalStatePaths = {
   root: string;
   reposDir: string;
   worktreesDir: string;
   runsDir: string;
+  agentsDir: string;
 };
 
 export type PrepareRunInput = {
@@ -57,6 +59,12 @@ export class LocalState {
     mkdirSync(this.paths.reposDir, { recursive: true });
     mkdirSync(this.paths.worktreesDir, { recursive: true });
     mkdirSync(this.paths.runsDir, { recursive: true });
+    mkdirSync(this.paths.agentsDir, { recursive: true });
+  }
+
+  registerAgent(metadata: AgentMetadata): void {
+    this.ensureBaseDirectories();
+    writeJsonFile(join(this.paths.agentsDir, `${sanitizePathPart(metadata.agentId)}.json`), metadata);
   }
 
   prepareRun(input: PrepareRunInput): PreparedRun {
@@ -265,6 +273,7 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
     reposDir: overrides.reposDir ?? join(root, "repos"),
     worktreesDir: overrides.worktreesDir ?? join(root, "worktrees"),
     runsDir: overrides.runsDir ?? join(root, "runs"),
+    agentsDir: overrides.agentsDir ?? join(root, "agents"),
   };
 }
 
