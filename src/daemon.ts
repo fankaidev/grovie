@@ -188,7 +188,6 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     const candidateAgentIds = getCandidateAgentIds({
       labels: issueResult.value.labels,
       machineId: identity.machineId,
-      fallbackAgentId: input.workerId ?? identity.defaultAgent.agentId,
     });
 
     if (candidateAgentIds.length === 0) {
@@ -378,12 +377,11 @@ async function claimAndRun(input: DaemonInput & {
 function getCandidateAgentIds(input: {
   labels: string[];
   machineId: string;
-  fallbackAgentId: string;
 }): string[] {
   const assignedAgentIds = getAssignedAgentIds(input.labels);
 
   if (assignedAgentIds.length === 0) {
-    return [input.fallbackAgentId];
+    return [];
   }
 
   if (!isAssignedToLocalMachine(input.labels, input.machineId)) {

@@ -122,6 +122,44 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
+  it("[UC-WORKER-04-S03] skips label-only issues without a local agent assignment", async () => {
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      workerId: `default@${resolveMachineId(hostname())}`,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(github.createdComments).toEqual([]);
+  });
+
   it("[UC-WORKER-04-S03] creates one run for a locally assigned agent with unhandled activity", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
@@ -617,8 +655,10 @@ describe("runDaemonCycle", () => {
   });
 
   it("[UC-GITHUB-01-S05] ignores visible claim comments when choosing local execution", async () => {
+    const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
+        labels: ["grovie", `agent:default@${machineId}`],
         comments: [
           fakeComment({
             id: 99,
@@ -652,7 +692,7 @@ describe("runDaemonCycle", () => {
       stdout: "ran despite visible claim",
     });
     expect(runs).toHaveLength(1);
-    expect(github.createdComments[0]).toContain(`- Worker: \`default@${resolveMachineId(hostname())}\``);
+    expect(github.createdComments[0]).toContain(`- Worker: \`default@${machineId}\``);
   });
 
   it("[UC-WORKER-04-S06] uses independent local agent locks for assigned agents on one issue", async () => {
@@ -809,8 +849,10 @@ describe("runDaemonCycle", () => {
   });
 
   it("[UC-GITHUB-01-S05] treats stale visible claims as non-authoritative summaries", async () => {
+    const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
+        labels: ["grovie", `agent:default@${machineId}`],
         comments: [
           fakeComment({
             id: 99,
@@ -846,6 +888,7 @@ describe("runDaemonCycle", () => {
   });
 
   it("[UC-WORKER-04-S08] checks multiple watched repositories sequentially until it finds queued work", async () => {
+    const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
         reference: {
@@ -853,7 +896,7 @@ describe("runDaemonCycle", () => {
           repo: "other",
           number: 5,
         },
-        labels: ["ready"],
+        labels: ["ready", `agent:default@${machineId}`],
       }),
     ]);
     const runs: RunIssueAsyncInput[] = [];
@@ -1087,7 +1130,7 @@ function fakeIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
     body: "Run queued work.",
     state: "open",
     updatedAt: NOW.toISOString(),
-    labels: ["grovie"],
+    labels: ["grovie", `agent:default@${resolveMachineId(hostname())}`],
     comments: [],
     defaultBranch: "main",
     ...overrides,
