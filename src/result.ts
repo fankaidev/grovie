@@ -79,7 +79,7 @@ export class GitResultHandler implements ResultHandler {
       "-m",
       `Run id: ${input.run.runId}`,
     ]);
-    this.git(input.run.worktreePath, ["push", "-u", "origin", `HEAD:${input.run.branchName}`]);
+    this.pushResultBranch(input);
 
     const commitSha = this.git(input.run.worktreePath, ["rev-parse", "HEAD"]).stdout.trim();
     const pullRequestResult = this.github.createPullRequest({
@@ -117,6 +117,25 @@ export class GitResultHandler implements ResultHandler {
     }
 
     return result;
+  }
+
+  private pushResultBranch(input: HandleRunResultInput): void {
+    const result = this.runner.run("git", ["push", "-u", "origin", `HEAD:${input.run.branchName}`], undefined, {
+      cwd: input.run.worktreePath,
+    });
+
+    if (result.exitCode !== 0) {
+      const detail = result.stderr.trim() || `git push failed with exit code ${result.exitCode}.`;
+
+      throw new Error(
+        [
+          `Could not push result branch ${input.run.branchName}.`,
+          "Another Grovie worker may have already pushed this issue branch.",
+          "Grovie will not force-push or overwrite remote work.",
+          detail,
+        ].join(" "),
+      );
+    }
   }
 }
 

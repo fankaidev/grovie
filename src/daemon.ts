@@ -1,9 +1,15 @@
 import type { GrovieConfig } from "./config.js";
 import {
+  createIssueClaim,
+  DEFAULT_STALE_CLAIM_MS,
+  hasCancelRequest,
+  isIssueClaimable,
+  selectActiveClaim,
+  updateIssueClaim,
+} from "./claim.js";
+import {
   formatIssueReference,
-  type GitHubComment,
   type GitHubGateway,
-  type GitHubIssue,
   type IssueReference,
 } from "./github.js";
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
@@ -31,18 +37,7 @@ type DaemonCycleResult = RunIssueResult & {
   processed: boolean;
 };
 
-type ClaimStatus = "claimed" | "running" | "completed" | "failed" | "canceled" | "skipped";
-
-type Claim = {
-  id: number;
-  workerId: string;
-  status: ClaimStatus;
-  updatedAt: string;
-};
-
-const CLAIM_MARKER = "grovie:claim";
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
-const DEFAULT_STALE_CLAIM_MS = 60 * 60 * 1000;
 
 export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
   if (input.once) {
@@ -89,7 +84,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       };
     }
 
-    if (!isEligibleIssue(issueResult.value, input.label, now(), input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS)) {
+    if (!isIssueClaimable(issueResult.value, input.label, now(), input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS)) {
       continue;
     }
 
@@ -119,26 +114,22 @@ async function claimAndRun(input: DaemonInput & {
   now: () => Date;
   issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
 }): Promise<DaemonCycleResult> {
-  const claimedAt = input.now().toISOString();
-  const claimResult = input.github.createIssueComment(
-    input.issueReference,
-    renderClaimComment({
-      status: "claimed",
-      workerId: input.workerId,
-      claimedAt,
-      heartbeatAt: claimedAt,
-    }),
-  );
+  const claimResult = createIssueClaim({
+    github: input.github,
+    issueReference: input.issueReference,
+    actor: "daemon",
+    workerId: input.workerId,
+    now: input.now(),
+  });
 
   if (!claimResult.ok) {
     return Promise.resolve({
       exitCode: 1,
       processed: false,
-      stderr: claimResult.error.message,
+      stderr: claimResult.message,
     });
   }
 
-  const repository = formatRepository(input.issueReference);
   const rereadResult = input.github.readIssue(input.issueReference);
 
   if (!rereadResult.ok) {
@@ -150,20 +141,14 @@ async function claimAndRun(input: DaemonInput & {
   }
 
   const rereadIssue = rereadResult.value;
-  const claimOwner = selectClaimOwner(
+  const claimOwner = selectActiveClaim(
     rereadIssue,
     input.now(),
     input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS,
   );
 
-  if (claimOwner?.id !== claimResult.value.id) {
-    updateClaim(input.github, repository, claimResult.value.id, {
-      status: "skipped",
-      workerId: input.workerId,
-      claimedAt,
-      heartbeatAt: input.now().toISOString(),
-      note: "Another visible claim owns this issue.",
-    });
+  if (claimOwner?.id !== claimResult.claim.commentId) {
+    updateIssueClaim(input.github, claimResult.claim, "skipped", input.now(), "Another visible claim owns this issue.");
 
     return Promise.resolve({
       exitCode: 0,
@@ -177,13 +162,13 @@ async function claimAndRun(input: DaemonInput & {
   }
 
   if (hasCancelRequest(rereadIssue, input.label)) {
-    updateClaim(input.github, repository, claimResult.value.id, {
-      status: "canceled",
-      workerId: input.workerId,
-      claimedAt,
-      heartbeatAt: input.now().toISOString(),
-      note: "Cancellation was requested before runtime start.",
-    });
+    updateIssueClaim(
+      input.github,
+      claimResult.claim,
+      "canceled",
+      input.now(),
+      "Cancellation was requested before runtime start.",
+    );
 
     return Promise.resolve({
       exitCode: 0,
@@ -196,12 +181,7 @@ async function claimAndRun(input: DaemonInput & {
     });
   }
 
-  updateClaim(input.github, repository, claimResult.value.id, {
-    status: "running",
-    workerId: input.workerId,
-    claimedAt,
-    heartbeatAt: input.now().toISOString(),
-  });
+  updateIssueClaim(input.github, claimResult.claim, "running", input.now());
 
   const result = await input.issueRunner({
     issueReference: input.issueReference,
@@ -215,12 +195,7 @@ async function claimAndRun(input: DaemonInput & {
     monitor: {
       heartbeatIntervalMs: input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
       onHeartbeat: () => {
-        updateClaim(input.github, repository, claimResult.value.id, {
-          status: "running",
-          workerId: input.workerId,
-          claimedAt,
-          heartbeatAt: input.now().toISOString(),
-        });
+        updateIssueClaim(input.github, claimResult.claim, "running", input.now());
       },
       shouldCancel: () => {
         const latestIssue = input.github.readIssue(input.issueReference);
@@ -234,140 +209,22 @@ async function claimAndRun(input: DaemonInput & {
     },
   });
 
-  updateClaim(input.github, repository, claimResult.value.id, {
-    status: result.canceled === true ? "canceled" : result.exitCode === 0 ? "completed" : "failed",
-    workerId: input.workerId,
-    claimedAt,
-    heartbeatAt: input.now().toISOString(),
-    note:
-      result.canceled === true
-        ? "Run canceled."
-        : result.exitCode === 0
-          ? "Run completed."
-          : "Run failed. See the Grovie result comment and local run logs.",
-  });
+  updateIssueClaim(
+    input.github,
+    claimResult.claim,
+    result.canceled === true ? "canceled" : result.exitCode === 0 ? "completed" : "failed",
+    input.now(),
+    result.canceled === true
+      ? "Run canceled."
+      : result.exitCode === 0
+        ? "Run completed."
+        : "Run failed. See the Grovie result comment and local run logs.",
+  );
 
   return {
     ...result,
     processed: true,
   };
-}
-
-function isEligibleIssue(issue: GitHubIssue, queueLabel: string, now: Date, staleClaimMs: number): boolean {
-  if (hasCancelRequest(issue, queueLabel)) {
-    return false;
-  }
-
-  return selectClaimOwner(issue, now, staleClaimMs) === undefined;
-}
-
-function hasCancelRequest(issue: GitHubIssue, queueLabel: string): boolean {
-  const cancelLabel = `${queueLabel}:cancel`;
-
-  return (
-    issue.labels.includes(cancelLabel) ||
-    issue.comments.some((comment) => comment.body.split("\n").some((line) => line.trim() === "/grovie cancel"))
-  );
-}
-
-function selectClaimOwner(issue: GitHubIssue, now: Date, staleClaimMs: number): Claim | undefined {
-  const activeClaims = issue.comments
-    .map(parseClaim)
-    .filter((claim): claim is Claim => claim !== undefined)
-    .filter((claim) => isActiveClaim(claim, now, staleClaimMs))
-    .sort((left, right) => {
-      const byUpdatedAt = Date.parse(left.updatedAt) - Date.parse(right.updatedAt);
-      return byUpdatedAt === 0 ? left.id - right.id : byUpdatedAt;
-    });
-
-  return activeClaims[0];
-}
-
-function isActiveClaim(claim: Claim, now: Date, staleClaimMs: number): boolean {
-  if (claim.status !== "claimed" && claim.status !== "running") {
-    return false;
-  }
-
-  const updatedAt = Date.parse(claim.updatedAt);
-
-  if (Number.isNaN(updatedAt)) {
-    return true;
-  }
-
-  return now.getTime() - updatedAt <= staleClaimMs;
-}
-
-function parseClaim(comment: GitHubComment): Claim | undefined {
-  const marker = new RegExp(`<!-- ${CLAIM_MARKER} (?<json>[^\\n]+) -->`).exec(comment.body);
-  const rawJson = marker?.groups?.json;
-
-  if (rawJson === undefined) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(rawJson) as Partial<Pick<Claim, "workerId" | "status">>;
-
-    if (parsed.workerId === undefined || parsed.status === undefined) {
-      return undefined;
-    }
-
-    return {
-      id: comment.id,
-      workerId: parsed.workerId,
-      status: parsed.status,
-      updatedAt: comment.updatedAt,
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function updateClaim(
-  github: GitHubGateway,
-  repository: string,
-  commentId: number,
-  input: {
-    status: ClaimStatus;
-    workerId: string;
-    claimedAt: string;
-    heartbeatAt: string;
-    note?: string;
-  },
-): void {
-  github.updateIssueComment(repository, commentId, renderClaimComment(input));
-}
-
-function renderClaimComment(input: {
-  status: ClaimStatus;
-  workerId: string;
-  claimedAt: string;
-  heartbeatAt: string;
-  note?: string;
-}): string {
-  const marker = `<!-- ${CLAIM_MARKER} ${JSON.stringify({
-    workerId: input.workerId,
-    status: input.status,
-  })} -->`;
-  const lines = [
-    marker,
-    `Grovie daemon ${input.status}.`,
-    "",
-    `- Worker: \`${input.workerId}\``,
-    `- Status: ${input.status}`,
-    `- Claimed at: ${input.claimedAt}`,
-    `- Last heartbeat: ${input.heartbeatAt}`,
-  ];
-
-  if (input.note !== undefined) {
-    lines.push(`- Note: ${input.note}`);
-  }
-
-  return lines.join("\n");
-}
-
-function formatRepository(reference: Pick<IssueReference, "owner" | "repo">): string {
-  return `${reference.owner}/${reference.repo}`;
 }
 
 function sleepSync(ms: number): Promise<void> {

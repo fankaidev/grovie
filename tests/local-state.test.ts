@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildBranchName, buildRunId, LocalState } from "../src/local-state.js";
+import { buildBranchName, buildLocalBranchName, buildRunId, LocalState } from "../src/local-state.js";
 import type { CommandResult, CommandRunner } from "../src/github.js";
 
 const tmpDirs: string[] = [];
@@ -14,10 +14,12 @@ afterEach(() => {
 });
 
 describe("local state paths", () => {
-  it("builds deterministic run ids and branch names", () => {
-    expect(buildRunId("fankaidev/grovie", 5)).toBe("fankaidev-grovie-issue-5");
+  it("builds attempt-specific run ids and deterministic result branch names", () => {
+    expect(buildRunId("fankaidev/grovie", 5, "attempt-a")).toBe("fankaidev-grovie-issue-5-attempt-a");
+    expect(buildRunId("fankaidev/grovie", 5)).toMatch(/^fankaidev-grovie-issue-5-\d{14}-[0-9a-f]{8}$/);
     expect(buildBranchName("grovie/", 5)).toBe("grovie/issue-5");
     expect(buildBranchName("grovie", 5)).toBe("grovie/issue-5");
+    expect(buildLocalBranchName("grovie/", 5, "attempt-a")).toBe("grovie/issue-5-attempt-a");
   });
 });
 
@@ -32,13 +34,14 @@ describe("LocalState", () => {
       issueNumber: 5,
       defaultBranch: "main",
       branchPrefix: "grovie/",
+      attemptId: "attempt-a",
       task: {
         issue: 5,
       },
       prompt: "Implement issue #5",
     });
 
-    expect(run.runId).toBe("fankaidev-grovie-issue-5");
+    expect(run.runId).toBe("fankaidev-grovie-issue-5-attempt-a");
     expect(run.branchName).toBe("grovie/issue-5");
     expect(readFileSync(run.taskPath, "utf8")).toContain('"issue": 5');
     expect(readFileSync(run.promptPath, "utf8")).toBe("Implement issue #5");
@@ -55,15 +58,15 @@ describe("LocalState", () => {
         "+refs/heads/main:refs/heads/main",
       ],
       ["-C", join(root, "repos", "fankaidev-grovie.git"), "worktree", "prune"],
-      ["-C", join(root, "repos", "fankaidev-grovie.git"), "branch", "-D", "grovie/issue-5"],
+      ["-C", join(root, "repos", "fankaidev-grovie.git"), "branch", "-D", "grovie/issue-5-attempt-a"],
       [
         "-C",
         join(root, "repos", "fankaidev-grovie.git"),
         "worktree",
         "add",
         "-B",
-        "grovie/issue-5",
-        join(root, "worktrees", "fankaidev-grovie-issue-5"),
+        "grovie/issue-5-attempt-a",
+        join(root, "worktrees", "fankaidev-grovie-issue-5-attempt-a"),
         "main",
       ],
     ]);
@@ -72,7 +75,7 @@ describe("LocalState", () => {
   it("fetches existing caches and recreates existing worktree paths", () => {
     const root = createTmpDir();
     const cachePath = join(root, "repos", "fankaidev-grovie.git");
-    const worktreePath = join(root, "worktrees", "fankaidev-grovie-issue-5");
+    const worktreePath = join(root, "worktrees", "fankaidev-grovie-issue-5-attempt-a");
     mkdirSync(cachePath, { recursive: true });
     mkdirSync(worktreePath, { recursive: true });
     const runner = new FakeRunner();
@@ -83,6 +86,7 @@ describe("LocalState", () => {
       issueNumber: 5,
       defaultBranch: "main",
       branchPrefix: "grovie/",
+      attemptId: "attempt-a",
       task: {},
       prompt: "",
     });
@@ -92,9 +96,41 @@ describe("LocalState", () => {
       ["-C", cachePath, "fetch", "origin", "+refs/heads/main:refs/heads/main"],
       ["-C", cachePath, "worktree", "remove", "--force", worktreePath],
       ["-C", cachePath, "worktree", "prune"],
-      ["-C", cachePath, "branch", "-D", "grovie/issue-5"],
-      ["-C", cachePath, "worktree", "add", "-B", "grovie/issue-5", worktreePath, "main"],
+      ["-C", cachePath, "branch", "-D", "grovie/issue-5-attempt-a"],
+      ["-C", cachePath, "worktree", "add", "-B", "grovie/issue-5-attempt-a", worktreePath, "main"],
     ]);
+  });
+
+  it("uses unique local worktrees for repeated attempts while keeping the result branch fixed", () => {
+    const root = createTmpDir();
+    const runner = new FakeRunner();
+    const state = new LocalState({ paths: { root }, runner });
+
+    const first = state.prepareRun({
+      repository: "fankaidev/grovie",
+      issueNumber: 5,
+      defaultBranch: "main",
+      branchPrefix: "grovie/",
+      attemptId: "attempt-a",
+      task: {},
+      prompt: "",
+    });
+    const second = state.prepareRun({
+      repository: "fankaidev/grovie",
+      issueNumber: 5,
+      defaultBranch: "main",
+      branchPrefix: "grovie/",
+      attemptId: "attempt-b",
+      task: {},
+      prompt: "",
+    });
+
+    expect(first.branchName).toBe("grovie/issue-5");
+    expect(second.branchName).toBe("grovie/issue-5");
+    expect(first.runId).not.toBe(second.runId);
+    expect(first.worktreePath).not.toBe(second.worktreePath);
+    expect(first.worktreePath).toContain("attempt-a");
+    expect(second.worktreePath).toContain("attempt-b");
   });
 
   it("cleans successful worktrees without deleting run logs", () => {
@@ -106,6 +142,7 @@ describe("LocalState", () => {
       issueNumber: 5,
       defaultBranch: "main",
       branchPrefix: "grovie/",
+      attemptId: "attempt-a",
       task: {},
       prompt: "",
     });
@@ -136,6 +173,7 @@ describe("LocalState", () => {
         issueNumber: 5,
         defaultBranch: "main",
         branchPrefix: "grovie/",
+        attemptId: "attempt-a",
         task: {
           issue: 5,
         },
@@ -143,7 +181,7 @@ describe("LocalState", () => {
       }),
     ).toThrow("fatal: invalid reference: main");
 
-    const runDir = join(root, "runs", "fankaidev-grovie-issue-5");
+    const runDir = join(root, "runs", "fankaidev-grovie-issue-5-attempt-a");
     const eventsPath = join(runDir, "events.jsonl");
 
     expect(readFileSync(join(runDir, "task.json"), "utf8")).toContain('"issue": 5');
