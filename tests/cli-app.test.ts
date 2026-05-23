@@ -1192,6 +1192,7 @@ function fakeDaemonState(root: string, pid: number): Extract<DaemonLifecycleStat
     stdoutPath: `${root}/daemon/stdout.log`,
     stderrPath: `${root}/daemon/stderr.log`,
     statePath: `${root}/daemon/daemon.json`,
+    token: "daemon-token",
   };
 }
 

@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -9,6 +10,7 @@ export type DaemonLifecycleState = {
   stdoutPath: string;
   stderrPath: string;
   statePath: string;
+  token: string;
 };
 
 export type DaemonLifecycleStatus =
@@ -27,7 +29,11 @@ export type DaemonLifecycle = {
   status(input: { root: string }): DaemonLifecycleStatus;
 };
 
+type ProcessVerifier = (state: DaemonLifecycleState) => boolean;
+
 export class LocalDaemonLifecycle implements DaemonLifecycle {
+  constructor(private readonly verifyProcess: ProcessVerifier = verifyGrovieDaemonProcess) {}
+
   start(input: { root: string; args: string[] }): { ok: true; state: DaemonLifecycleState } | { ok: false; message: string } {
     const currentStatus = this.status(input);
 
@@ -52,6 +58,7 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
       };
     }
 
+    const token = randomUUID();
     const command = [process.execPath, entrypoint, "daemon", "run", ...input.args.filter((arg) => arg !== "start")];
     const stdoutFd = openSync(stdoutPath, "a");
     const stderrFd = openSync(stderrPath, "a");
@@ -62,6 +69,10 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
       child = spawn(command[0] ?? process.execPath, command.slice(1), {
         detached: true,
         stdio: ["ignore", stdoutFd, stderrFd],
+        env: {
+          ...process.env,
+          GROVIE_DAEMON_TOKEN: token,
+        },
       });
     } finally {
       closeSync(stdoutFd);
@@ -77,6 +88,7 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
       stdoutPath,
       stderrPath,
       statePath: getStatePath(input.root),
+      token,
     };
 
     writeFileSync(state.statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
@@ -102,6 +114,13 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
       return {
         ok: true,
         message: `Removed stale daemon state for pid ${currentStatus.state.pid}.`,
+      };
+    }
+
+    if (!this.verifyProcess(currentStatus.state)) {
+      return {
+        ok: false,
+        message: `Refusing to stop pid ${currentStatus.state.pid} because it does not match the recorded Grovie daemon token.`,
       };
     }
 
@@ -178,7 +197,7 @@ function readState(path: string): DaemonLifecycleState | undefined {
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<DaemonLifecycleState>;
 
-    if (typeof parsed.pid !== "number" || !Array.isArray(parsed.command)) {
+    if (typeof parsed.pid !== "number" || !Array.isArray(parsed.command) || typeof parsed.token !== "string") {
       return undefined;
     }
 
@@ -189,10 +208,27 @@ function readState(path: string): DaemonLifecycleState | undefined {
       stdoutPath: parsed.stdoutPath ?? "",
       stderrPath: parsed.stderrPath ?? "",
       statePath: parsed.statePath ?? path,
+      token: parsed.token,
     };
   } catch {
     return undefined;
   }
+}
+
+function verifyGrovieDaemonProcess(state: DaemonLifecycleState): boolean {
+  if (state.token.length === 0) {
+    return false;
+  }
+
+  const result = spawnSync("ps", ["eww", "-p", String(state.pid)], {
+    encoding: "utf8",
+  });
+
+  if (result.status !== 0) {
+    return false;
+  }
+
+  return result.stdout.includes(`GROVIE_DAEMON_TOKEN=${state.token}`);
 }
 
 function removeState(path: string): void {
