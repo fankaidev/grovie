@@ -87,7 +87,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments[0]).toContain(`- Worker: \`default@${machineId}\``);
   });
 
-  it("[UC-WORKER-03-S05] skips issues assigned only to another machine", async () => {
+  it("[UC-WORKER-03-S05] [UC-WORKER-04-S11] reports issues assigned only to another machine as skipped", async () => {
     const github = new FakeGitHub([
       fakeIssue({
         labels: ["grovie", "agent:coder@other-machine"],
@@ -118,6 +118,9 @@ describe("runDaemonCycle", () => {
         "grovie daemon",
         "",
         "No queued issues found for fankaidev/grovie with label grovie.",
+        "",
+        "Skipped assigned issues:",
+        "- fankaidev/grovie#8 agent=coder@other-machine reason=assigned to another machine",
       ].join("\n"),
     });
     expect(runs).toEqual([]);
@@ -156,6 +159,81 @@ describe("runDaemonCycle", () => {
         "grovie daemon",
         "",
         "No queued issues found for fankaidev/grovie with label grovie.",
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(github.createdComments).toEqual([]);
+  });
+
+  it("[UC-WORKER-04-S11] reports handled assigned issues as skipped", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.writeHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `coder@${machineId}`,
+      handledThrough: NOW.toISOString(),
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("run was not expected");
+      },
+    });
+
+    expect(result.stdout).toContain("Skipped assigned issues:");
+    expect(result.stdout).toContain(`- fankaidev/grovie#8 agent=coder@${machineId} reason=no unhandled activity`);
+  });
+
+  it("[UC-WORKER-04-S11] reports canceled local assignments as skipped without claiming them", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`, "grovie:cancel"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+        "",
+        "Skipped assigned issues:",
+        `- fankaidev/grovie#8 agent=coder@${machineId} reason=canceled`,
       ].join("\n"),
     });
     expect(runs).toEqual([]);
@@ -462,7 +540,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-04-S05] skips an issue when a local execution lock already exists", async () => {
+  it("[UC-WORKER-04-S05] [UC-WORKER-04-S11] reports an assigned issue skipped by a local execution lock", async () => {
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.acquireExecutionLock({
@@ -497,6 +575,9 @@ describe("runDaemonCycle", () => {
         "grovie daemon",
         "",
         "No queued issues found for fankaidev/grovie with label grovie.",
+        "",
+        "Skipped assigned issues:",
+        `- fankaidev/grovie#8 agent=default@${resolveMachineId(hostname())} reason=active local execution lock`,
       ].join("\n"),
     });
     expect(runs).toEqual([]);
@@ -648,7 +729,7 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(1);
   });
 
-  it("[UC-EXECUTION-02-S04] skips unchanged issue activity covered by the handled cursor", async () => {
+  it("[UC-EXECUTION-02-S04] [UC-WORKER-04-S11] reports unchanged issue activity skipped by the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -693,6 +774,9 @@ describe("runDaemonCycle", () => {
         "grovie daemon",
         "",
         "No queued issues found for fankaidev/grovie with label grovie.",
+        "",
+        "Skipped assigned issues:",
+        `- fankaidev/grovie#8 agent=default@${machineId} reason=no unhandled activity`,
       ].join("\n"),
     });
     expect(runs).toEqual([]);

@@ -11,7 +11,7 @@ import {
 } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
 import type { DaemonLock, ExecutionLock } from "./local-state.js";
-import { getIssueActivity, inspectQueue, selectNextRunnableCandidate, type IssueActivity } from "./queue.js";
+import { getIssueActivity, inspectQueue, renderSkippedQueueSummary, selectNextRunnableCandidate, type IssueActivity } from "./queue.js";
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
 import { runIssueAsync } from "./run.js";
 import type { AgentRuntime } from "./runtime.js";
@@ -212,6 +212,8 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     });
   }
 
+  const skippedSummary = renderSkippedQueueSummary(queueResult.value);
+
   return {
     exitCode: 0,
     processed: false,
@@ -219,6 +221,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       "grovie daemon",
       "",
       `No queued issues found for ${input.repository} with label ${input.label}.`,
+      ...(skippedSummary === undefined ? [] : ["", skippedSummary]),
     ].join("\n"),
   };
 }
