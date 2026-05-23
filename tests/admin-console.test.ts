@@ -256,6 +256,78 @@ describe("admin console server", () => {
     });
     expect((await fetch(`${started.url}/api/runs/missing/events`)).status).toBe(404);
   });
+
+  it("[UC-ADMIN-03-S01] serves a local admin home view with daemon, runtime, repositories, and recent runs", async () => {
+    const root = createTmpDir();
+    saveGlobalConfig(root, {
+      version: 1,
+      watchedRepositories: [{ repository: "fankaidev/grovie", label: "ready" }],
+      adminConsole: { enabled: true },
+    });
+    writeRun(pathsForRoot(root).runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 73,
+        agentId: "coder@fankai-mac",
+        branchName: "grovie/issue-73",
+      },
+      events: [event("2026-05-23T10:00:00.000Z", "runtime.started", { runtime: "codex" })],
+    });
+    const started = await startTestServer(root);
+    const html = await (await fetch(`${started.url}/`)).text();
+
+    expect(html).toContain("Grovie Admin Console");
+    expect(html).toContain("Machine id:");
+    expect(html).toContain(root);
+    expect(html).toContain("Daemon");
+    expect(html).toContain("codex");
+    expect(html).toContain("fankaidev/grovie label=ready");
+    expect(html).toContain("run-1");
+    expect(html).toContain("/runs/run-1");
+  });
+
+  it("[UC-ADMIN-03-S02] serves a local run detail view with paths, events, and result links", async () => {
+    const root = createTmpDir();
+    writeRun(pathsForRoot(root).runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 73,
+        agentId: "coder@fankai-mac",
+        branchName: "grovie/issue-73",
+        worktreePath: "/tmp/grovie/worktrees/run-1",
+      },
+      events: [
+        event("2026-05-23T10:00:00.000Z", "runtime.started", { runtime: "codex" }),
+        event("2026-05-23T10:01:00.000Z", "comment.created", { url: "https://github.com/fankaidev/grovie/issues/73#issuecomment-1" }),
+      ],
+    });
+    const started = await startTestServer(root);
+    const html = await (await fetch(`${started.url}/runs/run-1`)).text();
+
+    expect(html).toContain("fankaidev/grovie#73");
+    expect(html).toContain("coder@fankai-mac");
+    expect(html).toContain("grovie/issue-73");
+    expect(html).toContain("/tmp/grovie/worktrees/run-1");
+    expect(html).toContain("prompt.md");
+    expect(html).toContain("task.json");
+    expect(html).toContain("stdout.log");
+    expect(html).toContain("stderr.log");
+    expect(html).toContain("Result summary:");
+    expect(html).toContain("comment.created");
+    expect(html).toContain("https://github.com/fankaidev/grovie/issues/73#issuecomment-1");
+  });
+
+  it("[UC-ADMIN-03-S03] serves a clear not-found page for missing local runs", async () => {
+    const started = await startTestServer();
+    const response = await fetch(`${started.url}/runs/missing`);
+    const html = await response.text();
+
+    expect(response.status).toBe(404);
+    expect(html).toContain("Not Found");
+    expect(html).toContain("Run not found.");
+  });
 });
 
 function getAvailablePort(): Promise<number> {
