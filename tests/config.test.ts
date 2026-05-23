@@ -24,13 +24,29 @@ describe("config helpers", () => {
   });
 
   it("renders safe defaults", () => {
-    const config = renderDefaultConfig("fankaidev/grovie");
+    const config = renderDefaultConfig();
 
-    expect(config).toContain("allowed:");
-    expect(config).toContain("- fankaidev/grovie");
+    expect(config).not.toContain("repository:");
     expect(config).toContain("default: codex");
     expect(config).toContain("label: grovie");
     expect(config).toContain("allowDefaultBranchPush: false");
+  });
+
+  it("uses safe defaults when no config file exists", () => {
+    const cwd = createTmpDir();
+
+    const loaded = loadConfig(cwd);
+
+    expect(loaded.path).toBeUndefined();
+    expect(loaded.config).toMatchObject({
+      version: 1,
+      runtime: {
+        default: "codex",
+      },
+      queue: {
+        label: "grovie",
+      },
+    });
   });
 
   it("rejects unsafe and unknown nested config values", () => {
@@ -39,9 +55,6 @@ describe("config helpers", () => {
       join(cwd, ".grovie.yml"),
       [
         "version: 1",
-        "repositories:",
-        "  allowed:",
-        "    - fankaidev/grovie",
         "runtime:",
         "  default: codex",
         "queue:",
@@ -65,6 +78,38 @@ describe("config helpers", () => {
 
     expect(() => loadConfig(cwd)).toThrow("safety.allowDefaultBranchPush: Invalid input: expected false");
     expect(() => loadConfig(cwd)).toThrow("safety: Unrecognized key: \"forcePush\"");
+  });
+
+  it("rejects the old repositories allowlist shape", () => {
+    const cwd = createTmpDir();
+    writeFileSync(
+      join(cwd, ".grovie.yml"),
+      [
+        "version: 1",
+        "repositories:",
+        "  allowed:",
+        "    - fankaidev/grovie",
+        "runtime:",
+        "  default: codex",
+        "queue:",
+        "  label: grovie",
+        "branches:",
+        "  prefix: grovie/",
+        "worktrees:",
+        "  cleanup: on-success",
+        "pullRequests:",
+        "  create: true",
+        "  draft: false",
+        "comments:",
+        "  mode: concise",
+        "safety:",
+        "  allowDefaultBranchPush: false",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => loadConfig(cwd)).toThrow("Unrecognized key: \"repositories\"");
   });
 });
 

@@ -13,6 +13,7 @@ import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunRe
 
 export type RunIssueInput = {
   issueReference: IssueReference;
+  repository: string;
   config: GrovieConfig;
   configPath: string;
   agent: "codex";
@@ -128,12 +129,12 @@ type PreparedIssueRun =
 function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   const repository = `${input.issueReference.owner}/${input.issueReference.repo}`;
 
-  if (!input.config.repositories.allowed.includes(repository)) {
+  if (repository !== input.repository) {
     return {
       ok: false,
       result: {
         exitCode: 1,
-        stderr: `Repository ${repository} is not allowed by ${input.configPath}.`,
+        stderr: `Repository ${repository} does not match current checkout repository ${input.repository}.`,
       },
     };
   }

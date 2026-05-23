@@ -26,6 +26,7 @@ describe("runIssue", () => {
         repo: "grovie",
         number: 7,
       },
+      repository: "fankaidev/grovie",
       config: defaultConfig(),
       configPath: "/project/.grovie.yml",
       agent: "codex",
@@ -94,6 +95,7 @@ describe("runIssue", () => {
         repo: "grovie",
         number: 7,
       },
+      repository: "fankaidev/grovie",
       config: defaultConfig(),
       configPath: "/project/.grovie.yml",
       agent: "codex",
@@ -124,6 +126,7 @@ describe("runIssue", () => {
         repo: "grovie",
         number: 7,
       },
+      repository: "fankaidev/grovie",
       config: defaultConfig(),
       configPath: "/project/.grovie.yml",
       agent: "codex",
@@ -175,6 +178,7 @@ describe("runIssue", () => {
         repo: "grovie",
         number: 7,
       },
+      repository: "fankaidev/grovie",
       config: defaultConfig(),
       configPath: "/project/.grovie.yml",
       agent: "codex",
@@ -202,6 +206,7 @@ describe("runIssue", () => {
         repo: "grovie",
         number: 7,
       },
+      repository: "fankaidev/grovie",
       config: defaultConfig(),
       configPath: "/project/.grovie.yml",
       agent: "codex",
@@ -220,7 +225,7 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 
-  it("rejects repositories outside the allowlist before reading from GitHub", () => {
+  it("rejects repositories outside the current checkout repository before reading from GitHub", () => {
     const github = new FakeGitHub();
 
     const result = runIssue({
@@ -229,6 +234,7 @@ describe("runIssue", () => {
         repo: "repo",
         number: 7,
       },
+      repository: "fankaidev/grovie",
       config: defaultConfig(),
       configPath: "/project/.grovie.yml",
       agent: "codex",
@@ -237,7 +243,7 @@ describe("runIssue", () => {
 
     expect(result).toEqual({
       exitCode: 1,
-      stderr: "Repository other/repo is not allowed by /project/.grovie.yml.",
+      stderr: "Repository other/repo does not match current checkout repository fankaidev/grovie.",
     });
     expect(github.reads).toBe(0);
   });
@@ -380,9 +386,6 @@ class FakeResultHandler implements ResultHandler {
 function defaultConfig(): GrovieConfig {
   return {
     version: 1,
-    repositories: {
-      allowed: ["fankaidev/grovie"],
-    },
     runtime: {
       default: "codex",
     },

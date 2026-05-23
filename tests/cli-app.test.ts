@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,20 +39,20 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("writes the default config with an explicit repository", () => {
+  it("writes the default policy config", () => {
     const cwd = createTmpDir();
 
-    expect(runCli(["init", "--repo", "fankaidev/grovie"], { cwd })).toEqual({
+    expect(runCli(["init"], { cwd })).toEqual({
       exitCode: 0,
       stdout: [
         "grovie init",
         "",
-        "Created .grovie.yml for fankaidev/grovie.",
+        "Created .grovie.yml.",
         "Run `grovie doctor` to validate it.",
       ].join("\n"),
     });
 
-    expect(readFileSync(join(cwd, ".grovie.yml"), "utf8")).toContain("- fankaidev/grovie");
+    expect(readFileSync(join(cwd, ".grovie.yml"), "utf8")).not.toContain("repository:");
   });
 
   it("reports invalid config fields through doctor", () => {
@@ -66,7 +67,7 @@ describe("CLI command registration", () => {
 
   it("rejects unknown config fields through doctor", () => {
     const cwd = createTmpDir();
-    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+    runCli(["init"], { cwd });
     writeFileSync(join(cwd, ".grovie.yml"), `${readFileSync(join(cwd, ".grovie.yml"), "utf8")}unsupported: true\n`, "utf8");
 
     expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime() })).toEqual({
@@ -77,7 +78,8 @@ describe("CLI command registration", () => {
 
   it("validates the default config through doctor", () => {
     const cwd = createTmpDir();
-    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+    initGitHubOrigin(cwd);
+    runCli(["init"], { cwd });
 
     expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime() })).toEqual({
       exitCode: 0,
@@ -85,7 +87,7 @@ describe("CLI command registration", () => {
         "grovie doctor",
         "",
         `Config: ${join(cwd, ".grovie.yml")} is valid.`,
-        "Allowed repositories: fankaidev/grovie",
+        "Repository: fankaidev/grovie",
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
@@ -96,7 +98,8 @@ describe("CLI command registration", () => {
 
   it("reports unavailable Codex runtime through doctor", () => {
     const cwd = createTmpDir();
-    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+    initGitHubOrigin(cwd);
+    runCli(["init"], { cwd });
 
     expect(
       runCli(["doctor"], {
@@ -113,7 +116,7 @@ describe("CLI command registration", () => {
         "grovie doctor",
         "",
         `Config: ${join(cwd, ".grovie.yml")} is valid.`,
-        "Allowed repositories: fankaidev/grovie",
+        "Repository: fankaidev/grovie",
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
@@ -125,7 +128,8 @@ describe("CLI command registration", () => {
 
   it("reports GitHub authentication errors through doctor", () => {
     const cwd = createTmpDir();
-    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+    initGitHubOrigin(cwd);
+    runCli(["init"], { cwd });
 
     expect(
       runCli(["doctor"], {
@@ -169,16 +173,20 @@ describe("CLI command registration", () => {
 
   it("accepts the issue reference after options", () => {
     const cwd = createTmpDir();
+    initGitHubOrigin(cwd);
 
-    expect(runCli(["run", "--agent", "codex", "fankaidev/grovie#2"], { cwd })).toEqual({
+    const result = runCli(["run", "--agent", "codex", "other/repo#2"], { cwd });
+
+    expect(result).toEqual({
       exitCode: 1,
-      stderr: "Missing .grovie.yml. Run `grovie init` first.",
+      stderr: "Repository other/repo does not match current checkout repository fankaidev/grovie.",
     });
   });
 
   it("rejects unsupported run agents", () => {
     const cwd = createTmpDir();
-    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+    initGitHubOrigin(cwd);
+    runCli(["init"], { cwd });
 
     expect(runCli(["run", "fankaidev/grovie#2", "--agent", "claude"], { cwd })).toEqual({
       exitCode: 1,
@@ -190,7 +198,8 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState();
     let runtimeInput: AgentRunInput | undefined;
-    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+    initGitHubOrigin(cwd);
+    runCli(["init"], { cwd });
 
     const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "codex"], {
       cwd,
@@ -235,12 +244,13 @@ describe("CLI command registration", () => {
     expect(runtimeInput?.run).toBe(localState.run);
   });
 
-  it("runs one daemon polling cycle with the configured repository and label", async () => {
+  it("runs one daemon polling cycle with the current checkout repository and explicit label", async () => {
     const cwd = createTmpDir();
-    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+    initGitHubOrigin(cwd);
+    runCli(["init"], { cwd });
 
     expect(
-      await runCliAsync(["daemon", "--once"], {
+      await runCliAsync(["daemon", "--label", "grovie", "--once"], {
         cwd,
         github: fakeGitHubGateway({
           listOpenIssues: (repository, label) => {
@@ -265,59 +275,20 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("wires explicit daemon repository and label options", async () => {
+  it("rejects daemon repository options that do not match the current checkout repository", async () => {
     const cwd = createTmpDir();
-    writeFileSync(
-      join(cwd, ".grovie.yml"),
-      [
-        "version: 1",
-        "repositories:",
-        "  allowed:",
-        "    - fankaidev/grovie",
-        "    - fankaidev/other",
-        "runtime:",
-        "  default: codex",
-        "queue:",
-        "  label: grovie",
-        "branches:",
-        "  prefix: grovie/",
-        "worktrees:",
-        "  cleanup: on-success",
-        "pullRequests:",
-        "  create: true",
-        "  draft: false",
-        "comments:",
-        "  mode: concise",
-        "safety:",
-        "  allowDefaultBranchPush: false",
-        "",
-      ].join("\n"),
-      "utf8",
-    );
+    initGitHubOrigin(cwd);
+    runCli(["init"], { cwd });
 
     expect(
       await runCliAsync(["daemon", "--repo", "fankaidev/other", "--label", "ready", "--once"], {
         cwd,
-        github: fakeGitHubGateway({
-          listOpenIssues: (repository, label) => {
-            expect(repository).toBe("fankaidev/other");
-            expect(label).toBe("ready");
-
-            return {
-              ok: true,
-              value: [],
-            };
-          },
-        }),
+        github: fakeGitHubGateway(),
         runtime: fakeRuntime(),
       }),
     ).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie daemon",
-        "",
-        "No queued issues found for fankaidev/other with label ready.",
-      ].join("\n"),
+      exitCode: 1,
+      stderr: "Repository fankaidev/other does not match current checkout repository fankaidev/grovie.",
     });
   });
 });
@@ -326,6 +297,11 @@ function createTmpDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "grovie-test-"));
   tmpDirs.push(dir);
   return dir;
+}
+
+function initGitHubOrigin(cwd: string): void {
+  execFileSync("git", ["init"], { cwd, stdio: "ignore" });
+  execFileSync("git", ["remote", "add", "origin", "git@github.com:fankaidev/grovie.git"], { cwd, stdio: "ignore" });
 }
 
 function fakeRuntime(availability: Partial<RuntimeAvailability> = {}): AgentRuntime {
