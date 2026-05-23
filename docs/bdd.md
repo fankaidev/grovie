@@ -40,7 +40,7 @@ details, repeat one scenario, or turn the use case into a full specification.
 ```text
 docs/use-cases/
   {domain}/
-    {use-case-name}.md
+    {nn}-{use-case-name}.md
 ```
 
 Domains should follow user/system boundaries, not internal nouns:
@@ -64,13 +64,14 @@ Scenario table format:
 ```text
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-DOMAIN-001-S01 | P0 | A ready issue with no active execution lock runs once and posts a succeeded run comment. |
+| UC-DOMAIN-01-S01 | P0 | A ready issue with no active execution lock runs once and posts a succeeded run comment. |
 ```
 
 ## ID Naming Convention
 
-- Use Case ID: `UC-{DOMAIN}-{NNN}`.
-- Scenario ID: `UC-{DOMAIN}-{NNN}-S{NN}`.
+- File prefix: two digits, matching the use case order inside the domain, for example `01-request-agent-run.md`.
+- Use Case ID: `UC-{DOMAIN}-{NN}`.
+- Scenario ID: `UC-{DOMAIN}-{NN}-S{NN}`.
 - Scenario IDs are globally unique.
 - If automated tests cover a scenario, include the scenario ID in the test name.
 
