@@ -1,13 +1,18 @@
 # Grovie
 
-Grovie is a lightweight GitHub-native local runner for coding agents.
+Grovie is an open-source, local-first multi-agent workspace for GitHub-native software work.
 
-The MVP keeps coordination in tools teams already use:
+It gives teams multi-agent automation without a hosted platform. GitHub stays the control plane for issues, labels, comments, branches, pull requests, reviews, and CI; your local machine stays the executor for agents, worktrees, credentials, and logs.
 
-- GitHub is the control plane: issues, labels, comments, branches, pull requests, reviews, and CI.
-- The local machine is the executor: `gh`, `git`, Codex or another local agent CLI, worktrees, and logs.
-- Local state stays inspectable on disk under `~/.grovie/`.
-- There is no hosted server, web dashboard, account system, or central database.
+Grovie keeps adoption and operation simple:
+
+- Free to run: there are no hosted-service seats, usage meters, or per-repository fees.
+- Fully open source: the workflow is visible, auditable, and adaptable to your own repositories.
+- No extra infrastructure: no server, database, queue, dashboard, account system, or central coordinator.
+- GitHub-native by default: coordination happens through ordinary GitHub artifacts your team already uses.
+- Local-first execution: source checkouts, credentials, worktrees, prompts, and raw logs stay on your machine.
+- No platform lock-in: outputs are normal issue comments, branches, pull requests, reviews, and CI results.
+- Inspectable state: local runs, logs, and worktrees live under `~/.grovie/`.
 
 ## Mental Model
 
@@ -112,7 +117,7 @@ Use [docs/use-cases](docs/use-cases) as the behavioral source of truth when addi
 
 ## Safety Model
 
-Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The MVP keeps the safety boundary simple:
+Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The safety boundary is intentionally simple:
 
 - `grovie run` derives the target repository from the explicit issue reference.
 - `grovie daemon` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
@@ -124,7 +129,7 @@ Grovie is a local executor, so it runs with your local filesystem, GitHub creden
 - It does not open empty pull requests for no-change runs.
 - It coordinates run and daemon work with visible advisory issue comments and supports explicit cancellation for daemon-owned runs.
 
-Current MVP limitations:
+Current limitations:
 
 - Codex is the only runtime adapter.
 - GitHub access uses the local `gh` CLI.
