@@ -14,6 +14,7 @@ import type {
 import { resolveMachineId } from "../src/identity.js";
 import { LocalState } from "../src/local-state.js";
 import type { RunIssueAsyncInput, RunIssueResult } from "../src/run.js";
+import type { AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
 
 const NOW = new Date("2026-05-22T00:00:00Z");
 const tmpDirs: string[] = [];
@@ -237,6 +238,48 @@ describe("runDaemonCycle", () => {
     });
     expect(runs).toHaveLength(1);
     expect(github.createdComments[0]).toContain(`- Worker: \`coder@${machineId}\``);
+  });
+
+  it("[UC-EXECUTION-03-S02] skips assigned runs when Codex is unavailable", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      runtime: fakeRuntime({
+        available: false,
+        message: "codex command not found",
+      }),
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        "Skipped assigned runs because Codex runtime is unavailable: codex command not found",
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(github.createdComments).toEqual([]);
   });
 
   it("[UC-WORKER-04-S07] creates a reviewer run before a related pull request exists", async () => {
@@ -1159,6 +1202,23 @@ function defaultConfig(): GrovieConfig {
     },
     safety: {
       allowDefaultBranchPush: false,
+    },
+  };
+}
+
+function fakeRuntime(availability: Partial<RuntimeAvailability> = {}): AgentRuntime {
+  return {
+    name: "codex",
+    checkAvailability: () => ({
+      runtime: "codex",
+      command: "codex",
+      available: true,
+      version: "codex-cli 0.133.0",
+      message: "available (codex-cli 0.133.0)",
+      ...availability,
+    }),
+    run: () => {
+      throw new Error("runtime run was not expected");
     },
   };
 }
