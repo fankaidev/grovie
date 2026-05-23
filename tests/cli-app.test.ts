@@ -449,7 +449,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("runs one daemon polling cycle from global watched repositories and explicit label", async () => {
+  it("[UC-WORKER-01-S05] runs one daemon polling cycle from global watched repositories and records default agent metadata", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
@@ -480,6 +480,13 @@ describe("CLI command registration", () => {
         "No queued issues found for fankaidev/grovie with label grovie.",
       ].join("\n"),
     });
+    expect(localState.registeredAgents).toEqual([
+      expect.objectContaining({
+        agentId: expect.stringMatching(/^default@.+/),
+        runtime: "codex",
+        envKeys: ["OPENAI_API_KEY"],
+      }),
+    ]);
   });
 
   it("uses built-in queue defaults for global daemon without reading cwd policy config", async () => {

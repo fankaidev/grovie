@@ -14,6 +14,7 @@ import {
   type GitHubIssue,
   type IssueReference,
 } from "./github.js";
+import type { AgentMetadata } from "./identity.js";
 import { buildAttemptId, buildBranchName, buildRunId, LocalState, type LocalStatePaths, type PreparedRun } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
@@ -50,6 +51,7 @@ export type RunClaimedIssueAsyncInput = RunIssueAsyncInput & {
 
 export type RunLocalState = {
   getPaths(): LocalStatePaths;
+  registerAgent?(metadata: AgentMetadata): void;
   prepareRun(input: {
     repository: string;
     issueNumber: number;

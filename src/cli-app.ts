@@ -11,7 +11,7 @@ import {
 } from "./config.js";
 import { runDaemon, runDaemonForRepositories } from "./daemon.js";
 import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
-import { type AgentMetadata, resolveLocalIdentity } from "./identity.js";
+import { resolveLocalIdentity } from "./identity.js";
 import { LocalState } from "./local-state.js";
 import { runClaimedIssueAsync, type RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
@@ -28,9 +28,7 @@ export type CliContext = {
   cwd: string;
   github: GitHubGateway;
   runtime: AgentRuntime;
-  localState: RunLocalState & {
-    registerAgent?(metadata: AgentMetadata): void;
-  };
+  localState: RunLocalState;
 };
 
 type CliCommand = {
