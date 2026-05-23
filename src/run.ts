@@ -58,7 +58,14 @@ export type RunLocalState = {
   hasExecutionLock?(input: { repository: string; issueNumber: number; agentId: string }): boolean;
   releaseExecutionLock?(lock: ExecutionLock): void;
   readHandledCursor?(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined;
-  writeHandledCursor?(input: { repository: string; issueNumber: number; agentId: string; handledThrough: string; now?: Date }): HandledCursor;
+  writeHandledCursor?(input: {
+    repository: string;
+    issueNumber: number;
+    agentId: string;
+    handledThrough: string;
+    issueFingerprint?: string;
+    now?: Date;
+  }): HandledCursor;
   prepareRun(input: {
     repository: string;
     issueNumber: number;

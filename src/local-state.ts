@@ -63,6 +63,7 @@ export type HandledCursor = {
   issueNumber: number;
   agentId: string;
   handledThrough: string;
+  issueFingerprint?: string;
   updatedAt: string;
 };
 
@@ -188,6 +189,7 @@ export class LocalState {
     issueNumber: number;
     agentId: string;
     handledThrough: string;
+    issueFingerprint?: string;
     now?: Date;
   }): HandledCursor {
     this.ensureBaseDirectories();
@@ -196,6 +198,7 @@ export class LocalState {
       issueNumber: input.issueNumber,
       agentId: input.agentId,
       handledThrough: input.handledThrough,
+      issueFingerprint: input.issueFingerprint,
       updatedAt: (input.now ?? new Date()).toISOString(),
     };
 

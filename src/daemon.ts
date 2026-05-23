@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { GrovieConfig } from "./config.js";
 import { getAssignedAgentIds, isAssignedToLocalMachine } from "./assignment.js";
 import {
@@ -44,6 +45,11 @@ export type MultiRepositoryDaemonInput = Omit<DaemonInput, "repository" | "label
 
 type DaemonCycleResult = RunIssueResult & {
   processed: boolean;
+};
+
+type IssueActivity = {
+  timestamp: string;
+  issueFingerprint: string;
 };
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
@@ -198,14 +204,14 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
         continue;
       }
 
-      const activityTimestamp = getIssueActivityTimestamp(issueResult.value);
+      const issueActivity = getIssueActivity(issueResult.value);
       const handledCursor = input.localState?.readHandledCursor?.({
         repository: input.repository,
         issueNumber: summary.reference.number,
         agentId,
       });
 
-      if (handledCursor !== undefined && Date.parse(handledCursor.handledThrough) >= Date.parse(activityTimestamp)) {
+      if (handledCursor !== undefined && isHandledCursorCovered(handledCursor, issueActivity)) {
         continue;
       }
 
@@ -213,7 +219,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
         ...input,
         issueReference: summary.reference,
         workerId: agentId,
-        activityTimestamp,
+        issueActivity,
         now,
         issueRunner,
       });
@@ -234,7 +240,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
 async function claimAndRun(input: DaemonInput & {
   issueReference: IssueReference;
   workerId: string;
-  activityTimestamp: string;
+  issueActivity: IssueActivity;
   now: () => Date;
   issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
 }): Promise<DaemonCycleResult> {
@@ -355,7 +361,8 @@ async function claimAndRun(input: DaemonInput & {
       repository: input.repository,
       issueNumber: input.issueReference.number,
       agentId: input.workerId,
-      handledThrough: input.activityTimestamp,
+      handledThrough: input.issueActivity.timestamp,
+      issueFingerprint: input.issueActivity.issueFingerprint,
       now: input.now(),
     });
 
@@ -386,7 +393,17 @@ function getCandidateAgentIds(input: {
   return assignedAgentIds.filter((agentId) => agentId.endsWith(`@${input.machineId}`));
 }
 
-function getIssueActivityTimestamp(issue: GitHubIssue): string {
+function isHandledCursorCovered(
+  cursor: { handledThrough: string; issueFingerprint?: string },
+  activity: IssueActivity,
+): boolean {
+  return (
+    Date.parse(cursor.handledThrough) >= Date.parse(activity.timestamp) &&
+    (cursor.issueFingerprint === undefined || cursor.issueFingerprint === activity.issueFingerprint)
+  );
+}
+
+function getIssueActivity(issue: GitHubIssue): IssueActivity {
   const latestGrovieActivity = issue.comments
     .filter((comment) => isGrovieActivityComment(comment.body))
     .map((comment) => comment.updatedAt)
@@ -404,14 +421,31 @@ function getIssueActivityTimestamp(issue: GitHubIssue): string {
   ].filter((timestamp) => !Number.isNaN(Date.parse(timestamp)));
 
   if (timestamps.length === 0) {
-    return "1970-01-01T00:00:00.000Z";
+    return {
+      timestamp: "1970-01-01T00:00:00.000Z",
+      issueFingerprint: getIssueFingerprint(issue),
+    };
   }
 
-  return timestamps.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? "1970-01-01T00:00:00.000Z";
+  return {
+    timestamp: timestamps.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? "1970-01-01T00:00:00.000Z",
+    issueFingerprint: getIssueFingerprint(issue),
+  };
 }
 
 function isGrovieActivityComment(body: string): boolean {
   return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:session ");
+}
+
+function getIssueFingerprint(issue: GitHubIssue): string {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      title: issue.title,
+      body: issue.body,
+      state: issue.state,
+      labels: [...issue.labels].sort(),
+    }))
+    .digest("hex");
 }
 
 function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {

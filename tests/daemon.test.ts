@@ -198,6 +198,7 @@ describe("runDaemonCycle", () => {
       fakeIssue({
         comments: [
           fakeComment({
+            id: 10,
             updatedAt: "2026-05-22T00:00:01.000Z",
           }),
         ],
@@ -416,6 +417,7 @@ describe("runDaemonCycle", () => {
       updatedAt: "2026-05-22T00:00:00.000Z",
       comments: [
         fakeComment({
+          id: 10,
           updatedAt: "2026-05-22T00:00:01.000Z",
         }),
       ],
@@ -475,6 +477,71 @@ describe("runDaemonCycle", () => {
       exitCode: 0,
       processed: true,
       stdout: "ran user activity",
+    });
+    expect(runs).toHaveLength(2);
+  });
+
+  it("[UC-EXECUTION-02-S03] creates another run when the issue is edited during execution", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const issue = fakeIssue({
+      updatedAt: "2026-05-22T00:00:00.000Z",
+      comments: [
+        fakeComment({
+          id: 10,
+          updatedAt: "2026-05-22T00:00:01.000Z",
+        }),
+      ],
+    });
+    const github = new FakeGitHub([issue], { commentNow: () => new Date("2026-05-22T00:00:03.000Z") });
+    const runs: RunIssueAsyncInput[] = [];
+
+    await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        issue.body = "Run queued work and update CLI help.";
+        issue.updatedAt = "2026-05-22T00:00:02.000Z";
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    const secondResult = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran edited issue",
+        };
+      },
+    });
+
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    })?.handledThrough).toBe("2026-05-22T00:00:01.000Z");
+    expect(secondResult).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran edited issue",
     });
     expect(runs).toHaveLength(2);
   });

@@ -128,6 +128,7 @@ describe("LocalState", () => {
       issueNumber: 8,
       agentId: "coder@fankai-mac",
       handledThrough: "2026-05-23T00:00:00.000Z",
+      issueFingerprint: "issue-fingerprint-1",
       now: new Date("2026-05-23T00:00:01.000Z"),
     });
 
@@ -140,6 +141,7 @@ describe("LocalState", () => {
       issueNumber: 8,
       agentId: "coder@fankai-mac",
       handledThrough: "2026-05-23T00:00:00.000Z",
+      issueFingerprint: "issue-fingerprint-1",
       updatedAt: "2026-05-23T00:00:01.000Z",
     });
     expect(state.readHandledCursor({
