@@ -289,8 +289,10 @@ function fakeRun(root: string): PreparedRun {
   writeFileSync(join(runDir, "events.jsonl"), "");
 
   return {
+    sessionId: "fankaidev-grovie-issue-6-codex",
     runId: "fankaidev-grovie-issue-6",
     branchName: "grovie/issue-6",
+    sessionDir: join(root, "sessions", "fankaidev-grovie-issue-6-codex"),
     repositoryCachePath: join(root, "repos", "fankaidev-grovie.git"),
     worktreePath,
     runDir,

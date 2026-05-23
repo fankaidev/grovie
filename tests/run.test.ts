@@ -364,8 +364,10 @@ class FakeLocalState implements RunLocalState {
     sessionsDir: "/tmp/grovie/sessions",
   };
   readonly run: PreparedRun = {
+    sessionId: "fankaidev-grovie-issue-7-codex",
     runId: "fankaidev-grovie-issue-7",
     branchName: "grovie/issue-7",
+    sessionDir: "/tmp/grovie/sessions/fankaidev-grovie-issue-7-codex",
     repositoryCachePath: "/tmp/grovie/repos/fankaidev-grovie.git",
     worktreePath: "/tmp/grovie/worktrees/fankaidev-grovie-issue-7",
     runDir: "/tmp/grovie/runs/fankaidev-grovie-issue-7",
