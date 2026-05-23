@@ -356,10 +356,10 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       issueNumber: 8,
       agentId: `default@${machineId}`,
-    })?.handledThrough).toBe(NOW.toISOString());
+    })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
   });
 
-  it("[UC-EXECUTION-02-S04] includes Grovie result comments in the terminal handled cursor", async () => {
+  it("[UC-EXECUTION-02-S04] ignores Grovie claim comments when checking the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
@@ -405,8 +405,77 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       issueNumber: 8,
       agentId: `default@${machineId}`,
-    })?.handledThrough).toBe(NOW.toISOString());
+    })?.handledThrough).toBe("2026-05-22T00:00:01.000Z");
     expect(secondResult.processed).toBe(false);
+  });
+
+  it("[UC-EXECUTION-02-S03] creates another run when a user comment arrives during execution", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const issue = fakeIssue({
+      updatedAt: "2026-05-22T00:00:00.000Z",
+      comments: [
+        fakeComment({
+          updatedAt: "2026-05-22T00:00:01.000Z",
+        }),
+      ],
+    });
+    const github = new FakeGitHub([issue]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        issue.comments.push(
+          fakeComment({
+            id: 42,
+            body: "Please also update the CLI help.",
+            updatedAt: "2026-05-22T00:00:02.000Z",
+          }),
+        );
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    const secondResult = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran user activity",
+        };
+      },
+    });
+
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
+    expect(secondResult).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran user activity",
+    });
+    expect(runs).toHaveLength(2);
   });
 
   it("[UC-GITHUB-01-S05] ignores visible claim comments when choosing local execution", async () => {

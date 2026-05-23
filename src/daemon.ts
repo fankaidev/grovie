@@ -351,16 +351,11 @@ async function claimAndRun(input: DaemonInput & {
           : "Session failed. See the Grovie result comment and local run logs.",
     );
 
-    const latestIssueResult = input.github.readIssue(input.issueReference);
-    const handledThrough = latestIssueResult.ok
-      ? getIssueActivityTimestamp(latestIssueResult.value)
-      : input.activityTimestamp;
-
     input.localState?.writeHandledCursor?.({
       repository: input.repository,
       issueNumber: input.issueReference.number,
       agentId: input.workerId,
-      handledThrough,
+      handledThrough: input.activityTimestamp,
       now: input.now(),
     });
 
@@ -392,7 +387,9 @@ function getCandidateAgentIds(input: {
 }
 
 function getIssueActivityTimestamp(issue: GitHubIssue): string {
-  const timestamps = [issue.updatedAt, ...issue.comments.map((comment) => comment.updatedAt)]
+  const timestamps = [issue.updatedAt, ...issue.comments
+    .filter((comment) => !isGrovieActivityComment(comment.body))
+    .map((comment) => comment.updatedAt)]
     .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)));
 
   if (timestamps.length === 0) {
@@ -400,6 +397,10 @@ function getIssueActivityTimestamp(issue: GitHubIssue): string {
   }
 
   return timestamps.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? "1970-01-01T00:00:00.000Z";
+}
+
+function isGrovieActivityComment(body: string): boolean {
+  return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:session ");
 }
 
 function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {
