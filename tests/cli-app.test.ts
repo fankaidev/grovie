@@ -1246,6 +1246,17 @@ describe("CLI command registration", () => {
     expect(result.stdout).not.toContain("daemon stdout");
   });
 
+  it("[UC-WORKER-06-S09] reports daemon service paths through the CLI", () => {
+    const localState = new FakeLocalState(createTmpDir());
+
+    const result = runCli(["daemon", "service", "path", "--platform", "systemd"], { localState });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("grovie daemon service path");
+    expect(result.stdout).toContain("Platform: systemd");
+    expect(result.stdout).toContain(".config/systemd/user/grovie.service");
+  });
+
   it("[UC-WORKER-06-S07] reports missing daemon logs through the CLI", () => {
     const localState = new FakeLocalState(createTmpDir());
 

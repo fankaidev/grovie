@@ -1,0 +1,202 @@
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import type { LocalStatePaths } from "./local-state.js";
+
+export type DaemonServicePlatform = "launchd" | "systemd";
+
+export type DaemonServiceInstallInput = {
+  paths: LocalStatePaths;
+  platform?: DaemonServicePlatform;
+  home?: string;
+  entrypoint?: string;
+};
+
+export type DaemonServiceResult = {
+  platform: DaemonServicePlatform;
+  path: string;
+  action: "installed" | "uninstalled" | "missing";
+};
+
+const SERVICE_LABEL = "dev.grovie.daemon";
+const SYSTEMD_SERVICE_NAME = "grovie.service";
+
+export function installDaemonService(input: DaemonServiceInstallInput): DaemonServiceResult {
+  const platform = resolveDaemonServicePlatform(input.platform);
+  const path = resolveDaemonServicePath(platform, input.home);
+  const entrypoint = input.entrypoint ?? process.argv[1];
+
+  if (entrypoint === undefined) {
+    throw new Error("Cannot install daemon service: current CLI entrypoint is unknown.");
+  }
+
+  mkdirSync(dirname(path), { recursive: true });
+  mkdirSync(join(input.paths.root, "daemon"), { recursive: true });
+  writeFileSync(path, renderDaemonServiceFile({
+    platform,
+    root: input.paths.root,
+    entrypoint,
+    stdoutPath: join(input.paths.root, "daemon", "stdout.log"),
+    stderrPath: join(input.paths.root, "daemon", "stderr.log"),
+  }), "utf8");
+
+  return {
+    platform,
+    path,
+    action: "installed",
+  };
+}
+
+export function uninstallDaemonService(input: Omit<DaemonServiceInstallInput, "entrypoint">): DaemonServiceResult {
+  const platform = resolveDaemonServicePlatform(input.platform);
+  const path = resolveDaemonServicePath(platform, input.home);
+
+  if (!existsSync(path)) {
+    return {
+      platform,
+      path,
+      action: "missing",
+    };
+  }
+
+  rmSync(path, { force: true });
+  return {
+    platform,
+    path,
+    action: "uninstalled",
+  };
+}
+
+export function getDaemonServicePath(input: Omit<DaemonServiceInstallInput, "entrypoint">): DaemonServiceResult {
+  const platform = resolveDaemonServicePlatform(input.platform);
+
+  return {
+    platform,
+    path: resolveDaemonServicePath(platform, input.home),
+    action: existsSync(resolveDaemonServicePath(platform, input.home)) ? "installed" : "missing",
+  };
+}
+
+export function renderDaemonServiceResult(command: string, result: DaemonServiceResult): string {
+  return [
+    `grovie daemon service ${command}`,
+    "",
+    `Platform: ${result.platform}`,
+    `Service file: ${result.path}`,
+    `Status: ${result.action}`,
+    ...renderServiceHint(command, result),
+  ].join("\n");
+}
+
+export function parseDaemonServicePlatform(value: string | undefined): DaemonServicePlatform | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return value === "launchd" || value === "systemd" ? value : undefined;
+}
+
+function resolveDaemonServicePlatform(platform: DaemonServicePlatform | undefined): DaemonServicePlatform {
+  if (platform !== undefined) {
+    return platform;
+  }
+
+  if (process.platform === "darwin") {
+    return "launchd";
+  }
+
+  if (process.platform === "linux") {
+    return "systemd";
+  }
+
+  throw new Error("Daemon service integration supports macOS launchd and Linux systemd user services only.");
+}
+
+function resolveDaemonServicePath(platform: DaemonServicePlatform, home = homedir()): string {
+  return platform === "launchd"
+    ? join(home, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`)
+    : join(home, ".config", "systemd", "user", SYSTEMD_SERVICE_NAME);
+}
+
+function renderDaemonServiceFile(input: {
+  platform: DaemonServicePlatform;
+  root: string;
+  entrypoint: string;
+  stdoutPath: string;
+  stderrPath: string;
+}): string {
+  return input.platform === "launchd" ? renderLaunchAgent(input) : renderSystemdService(input);
+}
+
+function renderLaunchAgent(input: { root: string; entrypoint: string; stdoutPath: string; stderrPath: string }): string {
+  return [
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+    "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">",
+    "<plist version=\"1.0\">",
+    "<dict>",
+    "  <key>Label</key>",
+    `  <string>${SERVICE_LABEL}</string>`,
+    "  <key>ProgramArguments</key>",
+    "  <array>",
+    `    <string>${escapeXml(process.execPath)}</string>`,
+    `    <string>${escapeXml(input.entrypoint)}</string>`,
+    "    <string>daemon</string>",
+    "    <string>run</string>",
+    "  </array>",
+    "  <key>WorkingDirectory</key>",
+    `  <string>${escapeXml(input.root)}</string>`,
+    "  <key>StandardOutPath</key>",
+    `  <string>${escapeXml(input.stdoutPath)}</string>`,
+    "  <key>StandardErrorPath</key>",
+    `  <string>${escapeXml(input.stderrPath)}</string>`,
+    "  <key>RunAtLoad</key>",
+    "  <true/>",
+    "</dict>",
+    "</plist>",
+    "",
+  ].join("\n");
+}
+
+function renderSystemdService(input: { root: string; entrypoint: string; stdoutPath: string; stderrPath: string }): string {
+  return [
+    "[Unit]",
+    "Description=Grovie local daemon",
+    "",
+    "[Service]",
+    "Type=simple",
+    `WorkingDirectory=${input.root}`,
+    `ExecStart=${quoteSystemd(process.execPath)} ${quoteSystemd(input.entrypoint)} daemon run`,
+    `StandardOutput=append:${input.stdoutPath}`,
+    `StandardError=append:${input.stderrPath}`,
+    "",
+    "[Install]",
+    "WantedBy=default.target",
+    "",
+  ].join("\n");
+}
+
+function renderServiceHint(command: string, result: DaemonServiceResult): string[] {
+  if (command !== "install") {
+    return [];
+  }
+
+  return result.platform === "launchd"
+    ? [`Load with: launchctl load ${result.path}`]
+    : [
+      "Reload with: systemctl --user daemon-reload",
+      `Enable with: systemctl --user enable --now ${SYSTEMD_SERVICE_NAME}`,
+    ];
+}
+
+function quoteSystemd(value: string): string {
+  return value.includes(" ") ? `"${value.replace(/(["\\])/g, "\\$1")}"` : value;
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
