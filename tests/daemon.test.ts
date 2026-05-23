@@ -240,7 +240,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-EXECUTION-01-S01] consumes one manual run request before scheduled issues", async () => {
+  it("[UC-EXECUTION-01-S01] [UC-EXECUTION-02-S09] consumes one manual run request before scheduled issues and preserves request trace", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
       fakeIssue({
@@ -251,6 +251,8 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       issueNumber: 8,
       agentId: "coder@fankai-mac",
+      sourceRunId: "failed-run",
+      reason: "retry",
       now: NOW,
     });
     const runs: RunIssueAsyncInput[] = [];
@@ -280,6 +282,10 @@ describe("runDaemonCycle", () => {
     });
     expect(runs[0]?.issueReference.number).toBe(8);
     expect(runs[0]?.agentId).toBe("coder@fankai-mac");
+    expect(runs[0]?.runRequest).toEqual({
+      sourceRunId: "failed-run",
+      reason: "retry",
+    });
     expect(github.createdComments[0]).toContain("- Worker: `coder@fankai-mac`");
     expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
   });

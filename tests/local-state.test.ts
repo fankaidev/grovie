@@ -114,6 +114,33 @@ describe("LocalState", () => {
     });
   });
 
+  it("[UC-EXECUTION-02-S09] writes retry trace metadata into prepared run history", () => {
+    const root = createTmpDir();
+    const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
+
+    const run = state.prepareRun({
+      repository: "fankaidev/grovie",
+      issueNumber: 79,
+      agentId: "coder@fankai-mac",
+      defaultBranch: "main",
+      branchPrefix: "grovie/",
+      now: new Date("2026-05-23T00:00:00Z"),
+      prompt: "Prompt",
+      task: {},
+      runRequest: {
+        sourceRunId: "failed-run",
+        reason: "retry",
+      },
+    });
+
+    expect(JSON.parse(readFileSync(join(run.runDir, "metadata.json"), "utf8"))).toMatchObject({
+      runRequest: {
+        sourceRunId: "failed-run",
+        reason: "retry",
+      },
+    });
+  });
+
   it("[UC-WORKER-04-S05] blocks duplicate local execution locks for the same issue and agent", () => {
     const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
     const first = state.acquireExecutionLock({

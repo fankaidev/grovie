@@ -24,6 +24,10 @@ export type PrepareRunInput = {
   now?: Date;
   prompt: string;
   task: Record<string, unknown>;
+  runRequest?: {
+    sourceRunId?: string;
+    reason?: RunRequest["reason"];
+  };
 };
 
 export type PreparedRun = {
@@ -349,6 +353,7 @@ export class LocalState {
       defaultBranch: input.defaultBranch,
       repositoryCachePath,
       worktreePath,
+      runRequest: input.runRequest,
       createdAt,
     });
 
@@ -380,6 +385,7 @@ export class LocalState {
         defaultBranch: input.defaultBranch,
         repositoryCachePath,
         worktreePath,
+        runRequest: input.runRequest,
         createdAt,
         preparedAt: new Date().toISOString(),
       });
