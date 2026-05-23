@@ -84,14 +84,18 @@ describe("runIssue", () => {
     ]);
   });
 
-  it("[UC-GITHUB-01-S01] posts a concise failure comment when the runtime fails", () => {
+  it("[UC-GITHUB-01-S01] [UC-GITHUB-01-S04] posts a concise failure comment when the runtime fails", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
       ok: false,
       execution: fakeExecution(localState.run, 2),
       error: {
-        message: "codex failed",
+        message: [
+          "raw stderr line 1",
+          "raw stderr line 2",
+          "raw stdout line 1",
+        ].join("\n"),
       },
     });
 
@@ -111,12 +115,52 @@ describe("runIssue", () => {
     });
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toBe("codex failed");
+    expect(result.stderr).toBe("raw stderr line 1\nraw stderr line 2\nraw stdout line 1");
     expect(result.stdout).toContain("Session status: failed");
     expect(github.comments[0]).toContain("Grovie session failed.");
     expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"failed","runtime":"codex"} -->');
-    expect(github.comments[0]).toContain("- Error: codex failed");
+    expect(github.comments[0]).toContain("- Error: Runtime failed. See the local run directory for stdout and stderr.");
+    expect(github.comments[0]).not.toContain("raw stderr line 1");
+    expect(github.comments[0]).not.toContain("raw stdout line 1");
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.failed", "comment.created"]);
+  });
+
+  it("[UC-EXECUTION-05-S05] posts reviewer no-change output without opening a PR", () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      agentId: "reviewer@fankai-mac",
+      github,
+      localState,
+      runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "Review approved: the implementation matches the issue intent.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Changes: none");
+    expect(github.comments[0]).toContain("- Agent: `reviewer@fankai-mac`");
+    expect(github.comments[0]).toContain("- Machine: `fankai-mac`");
+    expect(github.comments[0]).toContain("- Changes: none");
+    expect(github.comments[0]).toContain("- Review output: Review approved: the implementation matches the issue intent.");
+    expect(github.comments[0]).not.toContain("- Pull request:");
   });
 
   it("[UC-GITHUB-01-S02] includes pull request output when result handling creates one", () => {
@@ -399,7 +443,7 @@ class FakeLocalState implements RunLocalState {
       throw this.options.prepareError;
     }
 
-    return this.run;
+    return input.agentId === this.run.agentId ? this.run : { ...this.run, agentId: input.agentId };
   }
 
   appendEvent(_run: PreparedRun, type: string, data?: Record<string, unknown>): void {

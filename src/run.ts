@@ -95,6 +95,7 @@ type RunSummary = {
   result?: HandleRunResultResult;
   comment?: CreatedComment;
   error?: string;
+  errorSource?: "prepare" | "runtime" | "result";
 };
 
 const SESSION_MARKER = "grovie:session";
@@ -331,6 +332,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
       agentId,
       machineId,
       error: toErrorMessage(error),
+      errorSource: "prepare",
     });
     const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
 
@@ -476,6 +478,7 @@ function fallbackRunSummary(input: {
   agentId: string;
   machineId: string;
   error: string;
+  errorSource: "prepare";
 }): RunSummary {
   return {
     status: "failed",
@@ -487,6 +490,7 @@ function fallbackRunSummary(input: {
     agentId: input.agentId,
     machineId: input.machineId,
     error: input.error,
+    errorSource: input.errorSource,
   };
 }
 
@@ -518,6 +522,7 @@ function runSummaryFromRuntimeResult(input: {
     machineId,
     result: input.result,
     error: input.resultError ?? (input.runtimeResult.ok ? undefined : input.runtimeResult.error.message),
+    errorSource: input.resultError !== undefined ? "result" : input.runtimeResult.ok ? undefined : "runtime",
   };
 }
 
@@ -542,11 +547,15 @@ function renderRunComment(summary: RunSummary): string {
   ];
 
   if (summary.error !== undefined) {
-    lines.push(`- Error: ${summarizeError(summary.error)}`);
+    lines.push(`- Error: ${summarizeError(summary)}`);
   }
 
   if (summary.result?.kind === "no-changes") {
     lines.push("- Changes: none");
+
+    if (isReviewerRun(summary.agentId)) {
+      lines.push(`- Review output: ${summarizeOutput(summary.result.validationSummary)}`);
+    }
   }
 
   if (summary.result?.kind === "pull-request") {
@@ -594,11 +603,23 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function summarizeError(error: string): string {
-  const singleLine = error.replace(/\s+/g, " ").trim();
+function summarizeError(summary: RunSummary): string {
+  if (summary.errorSource === "runtime") {
+    return "Runtime failed. See the local run directory for stdout and stderr.";
+  }
+
+  return summarizeOutput(summary.error ?? "Session failed.");
+}
+
+function summarizeOutput(value: string): string {
+  const singleLine = value.replace(/\s+/g, " ").trim();
   return singleLine.length > 300 ? `${singleLine.slice(0, 297)}...` : singleLine;
 }
 
 function resolveSummaryMachineId(agentId: string): string {
   return agentId.includes("@") ? agentId.split("@")[1] ?? resolveLocalIdentity().machineId : resolveLocalIdentity().machineId;
+}
+
+function isReviewerRun(agentId: string): boolean {
+  return agentId === "reviewer" || agentId.startsWith("reviewer@");
 }
