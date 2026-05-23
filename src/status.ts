@@ -20,6 +20,7 @@ export type LocalRunSummary = {
   status: "preparing" | "prepared" | "running" | "succeeded" | "failed" | "canceled" | "stale" | "unknown";
   branchName?: string;
   localBranchName?: string;
+  repositoryCachePath?: string;
   worktreePath?: string;
   stdoutPath: string;
   stderrPath: string;
@@ -42,6 +43,7 @@ type RunMetadata = {
   agentId?: string;
   branchName?: string;
   localBranchName?: string;
+  repositoryCachePath?: string;
   worktreePath?: string;
   createdAt?: string;
 };
@@ -178,6 +180,7 @@ function readLocalRun(runDir: string, directoryRunId: string, now: Date, staleAf
     status: deriveRunStatus(metadata.status, events, now, staleAfterMs),
     branchName: metadata.branchName,
     localBranchName: metadata.localBranchName,
+    repositoryCachePath: metadata.repositoryCachePath,
     worktreePath: metadata.worktreePath,
     stdoutPath: join(runDir, "stdout.log"),
     stderrPath: join(runDir, "stderr.log"),

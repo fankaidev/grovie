@@ -291,6 +291,40 @@ describe("CLI command registration", () => {
     expect(detail.stdout).toContain('run.failed {"exitCode":1}');
   });
 
+  it("[UC-EXECUTION-04-S08] runs local cleanup in dry-run mode from the CLI", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    const worktreePath = join(localState.paths.worktreesDir, "cleanup-session");
+    mkdirSync(worktreePath, { recursive: true });
+    writeLocalRun(localState.paths.runsDir, "cleanup-run", {
+      metadata: {
+        runId: "cleanup-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 37,
+        agentId: "coder@fankai-mac",
+        branchName: "grovie/issue-37",
+        worktreePath,
+      },
+      events: [
+        {
+          timestamp: "2026-05-23T10:00:00.000Z",
+          type: "run.succeeded",
+          data: {
+            exitCode: 0,
+          },
+        },
+      ],
+    });
+
+    const result = runCli(["runs", "cleanup", "--dry-run"], { cwd, localState });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("grovie runs cleanup");
+    expect(result.stdout).toContain("Would remove worktrees: 1");
+    expect(result.stdout).toContain(worktreePath);
+    expect(readFileSync(join(localState.paths.runsDir, "cleanup-run", "events.jsonl"), "utf8")).not.toContain("worktree.cleaned");
+  });
+
   it("[UC-EXECUTION-02-S09] retries a failed run by enqueuing a new daemon request without deleting history", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });

@@ -101,6 +101,8 @@ The current implementation includes config initialization and validation, GitHub
 
 `grovie status` and `grovie runs list` read local run directories under `~/.grovie/runs/` and show recent session status, issue identity, branches, log paths, and last event time. `grovie runs show <run-id>` shows the worktree, run directory, stdout/stderr logs, and recent events for one run. Runs with a start event but no terminal event are shown as running, and older running-looking runs are marked stale instead of being hidden.
 
+`grovie runs cleanup --dry-run` previews explicit local cleanup. Without `--dry-run`, `grovie runs cleanup` removes only completed session worktrees while preserving session and run history; failed, canceled, active, and stale sessions are skipped. Add `--logs` only when you also want terminal run directories removed.
+
 ## Safety Model
 
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The safety boundary is intentionally simple:

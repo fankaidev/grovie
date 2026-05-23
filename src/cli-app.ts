@@ -11,6 +11,7 @@ import {
   saveGlobalConfig,
   type LoadedConfig,
 } from "./config.js";
+import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "./cleanup.js";
 import { runDaemon, runDaemonForRepositories } from "./daemon.js";
 import { followDaemonLogs, parseDaemonLogStream, readDaemonLogs } from "./daemon-logs.js";
 import { LocalDaemonLifecycle, renderDaemonLifecycleStatus, type DaemonLifecycle } from "./daemon-lifecycle.js";
@@ -147,7 +148,7 @@ const commandDefinitions = [
   {
     name: "runs",
     description: "Inspect local Grovie run history and logs.",
-    usage: "grovie runs <list|show|retry|rerun> [run-id|owner/repo#123]",
+    usage: "grovie runs <list|show|retry|rerun|cleanup> [run-id|owner/repo#123]",
     issue: "#36",
     run: (args: string[], context: CliContext) => {
       const [subcommand, runId] = args;
@@ -267,9 +268,38 @@ const commandDefinitions = [
           });
         }
 
+        if (subcommand === "cleanup") {
+          const olderThanOption = readStringOption(args, "--older-than");
+
+          if (!olderThanOption.ok) {
+            return olderThanOption.result;
+          }
+
+          const olderThanMs = olderThanOption.value === undefined ? undefined : parseOlderThan(olderThanOption.value);
+
+          if (olderThanOption.value !== undefined && olderThanMs === undefined) {
+            return {
+              exitCode: 1,
+              stderr: "Invalid --older-than value. Use a positive duration like 30m, 12h, or 7d.",
+            };
+          }
+
+          const result = cleanupLocalState({
+            paths: context.localState.getPaths(),
+            dryRun: args.includes("--dry-run"),
+            includeLogs: args.includes("--logs"),
+            olderThanMs,
+          });
+
+          return {
+            exitCode: 0,
+            stdout: renderCleanupResult(result),
+          };
+        }
+
         return {
           exitCode: 1,
-          stderr: "Missing runs subcommand. Usage: grovie runs <list|show|retry|rerun> [run-id|owner/repo#123]",
+          stderr: "Missing runs subcommand. Usage: grovie runs <list|show|retry|rerun|cleanup> [run-id|owner/repo#123]",
         };
       } catch (error) {
         return errorResult(error);
