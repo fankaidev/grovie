@@ -1,8 +1,8 @@
 # Grovie
 
-Grovie is an open-source, local-first multi-agent workspace for GitHub-native software work.
+Grovie is an open-source, local-first workspace for GitHub-native multi-agent workflows.
 
-It gives teams multi-agent automation without a hosted platform. GitHub stays the control plane for issues, labels, comments, branches, pull requests, reviews, and CI; your local machine stays the executor for agents, worktrees, credentials, and logs.
+It lets you coordinate AI teammates and other local agents without a hosted platform. GitHub stays the control plane for issues, labels, comments, branches, pull requests, reviews, and CI; your local machine stays the executor for agents, worktrees, credentials, and logs.
 
 Grovie keeps adoption and operation simple:
 
@@ -36,13 +36,16 @@ The main flow is:
 
 ## Quick Start
 
-Prerequisites:
+Core prerequisites:
+
+- Git
+- GitHub CLI authenticated with `gh auth login`
+
+Development prerequisites for this checkout:
 
 - Node.js 20 or newer
 - pnpm 10.26.1
-- Git
-- GitHub CLI authenticated with `gh auth login`
-- Codex CLI available as `codex`
+- Codex CLI available as `codex` for the current default runtime
 
 Install this checkout as a local development command:
 
