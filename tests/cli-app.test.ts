@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
+import { type AgentMetadata, resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
 import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
@@ -94,31 +95,44 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("validates the default config through doctor", () => {
+  it("[UC-WORKER-01-S04] validates the default local agent through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
 
     const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const machineId = resolveMachineId(hostname());
 
-    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState: new FakeLocalState(globalRoot) })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState })).toEqual({
       exitCode: 0,
       stdout: [
         "grovie doctor",
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
+        `Machine id: ${machineId}`,
+        `Default agent: default@${machineId} (codex)`,
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
         "Codex: available (codex-cli 0.133.0).",
       ].join("\n"),
     });
+    expect(localState.registeredAgents).toEqual([
+      expect.objectContaining({
+        agentId: `default@${machineId}`,
+        machineId,
+        runtime: "codex",
+        envKeys: ["OPENAI_API_KEY"],
+      }),
+    ]);
   });
 
-  it("reports unavailable Codex runtime through doctor", () => {
+  it("[UC-WORKER-01-S04] [UC-EXECUTION-03-S02] reports unavailable Codex runtime through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
     const globalRoot = createTmpDir();
+    const machineId = resolveMachineId(hostname());
 
     expect(
       runCli(["doctor"], {
@@ -137,6 +151,8 @@ describe("CLI command registration", () => {
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
+        `Machine id: ${machineId}`,
+        `Default agent: default@${machineId} (codex)`,
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
@@ -433,7 +449,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("runs one daemon polling cycle from global watched repositories and explicit label", async () => {
+  it("[UC-WORKER-01-S05] runs one daemon polling cycle from global watched repositories and records default agent metadata", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
@@ -464,6 +480,13 @@ describe("CLI command registration", () => {
         "No queued issues found for fankaidev/grovie with label grovie.",
       ].join("\n"),
     });
+    expect(localState.registeredAgents).toEqual([
+      expect.objectContaining({
+        agentId: expect.stringMatching(/^default@.+/),
+        runtime: "codex",
+        envKeys: ["OPENAI_API_KEY"],
+      }),
+    ]);
   });
 
   it("uses built-in queue defaults for global daemon without reading cwd policy config", async () => {
@@ -636,6 +659,7 @@ function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGatewa
 
 class FakeLocalState implements RunLocalState {
   readonly paths: LocalStatePaths;
+  readonly registeredAgents: AgentMetadata[] = [];
   readonly run: PreparedRun = {
     runId: "fankaidev-grovie-issue-2",
     branchName: "grovie/issue-2",
@@ -655,6 +679,7 @@ class FakeLocalState implements RunLocalState {
       reposDir: `${root}/repos`,
       worktreesDir: `${root}/worktrees`,
       runsDir: `${root}/runs`,
+      agentsDir: `${root}/agents`,
     };
   }
 
@@ -667,6 +692,10 @@ class FakeLocalState implements RunLocalState {
   }
 
   appendEvent(): void {}
+
+  registerAgent(metadata: AgentMetadata): void {
+    this.registeredAgents.push(metadata);
+  }
 }
 
 function fakeIssue(reference: IssueReference): GitHubIssue {

@@ -24,6 +24,32 @@ describe("local state paths", () => {
 });
 
 describe("LocalState", () => {
+  it("[UC-WORKER-01-S05] records agent registry metadata without environment values", () => {
+    const root = createTmpDir();
+    const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
+
+    state.registerAgent({
+      agentId: "default@fankai-mac",
+      name: "default",
+      machineId: "fankai-mac",
+      runtime: "codex",
+      args: ["--model", "gpt-5.3-codex"],
+      envKeys: ["OPENAI_API_KEY"],
+    });
+
+    const metadata = JSON.parse(readFileSync(join(root, "agents", "default-fankai-mac.json"), "utf8")) as Record<string, unknown>;
+
+    expect(metadata).toEqual({
+      agentId: "default@fankai-mac",
+      name: "default",
+      machineId: "fankai-mac",
+      runtime: "codex",
+      args: ["--model", "gpt-5.3-codex"],
+      envKeys: ["OPENAI_API_KEY"],
+    });
+    expect(JSON.stringify(metadata)).not.toContain("secret");
+  });
+
   it("creates repo cache, worktree, and run artifacts without touching the checkout", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
