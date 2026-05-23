@@ -174,6 +174,10 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       ...input,
       issueNumber: request.issueNumber,
       workerId: request.agentId,
+      runRequest: {
+        sourceRunId: request.sourceRunId,
+        reason: request.reason,
+      },
       now,
       issueRunner,
     });
@@ -229,6 +233,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
 async function runRequestedIssue(input: DaemonInput & {
   issueNumber: number;
   workerId: string;
+  runRequest: RunIssueAsyncInput["runRequest"];
   now: () => Date;
   issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
 }): Promise<DaemonCycleResult> {
@@ -272,6 +277,7 @@ async function claimAndRun(input: DaemonInput & {
   issueReference: IssueReference;
   workerId: string;
   issueActivity: IssueActivity;
+  runRequest?: RunIssueAsyncInput["runRequest"];
   now: () => Date;
   issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
 }): Promise<DaemonCycleResult> {
@@ -360,6 +366,7 @@ async function claimAndRun(input: DaemonInput & {
       github: input.github,
       runtime: input.runtime,
       localState: input.localState,
+      runRequest: input.runRequest,
       monitor: {
         heartbeatIntervalMs: input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
         onHeartbeat: () => {

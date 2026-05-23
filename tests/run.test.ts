@@ -208,6 +208,51 @@ describe("runIssue", () => {
     ]);
   });
 
+  it("[UC-EXECUTION-02-S09] includes retry trace metadata in the prepared run context", () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      runRequest: {
+        sourceRunId: "failed-run",
+        reason: "retry",
+      },
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(localState.prepareInput?.runRequest).toEqual({
+      sourceRunId: "failed-run",
+      reason: "retry",
+    });
+    expect(localState.prepareInput?.task).toMatchObject({
+      runRequest: {
+        sourceRunId: "failed-run",
+        reason: "retry",
+      },
+    });
+  });
+
   it("[UC-GITHUB-02-S03] includes related pull request context in the local handoff", () => {
     const github = new FakeGitHub({
       relatedPullRequests: [

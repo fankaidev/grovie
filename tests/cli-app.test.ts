@@ -7,7 +7,7 @@ import type { DaemonLifecycle, DaemonLifecycleStatus } from "../src/daemon-lifec
 import { type AgentMetadata, resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
-import type { HandledCursor, LocalStatePaths, PreparedRun } from "../src/local-state.js";
+import type { HandledCursor, LocalStatePaths, PreparedRun, RunRequest } from "../src/local-state.js";
 import type { RunLocalState } from "../src/run.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
 
@@ -279,6 +279,124 @@ describe("CLI command registration", () => {
     expect(detail.stdout).toContain(`Stderr log: ${join(localState.paths.runsDir, "failed-run", "stderr.log")}`);
     expect(detail.stdout).toContain("Result links: https://github.com/fankaidev/grovie/issues/37#issuecomment-1");
     expect(detail.stdout).toContain('run.failed {"exitCode":1}');
+  });
+
+  it("[UC-EXECUTION-02-S09] retries a failed run by enqueuing a new daemon request without deleting history", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
+    writeLocalRun(localState.paths.runsDir, "failed-run", {
+      metadata: {
+        runId: "failed-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 79,
+        agentId: "coder@fankai-mac",
+        branchName: "grovie/issue-79",
+      },
+      events: [
+        {
+          timestamp: "2026-05-23T10:00:00.000Z",
+          type: "runtime.started",
+          data: {
+            runtime: "codex",
+          },
+        },
+        {
+          timestamp: "2026-05-23T10:01:00.000Z",
+          type: "run.failed",
+          data: {
+            exitCode: 1,
+          },
+        },
+      ],
+    });
+
+    const result = runCli(["runs", "retry", "failed-run"], { cwd, localState });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Retry requested for failed-run.");
+    expect(result.stdout).toContain("Issue: fankaidev/grovie#79");
+    expect(result.stdout).toContain("Source run: failed-run");
+    expect(result.stdout).toContain("reuse the session worktree");
+    expect(localState.requests).toEqual([
+      expect.objectContaining({
+        repository: "fankaidev/grovie",
+        issueNumber: 79,
+        agentId: "coder@fankai-mac",
+        sourceRunId: "failed-run",
+        reason: "retry",
+      }),
+    ]);
+  });
+
+  it("[UC-EXECUTION-02-S09] retries a canceled run by enqueuing a new daemon request", () => {
+    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
+    writeLocalRun(localState.paths.runsDir, "canceled-run", {
+      metadata: {
+        runId: "canceled-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 79,
+        agentId: "coder@fankai-mac",
+      },
+      events: [
+        {
+          timestamp: "2026-05-23T10:01:00.000Z",
+          type: "run.canceled",
+        },
+      ],
+    });
+
+    const result = runCli(["runs", "retry", "canceled-run"], { localState });
+
+    expect(result.exitCode).toBe(0);
+    expect(localState.requests[0]).toMatchObject({
+      sourceRunId: "canceled-run",
+      reason: "retry",
+    });
+  });
+
+  it("[UC-EXECUTION-02-S10] reruns an issue-agent session through the daemon", () => {
+    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
+
+    const result = runCli(["runs", "rerun", "fankaidev/grovie#79", "--agent", "coder@fankai-mac"], { localState });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Rerun requested for fankaidev/grovie#79.");
+    expect(result.stdout).toContain("reuse the session worktree");
+    expect(localState.requests).toEqual([
+      expect.objectContaining({
+        repository: "fankaidev/grovie",
+        issueNumber: 79,
+        agentId: "coder@fankai-mac",
+        reason: "rerun",
+      }),
+    ]);
+  });
+
+  it("[UC-EXECUTION-02-S11] refuses retry while the same issue-agent execution is active", () => {
+    const localState = new FakeLocalState(createTmpDir(), {
+      daemonRunning: true,
+      lockedAgents: ["coder@fankai-mac"],
+    });
+    writeLocalRun(localState.paths.runsDir, "failed-run", {
+      metadata: {
+        runId: "failed-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 79,
+        agentId: "coder@fankai-mac",
+      },
+      events: [
+        {
+          timestamp: "2026-05-23T10:01:00.000Z",
+          type: "run.failed",
+        },
+      ],
+    });
+
+    expect(runCli(["runs", "retry", "failed-run"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Grovie execution is already active for fankaidev/grovie#79 and coder@fankai-mac.",
+    });
+    expect(localState.requests).toEqual([]);
   });
 
   it("requires a run id for runs show", () => {
@@ -1268,7 +1386,7 @@ function writeDaemonLogs(root: string, input: { stdout: string; stderr: string }
 class FakeLocalState implements RunLocalState {
   readonly paths: LocalStatePaths;
   readonly registeredAgents: AgentMetadata[] = [];
-  readonly requests: Array<{ repository: string; issueNumber: number; agentId: string; path: string }> = [];
+  readonly requests: RunRequest[] = [];
   readonly run: PreparedRun = {
     sessionId: "fankaidev-grovie-issue-2-codex",
     runId: "fankaidev-grovie-issue-2",
@@ -1337,7 +1455,7 @@ class FakeLocalState implements RunLocalState {
     return undefined;
   }
 
-  enqueueRunRequest(input: { repository: string; issueNumber: number; agentId: string }): { id: string; repository: string; issueNumber: number; agentId: string; createdAt: string; path: string } {
+  enqueueRunRequest(input: { repository: string; issueNumber: number; agentId: string; sourceRunId?: string; reason?: RunRequest["reason"] }): RunRequest {
     const request = {
       id: `request-${this.requests.length + 1}`,
       repository: input.repository,
@@ -1345,6 +1463,8 @@ class FakeLocalState implements RunLocalState {
       agentId: input.agentId,
       createdAt: "2026-05-23T00:00:00.000Z",
       path: `${this.paths.requestsDir}/request-${this.requests.length + 1}.json`,
+      sourceRunId: input.sourceRunId,
+      reason: input.reason,
     };
     this.requests.push(request);
     return request;

@@ -24,6 +24,10 @@ export type PrepareRunInput = {
   now?: Date;
   prompt: string;
   task: Record<string, unknown>;
+  runRequest?: {
+    sourceRunId?: string;
+    reason?: RunRequest["reason"];
+  };
 };
 
 export type PreparedRun = {
@@ -78,6 +82,8 @@ export type RunRequest = {
   agentId: string;
   createdAt: string;
   path: string;
+  sourceRunId?: string;
+  reason?: "manual" | "retry" | "rerun";
 };
 
 export type LockResult<T> =
@@ -204,6 +210,8 @@ export class LocalState {
     issueNumber: number;
     agentId: string;
     now?: Date;
+    sourceRunId?: string;
+    reason?: RunRequest["reason"];
   }): RunRequest {
     this.ensureBaseDirectories();
     const createdAt = (input.now ?? new Date()).toISOString();
@@ -221,6 +229,8 @@ export class LocalState {
       agentId: input.agentId,
       createdAt,
       path: requestPath.path,
+      sourceRunId: input.sourceRunId,
+      reason: input.reason,
     };
 
     writeJsonFile(requestPath.path, request);
@@ -343,6 +353,7 @@ export class LocalState {
       defaultBranch: input.defaultBranch,
       repositoryCachePath,
       worktreePath,
+      runRequest: input.runRequest,
       createdAt,
     });
 
@@ -374,6 +385,7 @@ export class LocalState {
         defaultBranch: input.defaultBranch,
         repositoryCachePath,
         worktreePath,
+        runRequest: input.runRequest,
         createdAt,
         preparedAt: new Date().toISOString(),
       });

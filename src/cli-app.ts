@@ -145,7 +145,7 @@ const commandDefinitions = [
   {
     name: "runs",
     description: "Inspect local Grovie run history and logs.",
-    usage: "grovie runs <list|show> [run-id]",
+    usage: "grovie runs <list|show|retry|rerun> [run-id|owner/repo#123]",
     issue: "#36",
     run: (args: string[], context: CliContext) => {
       const [subcommand, runId] = args;
@@ -182,9 +182,92 @@ const commandDefinitions = [
           };
         }
 
+        if (subcommand === "retry") {
+          if (runId === undefined) {
+            return {
+              exitCode: 1,
+              stderr: "Missing run id. Usage: grovie runs retry <run-id>",
+            };
+          }
+
+          const run = findLocalRun(runsDir, runId);
+
+          if (run === undefined) {
+            return {
+              exitCode: 1,
+              stderr: `Run not found: ${runId}`,
+            };
+          }
+
+          if (run.status !== "failed" && run.status !== "canceled" && run.status !== "stale") {
+            return {
+              exitCode: 1,
+              stderr: `Run ${runId} is ${run.status}; only failed, canceled, or stale runs can be retried.`,
+            };
+          }
+
+          if (run.repository === undefined || run.issueNumber === undefined || run.agentId === undefined) {
+            return {
+              exitCode: 1,
+              stderr: `Run ${runId} is missing repository, issue number, or agent metadata.`,
+            };
+          }
+
+          return enqueueDaemonRunRequest({
+            context,
+            repository: run.repository,
+            issueNumber: run.issueNumber,
+            agentId: run.agentId,
+            sourceRunId: run.runId,
+            reason: "retry",
+            title: "grovie runs retry",
+            action: `Retry requested for ${run.runId}.`,
+            mode: "The daemon will create a new run in the existing issue-agent session and reuse the session worktree.",
+          });
+        }
+
+        if (subcommand === "rerun") {
+          if (runId === undefined) {
+            return {
+              exitCode: 1,
+              stderr: "Missing issue reference. Usage: grovie runs rerun owner/repo#123 --agent coder@machine",
+            };
+          }
+
+          const parsedIssueReference = parseIssueReference(runId);
+
+          if (!parsedIssueReference.ok) {
+            return githubErrorResult(parsedIssueReference.error);
+          }
+
+          const agentOption = readStringOption(args, "--agent");
+
+          if (!agentOption.ok) {
+            return agentOption.result;
+          }
+
+          if (agentOption.value === undefined) {
+            return {
+              exitCode: 1,
+              stderr: "Missing agent. Usage: grovie runs rerun owner/repo#123 --agent coder@machine",
+            };
+          }
+
+          return enqueueDaemonRunRequest({
+            context,
+            repository: formatIssueRepository(parsedIssueReference.value),
+            issueNumber: parsedIssueReference.value.number,
+            agentId: agentOption.value,
+            reason: "rerun",
+            title: "grovie runs rerun",
+            action: `Rerun requested for ${formatIssueReference(parsedIssueReference.value)}.`,
+            mode: "The daemon will create a new run in the existing issue-agent session and reuse the session worktree.",
+          });
+        }
+
         return {
           exitCode: 1,
-          stderr: "Missing runs subcommand. Usage: grovie runs <list|show> [run-id]",
+          stderr: "Missing runs subcommand. Usage: grovie runs <list|show|retry|rerun> [run-id|owner/repo#123]",
         };
       } catch (error) {
         return errorResult(error);
@@ -312,6 +395,7 @@ const commandDefinitions = [
           repository: targetRepository,
           issueNumber: parsedIssueReference.value.number,
           agentId: agentResult.agentId,
+          reason: "manual",
         });
 
         if (request === undefined) {
@@ -809,6 +893,72 @@ function renderConfigSource(loaded: LoadedConfig): string {
 function renderGlobalConfigSource(path: string, watchedRepositoryCount: number): string {
   const repositoryText = watchedRepositoryCount === 1 ? "1 watched repository" : `${watchedRepositoryCount} watched repositories`;
   return `${path} (${repositoryText}).`;
+}
+
+function enqueueDaemonRunRequest(input: {
+  context: CliContext;
+  repository: string;
+  issueNumber: number;
+  agentId: string;
+  sourceRunId?: string;
+  reason: "retry" | "rerun";
+  title: string;
+  action: string;
+  mode: string;
+}): CliResult {
+  const identity = resolveLocalIdentity();
+  const issueReference = parseIssueReference(`${input.repository}#${input.issueNumber}`);
+
+  if (!issueReference.ok) {
+    return githubErrorResult(issueReference.error);
+  }
+
+  if (input.context.localState.isDaemonRunning?.(identity.machineId) !== true) {
+    return {
+      exitCode: 1,
+      stderr: `No Grovie daemon is running for machine ${identity.machineId}. Start one with \`grovie daemon start\`.`,
+    };
+  }
+
+  if (input.context.localState.hasExecutionLock?.({
+    repository: input.repository,
+    issueNumber: input.issueNumber,
+    agentId: input.agentId,
+  }) === true) {
+    return {
+      exitCode: 1,
+      stderr: `Grovie execution is already active for ${formatIssueReference(issueReference.value)} and ${input.agentId}.`,
+    };
+  }
+
+  const request = input.context.localState.enqueueRunRequest?.({
+    repository: input.repository,
+    issueNumber: input.issueNumber,
+    agentId: input.agentId,
+    sourceRunId: input.sourceRunId,
+    reason: input.reason,
+  });
+
+  if (request === undefined) {
+    return {
+      exitCode: 1,
+      stderr: "Local state does not support daemon run requests.",
+    };
+  }
+
+  return {
+    exitCode: 0,
+    stdout: [
+      input.title,
+      "",
+      input.action,
+      `Issue: ${formatIssueReference(issueReference.value)}`,
+      `Agent: ${input.agentId}`,
+      `Mode: ${input.mode}`,
+      input.sourceRunId === undefined ? undefined : `Source run: ${input.sourceRunId}`,
+      `Request: ${request.path}`,
+    ].filter((line): line is string => line !== undefined).join("\n"),
+  };
 }
 
 function readStringOption(
