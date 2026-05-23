@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
@@ -114,6 +115,64 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
         writeJson(response, 200, {
           runId: run.runId,
           events: run.events,
+        });
+        return;
+      }
+
+      const runLogMatch = /^\/api\/runs\/(?<runId>[^/]+)\/logs\/(?<stream>stdout|stderr)$/.exec(url.pathname);
+
+      if (runLogMatch?.groups?.runId !== undefined && isLogStream(runLogMatch.groups.stream)) {
+        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runLogMatch.groups.runId));
+
+        if (run === undefined) {
+          writeJson(response, 404, {
+            error: "not_found",
+            message: "Run not found.",
+          });
+          return;
+        }
+
+        const log = readRunLog(run, runLogMatch.groups.stream);
+
+        writeJson(response, 200, {
+          runId: run.runId,
+          stream: runLogMatch.groups.stream,
+          path: log.path,
+          content: log.content,
+        });
+        return;
+      }
+
+      const runLogStreamMatch = /^\/api\/runs\/(?<runId>[^/]+)\/logs\/stream$/.exec(url.pathname);
+
+      if (runLogStreamMatch?.groups?.runId !== undefined) {
+        const stream = url.searchParams.get("stream");
+
+        if (stream !== "stdout" && stream !== "stderr") {
+          writeJson(response, 400, {
+            error: "invalid_stream",
+            message: "Expected stream=stdout or stream=stderr.",
+          });
+          return;
+        }
+
+        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runLogStreamMatch.groups.runId));
+
+        if (run === undefined) {
+          writeJson(response, 404, {
+            error: "not_found",
+            message: "Run not found.",
+          });
+          return;
+        }
+
+        const log = readRunLog(run, stream);
+
+        writeServerSentEvent(response, {
+          runId: run.runId,
+          stream,
+          path: log.path,
+          content: log.content,
         });
         return;
       }
@@ -276,6 +335,11 @@ function renderRunDetailPage(run: LocalRunSummary): string {
     `<p>Stderr: ${escapeHtml(run.stderrPath)}</p>`,
     "</section>",
     "<section>",
+    "<h2>Logs</h2>",
+    renderLogPreview(run, "stdout"),
+    renderLogPreview(run, "stderr"),
+    "</section>",
+    "<section>",
     "<h2>Result Links</h2>",
     renderLinks(run.resultLinks),
     "</section>",
@@ -369,6 +433,50 @@ function renderEvents(run: LocalRunSummary): string {
     ...run.events.slice(-10).map((event) => `<li>${escapeHtml(event.timestamp ?? "(no timestamp)")} <code>${escapeHtml(event.type)}</code></li>`),
     "</ul>",
   ].join("\n");
+}
+
+function renderLogPreview(run: LocalRunSummary, stream: "stdout" | "stderr"): string {
+  const log = readRunLog(run, stream);
+  const content = log.content.length === 0 ? "(no output)" : stripAnsi(log.content);
+
+  return [
+    `<h3>${stream}</h3>`,
+    `<p><a href="/api/runs/${encodeURIComponent(run.runId)}/logs/${stream}">Raw ${stream}</a></p>`,
+    `<pre><code>${escapeHtml(content)}</code></pre>`,
+  ].join("\n");
+}
+
+function readRunLog(run: LocalRunSummary, stream: "stdout" | "stderr"): { path: string; content: string } {
+  const path = stream === "stdout" ? run.stdoutPath : run.stderrPath;
+
+  if (!existsSync(path)) {
+    return {
+      path,
+      content: "",
+    };
+  }
+
+  return {
+    path,
+    content: readFileSync(path, "utf8"),
+  };
+}
+
+function isLogStream(value: string | undefined): value is "stdout" | "stderr" {
+  return value === "stdout" || value === "stderr";
+}
+
+function writeServerSentEvent(response: ServerResponse, value: unknown): void {
+  response.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+  });
+  response.end(`event: snapshot\ndata: ${JSON.stringify(value)}\n\n`);
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
 function renderNotFoundPage(message: string): string {

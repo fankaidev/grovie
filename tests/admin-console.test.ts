@@ -328,6 +328,101 @@ describe("admin console server", () => {
     expect(html).toContain("Not Found");
     expect(html).toContain("Run not found.");
   });
+
+  it("[UC-ADMIN-04-S01] returns the local stdout log for a completed run", async () => {
+    const root = createTmpDir();
+    writeRun(pathsForRoot(root).runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 72,
+      },
+      events: [event("2026-05-23T10:00:00.000Z", "run.succeeded")],
+      stdout: "stdout line\n",
+      stderr: "stderr line\n",
+    });
+    const started = await startTestServer(root);
+
+    expect(await (await fetch(`${started.url}/api/runs/run-1/logs/stdout`)).json()).toMatchObject({
+      runId: "run-1",
+      stream: "stdout",
+      content: "stdout line\n",
+    });
+  });
+
+  it("[UC-ADMIN-04-S02] returns the local stderr log separately from stdout", async () => {
+    const root = createTmpDir();
+    writeRun(pathsForRoot(root).runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 72,
+      },
+      events: [event("2026-05-23T10:00:00.000Z", "run.failed")],
+      stdout: "stdout line\n",
+      stderr: "stderr line\n",
+    });
+    const started = await startTestServer(root);
+    const payload = await (await fetch(`${started.url}/api/runs/run-1/logs/stderr`)).json() as { content: string };
+
+    expect(payload.content).toBe("stderr line\n");
+    expect(payload.content).not.toContain("stdout line");
+  });
+
+  it("[UC-ADMIN-04-S03] returns an SSE snapshot for the selected log stream", async () => {
+    const root = createTmpDir();
+    writeRun(pathsForRoot(root).runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 72,
+      },
+      events: [event("2026-05-23T10:00:00.000Z", "runtime.started")],
+      stdout: "live stdout\n",
+      stderr: "live stderr\n",
+    });
+    const started = await startTestServer(root);
+    const response = await fetch(`${started.url}/api/runs/run-1/logs/stream?stream=stdout`);
+    const body = await response.text();
+
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    expect(body).toContain("event: snapshot");
+    expect(body).toContain("live stdout");
+    expect(body).not.toContain("live stderr");
+  });
+
+  it("[UC-ADMIN-04-S04] keeps stdout and stderr previews distinguishable in the run detail view", async () => {
+    const root = createTmpDir();
+    writeRun(pathsForRoot(root).runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 72,
+      },
+      events: [event("2026-05-23T10:00:00.000Z", "runtime.started")],
+      stdout: "\u001b[31mred stdout\u001b[0m\n",
+      stderr: "plain stderr\n",
+    });
+    const started = await startTestServer(root);
+    const html = await (await fetch(`${started.url}/runs/run-1`)).text();
+
+    expect(html).toContain("<h3>stdout</h3>");
+    expect(html).toContain("red stdout");
+    expect(html).toContain("<h3>stderr</h3>");
+    expect(html).toContain("plain stderr");
+  });
+
+  it("[UC-ADMIN-04-S05] returns clear errors for missing runs and invalid log streams", async () => {
+    const started = await startTestServer();
+
+    expect((await fetch(`${started.url}/api/runs/missing/logs/stdout`)).status).toBe(404);
+    const invalid = await fetch(`${started.url}/api/runs/missing/logs/stream?stream=combined`);
+
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({
+      error: "invalid_stream",
+    });
+  });
 });
 
 function getAvailablePort(): Promise<number> {
@@ -427,14 +522,16 @@ function writeRun(
   input: {
     metadata: Record<string, unknown>;
     events: Array<Record<string, unknown>>;
+    stdout?: string;
+    stderr?: string;
   },
 ): void {
   const runDir = join(runsDir, runId);
   mkdirSync(runDir, { recursive: true });
   writeFileSync(join(runDir, "metadata.json"), `${JSON.stringify(input.metadata, null, 2)}\n`, "utf8");
   writeFileSync(join(runDir, "events.jsonl"), input.events.map((item) => JSON.stringify(item)).join("\n"), "utf8");
-  writeFileSync(join(runDir, "stdout.log"), "", "utf8");
-  writeFileSync(join(runDir, "stderr.log"), "", "utf8");
+  writeFileSync(join(runDir, "stdout.log"), input.stdout ?? "", "utf8");
+  writeFileSync(join(runDir, "stderr.log"), input.stderr ?? "", "utf8");
 }
 
 function event(timestamp: string, type: string, data: Record<string, unknown> = {}): Record<string, unknown> {
