@@ -15,6 +15,7 @@ import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "./cleanu
 import { runDaemon, runDaemonForRepositories } from "./daemon.js";
 import { followDaemonLogs, parseDaemonLogStream, readDaemonLogs } from "./daemon-logs.js";
 import { LocalDaemonLifecycle, renderDaemonLifecycleStatus, type DaemonLifecycle } from "./daemon-lifecycle.js";
+import { getDaemonServicePath, installDaemonService, parseDaemonServicePlatform, renderDaemonServiceResult, uninstallDaemonService } from "./daemon-service.js";
 import { formatIssueReference, GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
 import { LocalState } from "./local-state.js";
@@ -513,7 +514,7 @@ const commandDefinitions = [
   {
     name: "daemon",
     description: "Run and control the local Grovie daemon.",
-    usage: "grovie daemon <run|start|stop|status|logs> [--repo owner/repo] [--label grovie] [--once]",
+    usage: "grovie daemon <run|start|stop|status|logs|service> [--repo owner/repo] [--label grovie] [--once]",
     issue: "#77",
     run: (args: string[], context: CliContext) => {
       const [subcommand] = args;
@@ -618,6 +619,51 @@ const commandDefinitions = [
               exitCode: 1,
               stderr: result.message,
             };
+        } catch (error) {
+          return errorResult(error);
+        }
+      }
+
+      if (subcommand === "service") {
+        const action = args[1];
+
+        if (action !== "install" && action !== "uninstall" && action !== "path") {
+          return {
+            exitCode: 1,
+            stderr: "Missing daemon service action. Usage: grovie daemon service <install|uninstall|path> [--platform launchd|systemd]",
+          };
+        }
+
+        const platformOption = readStringOption(args.slice(2), "--platform");
+
+        if (!platformOption.ok) {
+          return platformOption.result;
+        }
+
+        const platform = parseDaemonServicePlatform(platformOption.value);
+
+        if (platformOption.value !== undefined && platform === undefined) {
+          return {
+            exitCode: 1,
+            stderr: "Invalid --platform value. Use launchd or systemd.",
+          };
+        }
+
+        try {
+          const input = {
+            paths: context.localState.getPaths(),
+            platform,
+          };
+          const result = action === "install"
+            ? installDaemonService(input)
+            : action === "uninstall"
+              ? uninstallDaemonService(input)
+              : getDaemonServicePath(input);
+
+          return {
+            exitCode: 0,
+            stdout: renderDaemonServiceResult(action, result),
+          };
         } catch (error) {
           return errorResult(error);
         }
