@@ -3,7 +3,7 @@ import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import type { LocalStatePaths } from "./local-state.js";
 import type { AgentRuntime } from "./runtime.js";
-import { findLocalRun, listLocalRuns } from "./status.js";
+import { findLocalRun, listLocalRuns, type LocalRunSummary } from "./status.js";
 
 export type AdminConsoleResolvedConfig = {
   enabled: boolean;
@@ -45,6 +45,25 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
     }
 
     if (context !== undefined && request.method === "GET") {
+      if (url.pathname === "/") {
+        writeHtml(response, 200, renderAdminHome(context));
+        return;
+      }
+
+      const runPageMatch = /^\/runs\/(?<runId>[^/]+)$/.exec(url.pathname);
+
+      if (runPageMatch?.groups?.runId !== undefined) {
+        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runPageMatch.groups.runId));
+
+        if (run === undefined) {
+          writeHtml(response, 404, renderNotFoundPage("Run not found."));
+          return;
+        }
+
+        writeHtml(response, 200, renderRunDetailPage(run));
+        return;
+      }
+
       if (url.pathname === "/api/health") {
         writeJson(response, 200, {
           ok: true,
@@ -167,6 +186,13 @@ function writeJson(response: ServerResponse, statusCode: number, value: unknown)
   response.end(`${JSON.stringify(value)}\n`);
 }
 
+function writeHtml(response: ServerResponse, statusCode: number, value: string): void {
+  response.writeHead(statusCode, {
+    "content-type": "text/html; charset=utf-8",
+  });
+  response.end(value);
+}
+
 function parseRequestUrl(url: string | undefined): URL {
   return new URL(url ?? "/", "http://127.0.0.1");
 }
@@ -187,4 +213,188 @@ function renderApiDaemonStatus(status: DaemonLifecycleStatus): unknown {
       statePath: status.state.statePath,
     },
   };
+}
+
+function renderAdminHome(context: AdminConsoleContext): string {
+  const health = {
+    daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
+    runtime: context.runtime.checkAvailability(),
+  };
+  const globalConfig = loadGlobalConfig(context.paths.root);
+  const runs = listLocalRuns(context.paths.runsDir).slice(0, 20);
+
+  return renderDocument("Grovie Admin Console", [
+    "<h1>Grovie Admin Console</h1>",
+    "<section>",
+    "<h2>Daemon</h2>",
+    `<p>Status: ${escapeHtml(readStatus(health.daemon))}</p>`,
+    `<p>State path: ${escapeHtml(readStatePath(health.daemon))}</p>`,
+    "</section>",
+    "<section>",
+    "<h2>Runtime</h2>",
+    `<p>${escapeHtml(health.runtime.runtime)}: ${escapeHtml(health.runtime.message)}</p>`,
+    "</section>",
+    "<section>",
+    "<h2>Watched Repositories</h2>",
+    renderWatchedRepositories(globalConfig.config.watchedRepositories),
+    "</section>",
+    "<section>",
+    "<h2>Recent Runs</h2>",
+    renderRunsTable(runs),
+    "</section>",
+  ].join("\n"));
+}
+
+function renderRunDetailPage(run: LocalRunSummary): string {
+  return renderDocument(`Grovie Run ${run.runId}`, [
+    `<h1>${escapeHtml(run.runId)}</h1>`,
+    "<section>",
+    "<h2>Summary</h2>",
+    `<p>Status: ${escapeHtml(run.status)}</p>`,
+    `<p>Issue: ${escapeHtml(renderIssueReference(run))}</p>`,
+    `<p>Agent: ${escapeHtml(run.agentId ?? "(unknown)")}</p>`,
+    `<p>Runtime: ${escapeHtml(run.runtime ?? "(unknown)")}</p>`,
+    `<p>Branch: ${escapeHtml(run.branchName ?? "(unknown)")}</p>`,
+    `<p>Started: ${escapeHtml(run.startedAt ?? "(unknown)")}</p>`,
+    `<p>Ended: ${escapeHtml(run.endedAt ?? "(not ended)")}</p>`,
+    "</section>",
+    "<section>",
+    "<h2>Paths</h2>",
+    `<p>Worktree: ${escapeHtml(run.worktreePath ?? "(unknown)")}</p>`,
+    `<p>Run directory: ${escapeHtml(run.runDir)}</p>`,
+    `<p>Stdout: ${escapeHtml(run.stdoutPath)}</p>`,
+    `<p>Stderr: ${escapeHtml(run.stderrPath)}</p>`,
+    "</section>",
+    "<section>",
+    "<h2>Result Links</h2>",
+    renderLinks(run.resultLinks),
+    "</section>",
+    "<section>",
+    "<h2>Recent Events</h2>",
+    renderEvents(run),
+    "</section>",
+  ].join("\n"));
+}
+
+function renderDocument(title: string, body: string): string {
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${escapeHtml(title)}</title>`,
+    "<style>",
+    "body{font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:24px;color:#172026;background:#f8fafb;line-height:1.4}",
+    "main{max-width:1120px;margin:0 auto}",
+    "section{border-top:1px solid #d8dee4;padding:16px 0}",
+    "table{width:100%;border-collapse:collapse;background:#fff}",
+    "th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;vertical-align:top}",
+    "code{background:#eef2f5;padding:2px 4px;border-radius:4px}",
+    "a{color:#075985}",
+    "</style>",
+    "</head>",
+    "<body>",
+    "<main>",
+    body,
+    "</main>",
+    "</body>",
+    "</html>",
+  ].join("\n");
+}
+
+function renderWatchedRepositories(repositories: Array<{ repository: string; label?: string }>): string {
+  if (repositories.length === 0) {
+    return "<p>No watched repositories configured.</p>";
+  }
+
+  return [
+    "<ul>",
+    ...repositories.map((repository) => `<li>${escapeHtml(repository.repository)}${repository.label === undefined ? "" : ` label=${escapeHtml(repository.label)}`}</li>`),
+    "</ul>",
+  ].join("\n");
+}
+
+function renderRunsTable(runs: LocalRunSummary[]): string {
+  if (runs.length === 0) {
+    return "<p>No local runs found.</p>";
+  }
+
+  return [
+    "<table>",
+    "<thead><tr><th>Run</th><th>Issue</th><th>Status</th><th>Agent</th><th>Branch</th><th>Started</th><th>Ended</th><th>Links</th></tr></thead>",
+    "<tbody>",
+    ...runs.map((run) => [
+      "<tr>",
+      `<td><a href="/runs/${encodeURIComponent(run.runId)}">${escapeHtml(run.runId)}</a></td>`,
+      `<td>${escapeHtml(renderIssueReference(run))}</td>`,
+      `<td>${escapeHtml(run.status)}</td>`,
+      `<td>${escapeHtml(run.agentId ?? "(unknown)")}</td>`,
+      `<td>${escapeHtml(run.branchName ?? "(unknown)")}</td>`,
+      `<td>${escapeHtml(run.startedAt ?? "(unknown)")}</td>`,
+      `<td>${escapeHtml(run.endedAt ?? "(not ended)")}</td>`,
+      `<td>${renderLinks(run.resultLinks)}</td>`,
+      "</tr>",
+    ].join("")),
+    "</tbody>",
+    "</table>",
+  ].join("\n");
+}
+
+function renderLinks(links: string[]): string {
+  if (links.length === 0) {
+    return "(none)";
+  }
+
+  return links.map((link) => `<a href="${escapeHtml(link)}">${escapeHtml(link)}</a>`).join("<br>");
+}
+
+function renderEvents(run: LocalRunSummary): string {
+  if (run.events.length === 0) {
+    return "<p>No events recorded.</p>";
+  }
+
+  return [
+    "<ul>",
+    ...run.events.slice(-10).map((event) => `<li>${escapeHtml(event.timestamp ?? "(no timestamp)")} <code>${escapeHtml(event.type)}</code></li>`),
+    "</ul>",
+  ].join("\n");
+}
+
+function renderNotFoundPage(message: string): string {
+  return renderDocument("Not Found", `<h1>Not Found</h1><p>${escapeHtml(message)}</p>`);
+}
+
+function renderIssueReference(run: LocalRunSummary): string {
+  if (run.repository === undefined && run.issueNumber === undefined) {
+    return "(unknown)";
+  }
+
+  return `${run.repository ?? "(unknown)"}${run.issueNumber === undefined ? "" : `#${run.issueNumber}`}`;
+}
+
+function readStatus(value: unknown): string {
+  return typeof value === "object" && value !== null && "status" in value && typeof value.status === "string"
+    ? value.status
+    : "(unknown)";
+}
+
+function readStatePath(value: unknown): string {
+  if (typeof value !== "object" || value === null || !("state" in value)) {
+    return "(none)";
+  }
+
+  const state = value.state;
+
+  return typeof state === "object" && state !== null && "statePath" in state && typeof state.statePath === "string"
+    ? state.statePath
+    : "(none)";
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
