@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildBranchName, buildLocalBranchName, buildRunId, LocalState } from "../src/local-state.js";
+import { buildBranchName, buildLocalBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState } from "../src/local-state.js";
 import type { CommandResult, CommandRunner } from "../src/github.js";
 
 const tmpDirs: string[] = [];
@@ -14,12 +14,17 @@ afterEach(() => {
 });
 
 describe("local state paths", () => {
-  it("builds attempt-specific run ids and deterministic result branch names", () => {
-    expect(buildRunId("fankaidev/grovie", 5, "attempt-a")).toBe("fankaidev-grovie-issue-5-attempt-a");
-    expect(buildRunId("fankaidev/grovie", 5)).toMatch(/^fankaidev-grovie-issue-5-\d{14}-[0-9a-f]{8}$/);
-    expect(buildBranchName("grovie/", 5)).toBe("grovie/issue-5");
-    expect(buildBranchName("grovie", 5)).toBe("grovie/issue-5");
-    expect(buildLocalBranchName("grovie/", 5, "attempt-a")).toBe("grovie/issue-5-attempt-a");
+  it("[UC-EXECUTION-02-S01] [UC-EXECUTION-02-S02] builds session ids and timestamped run ids", () => {
+    const sessionId = buildSessionId("fankaidev/grovie", 123, "coder@fankai-mac");
+
+    expect(sessionId).toBe("fankaidev-grovie-issue-123-coder-fankai-mac");
+    expect(buildRunTimestamp(new Date("2026-05-23T00:00:01Z"))).toBe("20260523T000001Z");
+    expect(buildRunTimestamp(new Date("2026-05-23T00:00:01.456Z"))).toBe("20260523T000001Z");
+    expect(buildRunId(sessionId, "20260523T000001Z")).toBe(
+      "fankaidev-grovie-issue-123-coder-fankai-mac-20260523T000001Z",
+    );
+    expect(buildBranchName("grovie/", sessionId)).toBe("grovie/fankaidev-grovie-issue-123-coder-fankai-mac");
+    expect(buildLocalBranchName("grovie", sessionId)).toBe("grovie/fankaidev-grovie-issue-123-coder-fankai-mac");
   });
 });
 
@@ -151,25 +156,31 @@ describe("LocalState", () => {
     })).toBeUndefined();
   });
 
-  it("creates repo cache, worktree, and run artifacts without touching the checkout", () => {
+  it("[UC-EXECUTION-04-S01] creates session worktree and run artifacts without touching the checkout", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
     const state = new LocalState({ paths: { root }, runner });
+    const sessionId = "fankaidev-grovie-issue-5-coder-fankai-mac";
+    const runId = `${sessionId}-20260523T000001Z`;
 
     const run = state.prepareRun({
       repository: "fankaidev/grovie",
       issueNumber: 5,
+      agentId: "coder@fankai-mac",
       defaultBranch: "main",
       branchPrefix: "grovie/",
-      attemptId: "attempt-a",
+      now: new Date("2026-05-23T00:00:01Z"),
       task: {
         issue: 5,
       },
       prompt: "Implement issue #5",
     });
 
-    expect(run.runId).toBe("fankaidev-grovie-issue-5-attempt-a");
-    expect(run.branchName).toBe("grovie/issue-5");
+    expect(run.sessionId).toBe(sessionId);
+    expect(run.runId).toBe(runId);
+    expect(run.branchName).toBe(`grovie/${sessionId}`);
+    expect(run.sessionDir).toBe(join(root, "sessions", sessionId));
+    expect(run.worktreePath).toBe(join(root, "worktrees", sessionId));
     expect(readFileSync(run.taskPath, "utf8")).toContain('"issue": 5');
     expect(readFileSync(run.promptPath, "utf8")).toBe("Implement issue #5");
     expect(existsSync(run.stdoutPath)).toBe(true);
@@ -185,24 +196,24 @@ describe("LocalState", () => {
         "+refs/heads/main:refs/heads/main",
       ],
       ["-C", join(root, "repos", "fankaidev-grovie.git"), "worktree", "prune"],
-      ["-C", join(root, "repos", "fankaidev-grovie.git"), "branch", "-D", "grovie/issue-5-attempt-a"],
       [
         "-C",
         join(root, "repos", "fankaidev-grovie.git"),
         "worktree",
         "add",
         "-B",
-        "grovie/issue-5-attempt-a",
-        join(root, "worktrees", "fankaidev-grovie-issue-5-attempt-a"),
+        `grovie/${sessionId}`,
+        join(root, "worktrees", sessionId),
         "main",
       ],
     ]);
   });
 
-  it("fetches existing caches and recreates existing worktree paths", () => {
+  it("[UC-EXECUTION-04-S02] reuses the existing session worktree and branch", () => {
     const root = createTmpDir();
     const cachePath = join(root, "repos", "fankaidev-grovie.git");
-    const worktreePath = join(root, "worktrees", "fankaidev-grovie-issue-5-attempt-a");
+    const sessionId = "fankaidev-grovie-issue-5-coder-fankai-mac";
+    const worktreePath = join(root, "worktrees", sessionId);
     mkdirSync(cachePath, { recursive: true });
     mkdirSync(worktreePath, { recursive: true });
     const runner = new FakeRunner();
@@ -211,24 +222,21 @@ describe("LocalState", () => {
     state.prepareRun({
       repository: "fankaidev/grovie",
       issueNumber: 5,
+      agentId: "coder@fankai-mac",
       defaultBranch: "main",
       branchPrefix: "grovie/",
-      attemptId: "attempt-a",
+      now: new Date("2026-05-23T00:00:01Z"),
       task: {},
       prompt: "",
     });
 
-    expect(existsSync(worktreePath)).toBe(false);
+    expect(existsSync(worktreePath)).toBe(true);
     expect(runner.calls.map((call) => call.args)).toEqual([
       ["-C", cachePath, "fetch", "origin", "+refs/heads/main:refs/heads/main"],
-      ["-C", cachePath, "worktree", "remove", "--force", worktreePath],
-      ["-C", cachePath, "worktree", "prune"],
-      ["-C", cachePath, "branch", "-D", "grovie/issue-5-attempt-a"],
-      ["-C", cachePath, "worktree", "add", "-B", "grovie/issue-5-attempt-a", worktreePath, "main"],
     ]);
   });
 
-  it("uses unique local worktrees for repeated attempts while keeping the result branch fixed", () => {
+  it("[UC-EXECUTION-04-S03] creates separate sessions for different agents on one issue", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
     const state = new LocalState({ paths: { root }, runner });
@@ -236,40 +244,126 @@ describe("LocalState", () => {
     const first = state.prepareRun({
       repository: "fankaidev/grovie",
       issueNumber: 5,
+      agentId: "coder@fankai-mac",
       defaultBranch: "main",
       branchPrefix: "grovie/",
-      attemptId: "attempt-a",
+      now: new Date("2026-05-23T00:00:01Z"),
       task: {},
       prompt: "",
     });
     const second = state.prepareRun({
       repository: "fankaidev/grovie",
       issueNumber: 5,
+      agentId: "reviewer@fankai-mac",
       defaultBranch: "main",
       branchPrefix: "grovie/",
-      attemptId: "attempt-b",
+      now: new Date("2026-05-23T00:00:02Z"),
       task: {},
       prompt: "",
     });
 
-    expect(first.branchName).toBe("grovie/issue-5");
-    expect(second.branchName).toBe("grovie/issue-5");
+    expect(first.sessionId).toBe("fankaidev-grovie-issue-5-coder-fankai-mac");
+    expect(second.sessionId).toBe("fankaidev-grovie-issue-5-reviewer-fankai-mac");
+    expect(first.branchName).toBe("grovie/fankaidev-grovie-issue-5-coder-fankai-mac");
+    expect(second.branchName).toBe("grovie/fankaidev-grovie-issue-5-reviewer-fankai-mac");
     expect(first.runId).not.toBe(second.runId);
     expect(first.worktreePath).not.toBe(second.worktreePath);
-    expect(first.worktreePath).toContain("attempt-a");
-    expect(second.worktreePath).toContain("attempt-b");
   });
 
-  it("cleans successful worktrees without deleting run logs", () => {
+  it("[UC-EXECUTION-04-S04] reuses session state after constructing a new LocalState", () => {
+    const root = createTmpDir();
+    const firstRunner = new FakeRunner();
+    const firstState = new LocalState({ paths: { root }, runner: firstRunner });
+    const first = firstState.prepareRun({
+      repository: "fankaidev/grovie",
+      issueNumber: 5,
+      agentId: "coder@fankai-mac",
+      defaultBranch: "main",
+      branchPrefix: "grovie/",
+      now: new Date("2026-05-23T00:00:01Z"),
+      task: {},
+      prompt: "",
+    });
+    mkdirSync(first.worktreePath, { recursive: true });
+    const secondRunner = new FakeRunner();
+    const secondState = new LocalState({ paths: { root }, runner: secondRunner });
+
+    const second = secondState.prepareRun({
+      repository: "fankaidev/grovie",
+      issueNumber: 5,
+      agentId: "coder@fankai-mac",
+      defaultBranch: "main",
+      branchPrefix: "grovie/",
+      now: new Date("2026-05-23T00:00:02Z"),
+      task: {},
+      prompt: "",
+    });
+
+    expect(second.sessionId).toBe(first.sessionId);
+    expect(second.branchName).toBe(first.branchName);
+    expect(second.worktreePath).toBe(first.worktreePath);
+    expect(second.runId).toBe("fankaidev-grovie-issue-5-coder-fankai-mac-20260523T000002Z");
+    expect(readFileSync(join(root, "sessions", first.sessionId, "session.json"), "utf8")).toContain(first.sessionId);
+    expect(secondRunner.calls.map((call) => call.args)).toEqual([
+      [
+        "clone",
+        "--bare",
+        "https://github.com/fankaidev/grovie.git",
+        join(root, "repos", "fankaidev-grovie.git"),
+      ],
+      [
+        "-C",
+        join(root, "repos", "fankaidev-grovie.git"),
+        "fetch",
+        "origin",
+        "+refs/heads/main:refs/heads/main",
+      ],
+    ]);
+  });
+
+  it("[UC-EXECUTION-02-S06] fails clearly when a timestamped run id collides", () => {
+    const root = createTmpDir();
+    const runner = new FakeRunner();
+    const state = new LocalState({ paths: { root }, runner });
+
+    state.prepareRun({
+      repository: "fankaidev/grovie",
+      issueNumber: 5,
+      agentId: "coder@fankai-mac",
+      defaultBranch: "main",
+      branchPrefix: "grovie/",
+      now: new Date("2026-05-23T00:00:01Z"),
+      task: {},
+      prompt: "",
+    });
+
+    expect(() =>
+      state.prepareRun({
+        repository: "fankaidev/grovie",
+        issueNumber: 5,
+        agentId: "coder@fankai-mac",
+        defaultBranch: "main",
+        branchPrefix: "grovie/",
+        now: new Date("2026-05-23T00:00:01Z"),
+        task: {},
+        prompt: "",
+      }),
+    ).toThrow(
+      "Run id fankaidev-grovie-issue-5-coder-fankai-mac-20260523T000001Z already exists. Retry after the current UTC second",
+    );
+  });
+
+  it("[UC-EXECUTION-04-S07] cleans successful worktrees without deleting run logs", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
     const state = new LocalState({ paths: { root }, runner });
     const run = state.prepareRun({
       repository: "fankaidev/grovie",
       issueNumber: 5,
+      agentId: "coder@fankai-mac",
       defaultBranch: "main",
       branchPrefix: "grovie/",
-      attemptId: "attempt-a",
+      now: new Date("2026-05-23T00:00:01Z"),
       task: {},
       prompt: "",
     });
@@ -289,7 +383,7 @@ describe("LocalState", () => {
     ]);
   });
 
-  it("preserves run artifacts when worktree preparation fails", () => {
+  it("[UC-EXECUTION-04-S06] preserves run artifacts when worktree preparation fails", () => {
     const root = createTmpDir();
     const runner = new FakeRunner({ failWorktreeAdd: true });
     const state = new LocalState({ paths: { root }, runner });
@@ -298,9 +392,10 @@ describe("LocalState", () => {
       state.prepareRun({
         repository: "fankaidev/grovie",
         issueNumber: 5,
+        agentId: "coder@fankai-mac",
         defaultBranch: "main",
         branchPrefix: "grovie/",
-        attemptId: "attempt-a",
+        now: new Date("2026-05-23T00:00:01Z"),
         task: {
           issue: 5,
         },
@@ -308,7 +403,7 @@ describe("LocalState", () => {
       }),
     ).toThrow("fatal: invalid reference: main");
 
-    const runDir = join(root, "runs", "fankaidev-grovie-issue-5-attempt-a");
+    const runDir = join(root, "runs", "fankaidev-grovie-issue-5-coder-fankai-mac-20260523T000001Z");
     const eventsPath = join(runDir, "events.jsonl");
 
     expect(readFileSync(join(runDir, "task.json"), "utf8")).toContain('"issue": 5');

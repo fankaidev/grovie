@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
@@ -18,16 +17,19 @@ export type LocalStatePaths = {
 export type PrepareRunInput = {
   repository: string;
   issueNumber: number;
+  agentId: string;
   defaultBranch: string;
   branchPrefix: string;
-  attemptId?: string;
+  now?: Date;
   prompt: string;
   task: Record<string, unknown>;
 };
 
 export type PreparedRun = {
+  sessionId: string;
   runId: string;
   branchName: string;
+  sessionDir: string;
   repositoryCachePath: string;
   worktreePath: string;
   runDir: string;
@@ -209,21 +211,37 @@ export class LocalState {
   prepareRun(input: PrepareRunInput): PreparedRun {
     this.ensureBaseDirectories();
 
-    const attemptId = input.attemptId ?? buildAttemptId();
-    const runId = buildRunId(input.repository, input.issueNumber, attemptId);
-    const branchName = buildBranchName(input.branchPrefix, input.issueNumber);
-    const localBranchName = buildLocalBranchName(input.branchPrefix, input.issueNumber, attemptId);
+    const now = input.now ?? new Date();
+    const sessionId = buildSessionId(input.repository, input.issueNumber, input.agentId);
+    const runId = buildRunId(sessionId, buildRunTimestamp(now));
+    const branchName = buildBranchName(input.branchPrefix, sessionId);
+    const localBranchName = branchName;
     const repositoryCachePath = this.getRepositoryCachePath(input.repository);
-    const worktreePath = join(this.paths.worktreesDir, runId);
+    const sessionDir = join(this.paths.sessionsDir, sessionId);
+    const worktreePath = join(this.paths.worktreesDir, sessionId);
     const runDir = join(this.paths.runsDir, runId);
     const eventsPath = join(runDir, "events.jsonl");
     const taskPath = join(runDir, "task.json");
     const promptPath = join(runDir, "prompt.md");
     const stdoutPath = join(runDir, "stdout.log");
     const stderrPath = join(runDir, "stderr.log");
-    const createdAt = new Date().toISOString();
+    const createdAt = now.toISOString();
 
+    if (existsSync(runDir)) {
+      throw new Error(`Run id ${runId} already exists. Retry after the current UTC second or inspect ${runDir}.`);
+    }
+
+    mkdirSync(sessionDir, { recursive: true });
     mkdirSync(runDir, { recursive: true });
+    writeJsonFile(join(sessionDir, "session.json"), {
+      sessionId,
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      agentId: input.agentId,
+      branchName,
+      worktreePath,
+      updatedAt: createdAt,
+    });
     writeJsonFile(taskPath, input.task);
     writeFileSync(promptPath, input.prompt, "utf8");
     writeFileSync(eventsPath, "", { encoding: "utf8", flag: "a" });
@@ -231,8 +249,10 @@ export class LocalState {
     writeFileSync(stderrPath, "", { encoding: "utf8", flag: "a" });
 
     const preparedRun = {
+      sessionId,
       runId,
       branchName,
+      sessionDir,
       repositoryCachePath,
       worktreePath,
       runDir,
@@ -245,11 +265,14 @@ export class LocalState {
 
     writeJsonFile(join(runDir, "metadata.json"), {
       status: "preparing",
+      sessionId,
       runId,
       repository: input.repository,
       issueNumber: input.issueNumber,
+      agentId: input.agentId,
       branchName,
       localBranchName,
+      sessionDir,
       defaultBranch: input.defaultBranch,
       repositoryCachePath,
       worktreePath,
@@ -273,11 +296,14 @@ export class LocalState {
 
       writeJsonFile(join(runDir, "metadata.json"), {
         status: "prepared",
+        sessionId,
         runId,
         repository: input.repository,
         issueNumber: input.issueNumber,
+        agentId: input.agentId,
         branchName,
         localBranchName,
+        sessionDir,
         defaultBranch: input.defaultBranch,
         repositoryCachePath,
         worktreePath,
@@ -375,30 +401,13 @@ export class LocalState {
     baseBranch: string;
   }): void {
     if (existsSync(input.worktreePath)) {
-      const removeWorktree = this.runner.run("git", [
-        "-C",
-        input.repositoryCachePath,
-        "worktree",
-        "remove",
-        "--force",
-        input.worktreePath,
-      ]);
-
-      if (removeWorktree.exitCode !== 0) {
-        rmSync(input.worktreePath, { recursive: true, force: true });
-      }
+      return;
     }
 
     const pruneResult = this.runner.run("git", ["-C", input.repositoryCachePath, "worktree", "prune"]);
 
     if (pruneResult.exitCode !== 0) {
       throw new Error(pruneResult.stderr.trim() || `git worktree prune failed with exit code ${pruneResult.exitCode}.`);
-    }
-
-    const deleteBranch = this.runner.run("git", ["-C", input.repositoryCachePath, "branch", "-D", input.branchName]);
-
-    if (deleteBranch.exitCode !== 0 && !deleteBranch.stderr.includes("not found")) {
-      throw new Error(deleteBranch.stderr.trim() || `git branch -D failed with exit code ${deleteBranch.exitCode}.`);
     }
 
     const result = this.runner.run("git", [
@@ -432,22 +441,25 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
   };
 }
 
-export function buildRunId(repository: string, issueNumber: number, attemptId = buildAttemptId()): string {
-  return `${sanitizeRepository(repository)}-issue-${issueNumber}-${sanitizePathPart(attemptId)}`;
+export function buildSessionId(repository: string, issueNumber: number, agentId: string): string {
+  return `${sanitizeRepository(repository)}-issue-${issueNumber}-${sanitizePathPart(agentId)}`;
 }
 
-export function buildBranchName(branchPrefix: string, issueNumber: number): string {
+export function buildRunId(sessionId: string, runTimestamp = buildRunTimestamp()): string {
+  return `${sanitizePathPart(sessionId)}-${sanitizePathPart(runTimestamp)}`;
+}
+
+export function buildBranchName(branchPrefix: string, sessionId: string): string {
   const normalizedPrefix = branchPrefix.endsWith("/") ? branchPrefix : `${branchPrefix}/`;
-  return `${normalizedPrefix}issue-${issueNumber}`;
+  return `${normalizedPrefix}${sanitizePathPart(sessionId)}`;
 }
 
-export function buildLocalBranchName(branchPrefix: string, issueNumber: number, attemptId: string): string {
-  return `${buildBranchName(branchPrefix, issueNumber)}-${sanitizePathPart(attemptId)}`;
+export function buildLocalBranchName(branchPrefix: string, sessionId: string): string {
+  return buildBranchName(branchPrefix, sessionId);
 }
 
-export function buildAttemptId(now = new Date(), uniqueId = randomUUID()): string {
-  const timestamp = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-  return `${timestamp}-${uniqueId.slice(0, 8)}`;
+export function buildRunTimestamp(now = new Date()): string {
+  return now.toISOString().replace(/\.\d{3}Z$/, "Z").replace(/[-:]/g, "");
 }
 
 function sanitizeRepository(repository: string): string {

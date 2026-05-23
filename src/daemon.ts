@@ -324,6 +324,7 @@ async function claimAndRun(input: DaemonInput & {
       config: input.config,
       configPath: input.configPath,
       agent: "codex",
+      agentId: input.workerId,
       github: input.github,
       runtime: input.runtime,
       localState: input.localState,

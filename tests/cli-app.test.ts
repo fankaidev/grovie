@@ -732,8 +732,10 @@ class FakeLocalState implements RunLocalState {
   readonly paths: LocalStatePaths;
   readonly registeredAgents: AgentMetadata[] = [];
   readonly run: PreparedRun = {
+    sessionId: "fankaidev-grovie-issue-2-codex",
     runId: "fankaidev-grovie-issue-2",
     branchName: "grovie/issue-2",
+    sessionDir: "/tmp/grovie/sessions/fankaidev-grovie-issue-2-codex",
     repositoryCachePath: "/tmp/grovie/repos/fankaidev-grovie.git",
     worktreePath: "/tmp/grovie/worktrees/fankaidev-grovie-issue-2",
     runDir: "/tmp/grovie/runs/fankaidev-grovie-issue-2",

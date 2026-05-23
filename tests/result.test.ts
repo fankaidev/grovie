@@ -286,8 +286,10 @@ function defaultConfig(): GrovieConfig {
 
 function fakeRun(): PreparedRun {
   return {
+    sessionId: "fankaidev-grovie-issue-9-codex",
     runId: "fankaidev-grovie-issue-9",
     branchName: "grovie/issue-9",
+    sessionDir: "/tmp/grovie/sessions/fankaidev-grovie-issue-9-codex",
     repositoryCachePath: "/tmp/grovie/repos/fankaidev-grovie.git",
     worktreePath: "/tmp/grovie/worktrees/fankaidev-grovie-issue-9",
     runDir: "/tmp/grovie/runs/fankaidev-grovie-issue-9",
