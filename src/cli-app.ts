@@ -1,5 +1,15 @@
-import { CONFIG_FILE_NAME, createConfigFile, inferGitHubRepository, loadConfig, type LoadedConfig } from "./config.js";
-import { runDaemon } from "./daemon.js";
+import {
+  addWatchedRepository,
+  CONFIG_FILE_NAME,
+  createConfigFile,
+  defaultConfig,
+  loadConfig,
+  loadGlobalConfig,
+  removeWatchedRepository,
+  saveGlobalConfig,
+  type LoadedConfig,
+} from "./config.js";
+import { runDaemon, runDaemonForRepositories } from "./daemon.js";
 import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { LocalState } from "./local-state.js";
 import { runClaimedIssueAsync, type RunLocalState } from "./run.js";
@@ -52,18 +62,13 @@ const commandDefinitions = [
   },
   {
     name: "doctor",
-    description: "Check local prerequisites such as gh, git, and agent CLIs.",
+    description: "Check global worker config and local prerequisites.",
     usage: "grovie doctor",
     issue: "#3",
     run: (_args: string[], context: CliContext) => {
       try {
+        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
         const loaded = loadConfig(context.cwd);
-        const repositoryResult = resolveCurrentRepository(context.cwd);
-
-        if (!repositoryResult.ok) {
-          return repositoryResult.result;
-        }
-
         const authenticatedUser = context.github.getAuthenticatedUser();
 
         if (!authenticatedUser.ok) {
@@ -74,8 +79,8 @@ const commandDefinitions = [
         const doctorOutput = [
           "grovie doctor",
           "",
-          `Config: ${renderConfigSource(loaded)}`,
-          `Repository: ${repositoryResult.repository}`,
+          `Global config: ${renderGlobalConfigSource(globalConfig.path, globalConfig.config.watchedRepositories.length)}`,
+          `Local policy config: ${renderConfigSource(loaded)}`,
           `Default runtime: ${loaded.config.runtime.default}`,
           `Queue label: ${loaded.config.queue.label}`,
           `GitHub: authenticated as ${authenticatedUser.value.login}.`,
@@ -127,23 +132,10 @@ const commandDefinitions = [
       }
 
       try {
-        const loaded = loadConfig(context.cwd);
-        const repositoryResult = resolveCurrentRepository(context.cwd);
-
-        if (!repositoryResult.ok) {
-          return repositoryResult.result;
-        }
-
         const targetRepository = formatIssueRepository(parsedIssueReference.value);
+        const config = defaultConfig();
 
-        if (targetRepository !== repositoryResult.repository) {
-          return {
-            exitCode: 1,
-            stderr: `Repository ${targetRepository} does not match current checkout repository ${repositoryResult.repository}.`,
-          };
-        }
-
-        const agent = agentOption.value ?? loaded.config.runtime.default;
+        const agent = agentOption.value ?? config.runtime.default;
 
         if (agent !== "codex") {
           return {
@@ -154,9 +146,9 @@ const commandDefinitions = [
 
         return runClaimedIssueAsync({
           issueReference: parsedIssueReference.value,
-          repository: repositoryResult.repository,
-          config: loaded.config,
-          configPath: renderConfigPath(loaded),
+          repository: targetRepository,
+          config,
+          configPath: "built-in defaults",
           agent,
           github: context.github,
           runtime: context.runtime,
@@ -186,32 +178,129 @@ const commandDefinitions = [
       }
 
       try {
-        const loaded = loadConfig(context.cwd);
-        const repositoryResult = resolveCurrentRepository(context.cwd);
+        const config = defaultConfig();
 
-        if (!repositoryResult.ok) {
-          return repositoryResult.result;
+        if (repoOption.value !== undefined) {
+          return runDaemon({
+            repository: repoOption.value,
+            label: labelOption.value ?? config.queue.label,
+            config,
+            configPath: "built-in defaults",
+            github: context.github,
+            runtime: context.runtime,
+            localState: context.localState,
+            once: args.includes("--once"),
+          });
         }
 
-        const repository = repoOption.value ?? repositoryResult.repository;
+        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
 
-        if (repository !== repositoryResult.repository) {
-          return {
-            exitCode: 1,
-            stderr: `Repository ${repository} does not match current checkout repository ${repositoryResult.repository}.`,
-          };
-        }
-
-        return runDaemon({
-          repository,
-          label: labelOption.value ?? loaded.config.queue.label,
-          config: loaded.config,
-          configPath: renderConfigPath(loaded),
+        return runDaemonForRepositories({
+          repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => ({
+            repository: watchedRepository.repository,
+            label: labelOption.value ?? watchedRepository.label ?? config.queue.label,
+          })),
+          config,
+          configPath: "built-in defaults",
           github: context.github,
           runtime: context.runtime,
           localState: context.localState,
           once: args.includes("--once"),
         });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  },
+  {
+    name: "watch",
+    description: "Manage globally watched repositories for daemon polling.",
+    usage: "grovie watch <add|list|remove> [owner/repo] [--label grovie]",
+    issue: "#31",
+    run: (args: string[], context: CliContext) => {
+      const [subcommand, repository] = args;
+      const globalRoot = context.localState.getPaths().root;
+
+      try {
+        if (subcommand === "list") {
+          const loaded = loadGlobalConfig(globalRoot);
+          const lines = loaded.config.watchedRepositories.map((watchedRepository) => {
+            const label = watchedRepository.label === undefined ? "" : ` label=${watchedRepository.label}`;
+            return `- ${watchedRepository.repository}${label}`;
+          });
+
+          return {
+            exitCode: 0,
+            stdout: [
+              "grovie watch list",
+              "",
+              `Config: ${loaded.path}`,
+              lines.length === 0 ? "No watched repositories configured." : lines.join("\n"),
+            ].join("\n"),
+          };
+        }
+
+        if (subcommand === "add") {
+          if (repository === undefined) {
+            return {
+              exitCode: 1,
+              stderr: "Missing repository. Usage: grovie watch add owner/repo [--label grovie]",
+            };
+          }
+
+          const labelOption = readStringOption(args, "--label");
+
+          if (!labelOption.ok) {
+            return labelOption.result;
+          }
+
+          const loaded = loadGlobalConfig(globalRoot);
+          const nextConfig = addWatchedRepository(loaded.config, {
+            repository,
+            label: labelOption.value,
+          });
+          const path = saveGlobalConfig(globalRoot, nextConfig);
+
+          return {
+            exitCode: 0,
+            stdout: [
+              "grovie watch add",
+              "",
+              `Added ${repository}.`,
+              `Config: ${path}`,
+            ].join("\n"),
+          };
+        }
+
+        if (subcommand === "remove") {
+          if (repository === undefined) {
+            return {
+              exitCode: 1,
+              stderr: "Missing repository. Usage: grovie watch remove owner/repo",
+            };
+          }
+
+          const loaded = loadGlobalConfig(globalRoot);
+          const beforeCount = loaded.config.watchedRepositories.length;
+          const nextConfig = removeWatchedRepository(loaded.config, repository);
+          const path = saveGlobalConfig(globalRoot, nextConfig);
+          const removed = nextConfig.watchedRepositories.length < beforeCount;
+
+          return {
+            exitCode: 0,
+            stdout: [
+              "grovie watch remove",
+              "",
+              removed ? `Removed ${repository}.` : `${repository} was not watched.`,
+              `Config: ${path}`,
+            ].join("\n"),
+          };
+        }
+
+        return {
+          exitCode: 1,
+          stderr: "Missing watch subcommand. Usage: grovie watch <add|list|remove> [owner/repo]",
+        };
       } catch (error) {
         return errorResult(error);
       }
@@ -307,52 +396,17 @@ function renderCommandHelp(command: CliCommand): string {
   ].join("\n");
 }
 
-function stubResult(commandName: string, message: string): CliResult {
-  return {
-    exitCode: 0,
-    stdout: [`grovie ${commandName}`, "", message].join("\n"),
-  };
-}
-
-type RepositoryResolution =
-  | {
-    ok: true;
-    repository: string;
-  }
-  | {
-    ok: false;
-    result: CliResult;
-  };
-
-function resolveCurrentRepository(cwd: string): RepositoryResolution {
-  const inferredRepository = inferGitHubRepository(cwd);
-
-  if (inferredRepository === undefined) {
-    return {
-      ok: false,
-      result: {
-        exitCode: 1,
-        stderr: "Could not infer GitHub repository from origin remote.",
-      },
-    };
-  }
-
-  return {
-    ok: true,
-    repository: inferredRepository,
-  };
-}
-
 function formatIssueRepository(reference: { owner: string; repo: string }): string {
   return `${reference.owner}/${reference.repo}`;
 }
 
-function renderConfigPath(loaded: LoadedConfig): string {
-  return loaded.path ?? "built-in defaults";
-}
-
 function renderConfigSource(loaded: LoadedConfig): string {
   return loaded.path === undefined ? `defaults (no ${CONFIG_FILE_NAME} found)` : `${loaded.path} is valid.`;
+}
+
+function renderGlobalConfigSource(path: string, watchedRepositoryCount: number): string {
+  const repositoryText = watchedRepositoryCount === 1 ? "1 watched repository" : `${watchedRepositoryCount} watched repositories`;
+  return `${path} (${repositoryText}).`;
 }
 
 function readStringOption(

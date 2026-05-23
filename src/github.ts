@@ -428,7 +428,7 @@ export function formatRepository(reference: Pick<IssueReference, "owner" | "repo
   return `${reference.owner}/${reference.repo}`;
 }
 
-function parseRepositoryName(repository: string): Result<Pick<IssueReference, "owner" | "repo">> {
+export function parseRepositoryName(repository: string): Result<Pick<IssueReference, "owner" | "repo">> {
   const match = /^(?<owner>[A-Za-z0-9.-]+)\/(?<repo>[A-Za-z0-9._-]+)$/.exec(repository);
 
   if (match?.groups === undefined) {

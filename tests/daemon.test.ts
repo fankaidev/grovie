@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GrovieConfig } from "../src/config.js";
-import { runDaemonCycle } from "../src/daemon.js";
+import { runDaemonCycle, runDaemonForRepositories } from "../src/daemon.js";
 import type {
   CreatedComment,
   GitHubGateway,
@@ -241,6 +241,56 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(true);
     expect(runs).toHaveLength(1);
     expect(github.createdComments[0]).toContain("Grovie daemon claimed.");
+  });
+
+  it("checks multiple watched repositories sequentially until it finds queued work", async () => {
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: {
+          owner: "fankaidev",
+          repo: "other",
+          number: 5,
+        },
+        labels: ["ready"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+        {
+          repository: "fankaidev/other",
+          label: "ready",
+        },
+      ],
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github,
+      once: true,
+      workerId: "worker-1",
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran other issue",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "ran other issue",
+    });
+    expect(runs[0]?.issueReference).toEqual({
+      owner: "fankaidev",
+      repo: "other",
+      number: 5,
+    });
   });
 });
 

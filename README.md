@@ -27,11 +27,17 @@ pnpm link --global
 grovie --help
 ```
 
-Create a Grovie config in the repository where you want to run issues:
+Check the machine-level worker setup:
 
 ```sh
-grovie init
 grovie doctor
+```
+
+Add repositories to the global daemon schedule:
+
+```sh
+grovie watch add owner/repo --label grovie
+grovie watch list
 ```
 
 Run one issue:
@@ -43,30 +49,35 @@ grovie run owner/repo#123 --agent codex
 Run a local daemon for queued issues:
 
 ```sh
-grovie daemon --label grovie
+grovie daemon
 ```
 
 Use `--once` when you want exactly one polling cycle:
 
 ```sh
-grovie daemon --label grovie --once
+grovie daemon --once
 ```
 
 ## How It Works
 
 The current implementation includes config initialization and validation, GitHub access through `gh`, local run state under `~/.grovie/`, the first Codex runtime adapter, one-shot issue execution, daemon polling and claiming, cancellation, and result push/PR handling.
 
-`grovie init` writes an optional, documented `.grovie.yml` with safe local-runner policy defaults. When the file is absent, Grovie uses the same built-in defaults. `grovie doctor` validates the config when present, infers the GitHub repository from the current checkout's `origin` remote, and confirms the current `gh` login plus Codex CLI availability. Grovie stores local runner state under `~/.grovie/`.
+`~/.grovie/config.yml` is the global worker config. It contains the repositories the daemon should poll and optional per-repository queue labels. This is a scheduling list, not a security allowlist; GitHub access is still governed by the local `gh` authentication and repository permissions.
 
-`grovie run owner/repo#123 --agent codex` reads the issue, refuses to start when another active Grovie claim owns the issue, prepares an isolated per-attempt local worktree, runs Codex there, and comments back with the result, local branch, and run id. If files changed, Grovie commits the worktree, pushes the deterministic issue branch, and opens a pull request. No-change runs comment back without opening an empty PR.
+`grovie watch add owner/repo` creates or updates the global worker config. `grovie watch list` shows the configured daemon schedule, and `grovie watch remove owner/repo` removes a repository from that schedule.
 
-`grovie daemon --label grovie` polls open issues in the current checkout repository with the queue label, claims one visible issue at a time with an editable comment marker, and runs the same one-shot path. The claim is an advisory GitHub issue comment, not a hard distributed lock; the final fixed issue branch push remains the race detector, and Grovie does not force-push over remote work. Use `--once` for a single polling cycle. A `/grovie cancel` comment or `<label>:cancel` label cancels a claimed run; while Codex is running, the daemon checks cancellation on each heartbeat and terminates the child process.
+`grovie init` still writes an optional, documented repo-local `.grovie.yml` with safe local-runner policy defaults. This file is policy configuration, not repository identity or daemon scheduling. The current global `run` and `daemon` paths use built-in policy defaults and do not read `.grovie.yml` from the caller's current directory. `grovie doctor` validates the global worker config and any `.grovie.yml` in the current directory, then confirms the current `gh` login plus Codex CLI availability. Grovie stores local runner state under `~/.grovie/`.
+
+`grovie run owner/repo#123 --agent codex` derives the repository from the issue reference. It reads the issue, refuses to start when another active Grovie claim owns the issue, prepares an isolated per-attempt local worktree under `~/.grovie/`, runs Codex there, and comments back with the result, local branch, and run id. If files changed, Grovie commits the worktree, pushes the deterministic issue branch, and opens a pull request. No-change runs comment back without opening an empty PR.
+
+`grovie daemon` polls watched repositories from `~/.grovie/config.yml`, claims one visible issue at a time with an editable comment marker, and runs the same one-shot path. The claim is an advisory GitHub issue comment, not a hard distributed lock; the final fixed issue branch push remains the race detector, and Grovie does not force-push over remote work. Use `--once` for a single polling cycle. Use `--repo owner/repo` for an explicit single-repository debugging cycle. A `/grovie cancel` comment or `<label>:cancel` label cancels a claimed run; while Codex is running, the daemon checks cancellation on each heartbeat and terminates the child process.
 
 ## Safety Model
 
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The MVP keeps the safety boundary simple:
 
-- It only runs the GitHub repository inferred from the current checkout's `origin` remote.
+- `grovie run` derives the target repository from the explicit issue reference.
+- `grovie daemon` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
 - It prepares issue work in per-attempt isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
 - It refuses config that enables default-branch pushes.
@@ -88,15 +99,16 @@ Current MVP limitations:
 Use this checklist before trusting a new machine or repository:
 
 1. Run `gh auth status` and confirm it is authenticated to the target account.
-2. In the target repository, optionally run `grovie init` to create a local policy config.
-3. Run `grovie doctor` and confirm config, GitHub auth, and Codex availability are green.
-4. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
-5. Run `grovie run owner/repo#123 --agent codex`.
-6. Confirm the issue receives a Grovie result comment with a run id and local run directory.
-7. Confirm changed runs push a Grovie branch and open a pull request against the default branch.
-8. Confirm no direct push was made to the default branch.
-9. Run `grovie daemon --label grovie --once` against another labeled issue.
-10. Add `/grovie cancel` to a claimed issue and confirm the daemon marks it canceled.
+2. Run `grovie watch add owner/repo --label grovie` for repositories this machine should poll.
+3. Optionally run `grovie init` inside a target repository to create a repo-local policy config.
+4. Run `grovie doctor` and confirm config, GitHub auth, and Codex availability are green.
+5. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
+6. Run `grovie run owner/repo#123 --agent codex` from any directory.
+7. Confirm the issue receives a Grovie result comment with a run id and local run directory.
+8. Confirm changed runs push a Grovie branch and open a pull request against the default branch.
+9. Confirm no direct push was made to the default branch.
+10. Run `grovie daemon --once` against another labeled issue.
+11. Add `/grovie cancel` to a claimed issue and confirm the daemon marks it canceled.
 
 ## Development
 
