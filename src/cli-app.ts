@@ -11,6 +11,7 @@ import {
   type LoadedConfig,
 } from "./config.js";
 import { runDaemon, runDaemonForRepositories } from "./daemon.js";
+import { LocalDaemonLifecycle, renderDaemonLifecycleStatus, type DaemonLifecycle } from "./daemon-lifecycle.js";
 import { formatIssueReference, GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
 import { LocalState } from "./local-state.js";
@@ -31,6 +32,7 @@ export type CliContext = {
   github: GitHubGateway;
   runtime: AgentRuntime;
   localState: RunLocalState;
+  daemonLifecycle: DaemonLifecycle;
 };
 
 type CliCommand = {
@@ -385,35 +387,94 @@ const commandDefinitions = [
   },
   {
     name: "daemon",
-    description: "Watch GitHub issues by label and run them locally.",
-    usage: "grovie daemon [--repo owner/repo] [--label grovie] [--once]",
-    issue: "#8",
+    description: "Run and control the local Grovie daemon.",
+    usage: "grovie daemon <run|start|stop|status> [--repo owner/repo] [--label grovie] [--once]",
+    issue: "#77",
     run: (args: string[], context: CliContext) => {
-      const repoOption = readStringOption(args, "--repo");
+      const [subcommand] = args;
 
-      if (!repoOption.ok) {
-        return repoOption.result;
+      if (subcommand === "start") {
+        const result = context.daemonLifecycle.start({
+          root: context.localState.getPaths().root,
+          args,
+        });
+
+        if (!result.ok) {
+          return {
+            exitCode: 1,
+            stderr: result.message,
+          };
+        }
+
+        return {
+          exitCode: 0,
+          stdout: [
+            "grovie daemon start",
+            "",
+            `Started Grovie daemon pid ${result.state.pid}.`,
+            `State: ${result.state.statePath}`,
+            `Stdout log: ${result.state.stdoutPath}`,
+            `Stderr log: ${result.state.stderrPath}`,
+          ].join("\n"),
+        };
       }
 
-      const labelOption = readStringOption(args, "--label");
+      if (subcommand === "stop") {
+        const result = context.daemonLifecycle.stop({
+          root: context.localState.getPaths().root,
+        });
 
-      if (!labelOption.ok) {
-        return labelOption.result;
+        return result.ok
+          ? {
+            exitCode: 0,
+            stdout: [
+              "grovie daemon stop",
+              "",
+              result.message,
+            ].join("\n"),
+          }
+          : {
+            exitCode: 1,
+            stderr: result.message,
+          };
       }
+
+      if (subcommand === "status") {
+        return {
+          exitCode: 0,
+          stdout: renderDaemonLifecycleStatus(context.daemonLifecycle.status({
+            root: context.localState.getPaths().root,
+          })),
+        };
+      }
+
+      const runArgs = subcommand === "run" ? args.slice(1) : args;
 
       try {
         const config = defaultConfig();
 
-        if (repoOption.value !== undefined) {
+        const normalizedRepoOption = readStringOption(runArgs, "--repo");
+
+        if (!normalizedRepoOption.ok) {
+          return normalizedRepoOption.result;
+        }
+
+        const normalizedLabelOption = readStringOption(runArgs, "--label");
+
+        if (!normalizedLabelOption.ok) {
+          return normalizedLabelOption.result;
+        }
+
+        if (normalizedRepoOption.value !== undefined) {
           return runDaemon({
-            repository: repoOption.value,
-            label: labelOption.value ?? config.queue.label,
+            repository: normalizedRepoOption.value,
+            label: normalizedLabelOption.value ?? config.queue.label,
             config,
             configPath: "built-in defaults",
             github: context.github,
             runtime: context.runtime,
             localState: context.localState,
-            once: args.includes("--once"),
+            once: runArgs.includes("--once"),
           });
         }
 
@@ -422,14 +483,14 @@ const commandDefinitions = [
         return runDaemonForRepositories({
           repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => ({
             repository: watchedRepository.repository,
-            label: labelOption.value ?? watchedRepository.label ?? config.queue.label,
+            label: normalizedLabelOption.value ?? watchedRepository.label ?? config.queue.label,
           })),
           config,
           configPath: "built-in defaults",
           github: context.github,
           runtime: context.runtime,
           localState: context.localState,
-          once: args.includes("--once"),
+          once: runArgs.includes("--once"),
         });
       } catch (error) {
         return errorResult(error);
@@ -554,6 +615,7 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
     github: context.github ?? new GhGitHubGateway(),
     runtime: context.runtime ?? new CodexRuntime(),
     localState: context.localState ?? new LocalState(),
+    daemonLifecycle: context.daemonLifecycle ?? new LocalDaemonLifecycle(),
   };
   const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const [commandName, ...commandArgs] = normalizedArgs;
