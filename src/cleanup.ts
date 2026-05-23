@@ -1,5 +1,5 @@
 import { existsSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, relative, resolve, sep, join } from "node:path";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
 import type { LocalStatePaths } from "./local-state.js";
 import { listLocalRuns, type LocalRunSummary } from "./status.js";
@@ -59,7 +59,7 @@ export function cleanupLocalState(input: CleanupLocalStateInput): CleanupLocalSt
       continue;
     }
 
-    const skipReason = worktreeSkipReason(group.runs, input.olderThanMs, now);
+    const skipReason = worktreeSkipReason(group.worktreePath, input.paths, group.runs, input.olderThanMs, now);
 
     if (skipReason !== undefined) {
       result.skipped.push({
@@ -162,7 +162,17 @@ function groupRunsByWorktree(runs: LocalRunSummary[]): SessionGroup[] {
   }));
 }
 
-function worktreeSkipReason(runs: LocalRunSummary[], olderThanMs: number | undefined, now: Date): string | undefined {
+function worktreeSkipReason(
+  worktreePath: string,
+  paths: LocalStatePaths,
+  runs: LocalRunSummary[],
+  olderThanMs: number | undefined,
+  now: Date,
+): string | undefined {
+  if (!isManagedWorktreePath(worktreePath, paths)) {
+    return "worktree is outside Grovie worktrees directory";
+  }
+
   if (runs.some((run) => run.status !== "succeeded")) {
     return "session has non-succeeded runs";
   }
@@ -171,13 +181,22 @@ function worktreeSkipReason(runs: LocalRunSummary[], olderThanMs: number | undef
     return "newer than retention window";
   }
 
-  const worktreePath = runs.find((run) => run.worktreePath !== undefined)?.worktreePath;
-
-  if (worktreePath === undefined || !existsSync(worktreePath)) {
+  if (!existsSync(worktreePath)) {
     return "worktree missing";
   }
 
   return undefined;
+}
+
+function isManagedWorktreePath(worktreePath: string, paths: LocalStatePaths): boolean {
+  const resolvedWorktreesDir = resolve(paths.worktreesDir);
+  const resolvedWorktreePath = resolve(worktreePath);
+  const pathFromWorktreesDir = relative(resolvedWorktreesDir, resolvedWorktreePath);
+
+  return pathFromWorktreesDir.length > 0
+    && pathFromWorktreesDir !== ".."
+    && !pathFromWorktreesDir.startsWith(`..${sep}`)
+    && !isAbsolute(pathFromWorktreesDir);
 }
 
 function runDirSkipReason(run: LocalRunSummary, olderThanMs: number | undefined, now: Date): string | undefined {

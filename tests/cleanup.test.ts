@@ -101,6 +101,31 @@ describe("local state cleanup", () => {
     expect(existsSync(staleWorktree)).toBe(true);
   });
 
+  it("[UC-EXECUTION-04-S09] refuses to remove metadata worktree paths outside Grovie worktrees", () => {
+    const paths = createPaths();
+    const outsideDir = mkdtempSync(join(tmpdir(), "grovie-outside-"));
+    tmpDirs.push(outsideDir);
+    writeRun(paths, "outside-run", {
+      status: "succeeded",
+      worktreePath: outsideDir,
+      events: [event("2026-05-23T10:00:00.000Z", "run.succeeded")],
+    });
+
+    const result = cleanupLocalState({
+      paths,
+      now: new Date("2026-05-23T11:00:00.000Z"),
+    });
+
+    expect(result.removedWorktrees).toEqual([]);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({
+        path: outsideDir,
+        reason: "worktree is outside Grovie worktrees directory",
+      }),
+    ]);
+    expect(existsSync(outsideDir)).toBe(true);
+  });
+
   it("[UC-EXECUTION-04-S10] removes terminal run directories only when logs are explicitly included", () => {
     const paths = createPaths();
     writeRun(paths, "succeeded-run", {
