@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
@@ -11,6 +11,7 @@ export type LocalStatePaths = {
   runsDir: string;
   agentsDir: string;
   locksDir: string;
+  requestsDir: string;
   sessionsDir: string;
 };
 
@@ -69,6 +70,15 @@ export type HandledCursor = {
   updatedAt: string;
 };
 
+export type RunRequest = {
+  id: string;
+  repository: string;
+  issueNumber: number;
+  agentId: string;
+  createdAt: string;
+  path: string;
+};
+
 export type LockResult<T> =
   | {
     ok: true;
@@ -100,6 +110,7 @@ export class LocalState {
     mkdirSync(this.paths.runsDir, { recursive: true });
     mkdirSync(this.paths.agentsDir, { recursive: true });
     mkdirSync(this.paths.locksDir, { recursive: true });
+    mkdirSync(this.paths.requestsDir, { recursive: true });
     mkdirSync(this.paths.sessionsDir, { recursive: true });
   }
 
@@ -141,6 +152,11 @@ export class LocalState {
     removeFileIfExists(lock.path);
   }
 
+  isDaemonRunning(machineId: string): boolean {
+    const existing = readJsonFile<Partial<DaemonLock>>(join(this.paths.locksDir, `daemon-${sanitizePathPart(machineId)}.json`));
+    return existing !== undefined && isLivePid(existing.pid);
+  }
+
   acquireExecutionLock(input: {
     repository: string;
     issueNumber: number;
@@ -180,6 +196,55 @@ export class LocalState {
 
   releaseExecutionLock(lock: ExecutionLock): void {
     removeFileIfExists(lock.path);
+  }
+
+  enqueueRunRequest(input: {
+    repository: string;
+    issueNumber: number;
+    agentId: string;
+    now?: Date;
+  }): RunRequest {
+    this.ensureBaseDirectories();
+    const createdAt = (input.now ?? new Date()).toISOString();
+    const id = [
+      buildRunTimestamp(new Date(createdAt)),
+      sanitizePathPart(input.repository),
+      `issue-${input.issueNumber}`,
+      sanitizePathPart(input.agentId),
+    ].join("-");
+    const requestPath = this.getRunRequestPath(id);
+    const request = {
+      id: requestPath.id,
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      agentId: input.agentId,
+      createdAt,
+      path: requestPath.path,
+    };
+
+    writeJsonFile(requestPath.path, request);
+    return request;
+  }
+
+  takeRunRequest(repository: string): RunRequest | undefined {
+    this.ensureBaseDirectories();
+    const entries = readdirRequestFiles(this.paths.requestsDir);
+
+    for (const entry of entries) {
+      const request = readJsonFile<RunRequest>(join(this.paths.requestsDir, entry));
+
+      if (request?.repository !== repository) {
+        continue;
+      }
+
+      removeFileIfExists(join(this.paths.requestsDir, entry));
+      return {
+        ...request,
+        path: join(this.paths.requestsDir, entry),
+      };
+    }
+
+    return undefined;
   }
 
   readHandledCursor(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined {
@@ -349,6 +414,23 @@ export class LocalState {
     return JSON.parse(readFileSync(run.taskPath, "utf8"));
   }
 
+  private getRunRequestPath(id: string): { id: string; path: string } {
+    let candidate = id;
+    let path = join(this.paths.requestsDir, `${candidate}.json`);
+    let suffix = 2;
+
+    while (existsSync(path)) {
+      candidate = `${id}-${suffix}`;
+      path = join(this.paths.requestsDir, `${candidate}.json`);
+      suffix += 1;
+    }
+
+    return {
+      id: candidate,
+      path,
+    };
+  }
+
   private ensureRepositoryCache(repository: string, defaultBranch: string): string {
     const cachePath = this.getRepositoryCachePath(repository);
     const remoteUrl = `https://github.com/${repository}.git`;
@@ -437,6 +519,7 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
     runsDir: overrides.runsDir ?? join(root, "runs"),
     agentsDir: overrides.agentsDir ?? join(root, "agents"),
     locksDir: overrides.locksDir ?? join(root, "locks"),
+    requestsDir: overrides.requestsDir ?? join(root, "requests"),
     sessionsDir: overrides.sessionsDir ?? join(root, "sessions"),
   };
 }
@@ -468,6 +551,14 @@ function sanitizeRepository(repository: string): string {
 
 function sanitizePathPart(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]/g, "-");
+}
+
+function readdirRequestFiles(path: string): string[] {
+  try {
+    return readdirSync(path).filter((entry) => entry.endsWith(".json")).sort();
+  } catch {
+    return [];
+  }
 }
 
 function appendRunEvent(run: Pick<PreparedRun, "eventsPath">, type: string, data: Record<string, unknown> = {}): void {

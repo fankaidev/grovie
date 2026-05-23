@@ -272,111 +272,62 @@ describe("CLI command registration", () => {
   it("requires an issue reference for run", () => {
     expect(runCli(["run"])).toEqual({
       exitCode: 1,
-      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 --agent codex",
+      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
     });
   });
 
   it("does not treat option values as issue references", () => {
     expect(runCli(["run", "--agent", "codex"])).toEqual({
       exitCode: 1,
-      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 --agent codex",
+      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
     });
   });
 
   it("rejects malformed issue references with extra path segments", () => {
     expect(runCli(["run", "fankaidev/grovie/extra#2"])).toEqual({
       exitCode: 1,
-      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 --agent codex",
+      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
     });
   });
 
-  it("accepts the issue reference after options without reading cwd repository identity", async () => {
+  it("[UC-EXECUTION-01-S01] accepts the issue reference after options without reading cwd repository identity", async () => {
     const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
 
-    const result = await runCliAsync(["run", "--agent", "codex", "other/repo#2"], {
+    const result = await runCliAsync(["run", "--agent", "coder@fankai-mac", "other/repo#2"], {
       cwd,
-      github: fakeGitHubGateway({
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            comments: [
-              {
-                id: 42,
-                body: '<!-- grovie:claim {"workerId":"other-worker","status":"active"} -->\nGrovie daemon task claim active.',
-                author: "fankaidev",
-                createdAt: "2026-05-23T00:00:00Z",
-                updatedAt: new Date().toISOString(),
-              },
-            ],
-          },
-        }),
-      }),
+      localState,
     });
 
-    expect(result).toEqual({
-      exitCode: 1,
-      stderr: [
-        "Issue other/repo#2 already has an active Grovie claim.",
-        "Claim owner: other-worker.",
-        "Claim comment: 42.",
-      ].join(" "),
-    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Requested daemon execution for other/repo#2.");
+    expect(localState.requests).toEqual([
+      expect.objectContaining({
+        repository: "other/repo",
+        issueNumber: 2,
+        agentId: "coder@fankai-mac",
+      }),
+    ]);
   });
 
   it("rejects unsupported run agents", () => {
     const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     runCli(["init"], { cwd });
 
-    expect(runCli(["run", "fankaidev/grovie#2", "--agent", "claude"], { cwd })).toEqual({
+    expect(runCli(["run", "fankaidev/grovie#2", "--agent", "claude"], { cwd, localState })).toEqual({
       exitCode: 1,
-      stderr: "Unsupported agent runtime: claude. Only codex is supported.",
+      stderr: 'Invalid agent id "claude". Expected <agent-slug>@<machine-slug>.',
     });
   });
 
-  it("[UC-WORKER-03-S04] runs manual issue execution for an agent id without adding assignment labels", async () => {
+  it("[UC-EXECUTION-01-S01] requests manual issue execution for an agent id without adding assignment labels", async () => {
     const cwd = createTmpDir();
-    const localState = new FakeLocalState();
-    let runtimeInput: AgentRunInput | undefined;
-    const issueComments: GitHubIssue["comments"] = [];
+    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     writeInvalidPolicyConfig(cwd);
 
     const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "coder@fankai-mac"], {
       cwd,
-      github: fakeGitHubGateway({
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            comments: [...issueComments],
-          },
-        }),
-        createIssueComment: (_reference, body) => {
-          const comment = addIssueComment(issueComments, body);
-
-          return {
-            ok: true,
-            value: comment,
-          };
-        },
-        updateIssueComment: (_repository, commentId, body) => {
-          const comment = issueComments.find((candidate) => candidate.id === commentId);
-
-          if (comment !== undefined) {
-            comment.body = body;
-            comment.updatedAt = "2026-05-23T00:00:01Z";
-          }
-
-          return {
-            ok: true,
-            value: {
-              id: commentId,
-              body,
-              url: `https://github.com/fankaidev/grovie/issues/2#issuecomment-${commentId}`,
-            } satisfies CreatedComment,
-          };
-        },
-      }),
       localState,
       runtime: {
         name: "codex",
@@ -384,69 +335,126 @@ describe("CLI command registration", () => {
         run: () => {
           throw new Error("sync runtime path was not expected");
         },
-        runAsync: (input) => {
-          runtimeInput = input;
-
-          return Promise.resolve({
-            ok: false,
-            execution: fakeExecution(localState.run, 2),
-            error: {
-              message: "async runtime failed",
-            },
-          });
+        runAsync: () => {
+          throw new Error("foreground runtime path was not expected");
         },
       },
     });
 
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toBe("async runtime failed");
-    expect(result.stdout).toContain("Session status: failed");
-    expect(runtimeInput?.run).toBe(localState.run);
-    expect(issueComments[0]?.body).toContain("Grovie run task claim released.");
-    expect(issueComments[0]?.body).toContain("- Worker: `coder@fankai-mac`");
-    expect(issueComments[0]?.body).toContain("- Note: Session failed. See the Grovie result comment and local run logs.");
-    expect(issueComments[1]?.body).toContain("Grovie session failed.");
-    expect(issueComments[1]?.body).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-2","status":"failed","runtime":"codex"} -->');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Requested daemon execution for fankaidev/grovie#2.");
+    expect(result.stdout).toContain("Agent: coder@fankai-mac");
+    expect(localState.requests).toEqual([
+      expect.objectContaining({
+        repository: "fankaidev/grovie",
+        issueNumber: 2,
+        agentId: "coder@fankai-mac",
+      }),
+    ]);
   });
 
-  it("does not start manual issue execution when another active claim owns the issue", async () => {
+  it("[UC-EXECUTION-01-S02] fails clearly when no daemon is running", async () => {
     const cwd = createTmpDir();
-    runCli(["init"], { cwd });
+    const machineId = resolveMachineId(hostname());
 
-    const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "codex"], {
+    expect(await runCliAsync(["run", "fankaidev/grovie#2", "--agent", `coder@${machineId}`], {
+      cwd,
+      localState: new FakeLocalState(createTmpDir(), { daemonRunning: false }),
+    })).toEqual({
+      exitCode: 1,
+      stderr: `No Grovie daemon is running for machine ${machineId}. Start one with \`grovie daemon\`.`,
+    });
+  });
+
+  it("[UC-EXECUTION-01-S03] infers the only local assigned agent", async () => {
+    const cwd = createTmpDir();
+    const machineId = resolveMachineId(hostname());
+    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
+
+    const result = await runCliAsync(["run", "fankaidev/grovie#2"], {
       cwd,
       github: fakeGitHubGateway({
         readIssue: (reference) => ({
           ok: true,
           value: {
             ...fakeIssue(reference),
-            comments: [
-              {
-                id: 42,
-                body: '<!-- grovie:claim {"workerId":"other-worker","status":"active"} -->\nGrovie daemon task claim active.',
-                author: "fankaidev",
-                createdAt: "2026-05-23T00:00:00Z",
-                updatedAt: new Date().toISOString(),
-              },
-            ],
+            labels: ["grovie", `agent:coder@${machineId}`],
           },
         }),
       }),
-      runtime: {
-        ...fakeRuntime(),
-        runAsync: () => {
-          throw new Error("runtime run was not expected");
-        },
-      },
+      localState,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(localState.requests[0]).toEqual(expect.objectContaining({
+      repository: "fankaidev/grovie",
+      issueNumber: 2,
+      agentId: `coder@${machineId}`,
+    }));
+  });
+
+  it("[UC-EXECUTION-01-S04] fails clearly when no local agent is assigned", async () => {
+    const cwd = createTmpDir();
+    const machineId = resolveMachineId(hostname());
+
+    const result = await runCliAsync(["run", "fankaidev/grovie#2"], {
+      cwd,
+      github: fakeGitHubGateway({
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            labels: ["grovie", "agent:coder@other-machine"],
+          },
+        }),
+      }),
+      localState: new FakeLocalState(createTmpDir(), { daemonRunning: true }),
     });
 
     expect(result).toEqual({
       exitCode: 1,
-      stderr: [
-        "Issue fankaidev/grovie#2 already has an active Grovie claim.",
-        "Claim owner: other-worker.",
-        "Claim comment: 42.",
-      ].join(" "),
+      stderr: `No local agent assignment found for fankaidev/grovie#2. Pass --agent or add an agent:<name>@${machineId} label.`,
+    });
+  });
+
+  it("[UC-EXECUTION-01-S05] fails clearly when multiple local agents are assigned", async () => {
+    const cwd = createTmpDir();
+    const machineId = resolveMachineId(hostname());
+
+    const result = await runCliAsync(["run", "fankaidev/grovie#2"], {
+      cwd,
+      github: fakeGitHubGateway({
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            labels: ["grovie", `agent:coder@${machineId}`, `agent:reviewer@${machineId}`],
+          },
+        }),
+      }),
+      localState: new FakeLocalState(createTmpDir(), { daemonRunning: true }),
+    });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      stderr: `Multiple local agent assignments found for fankaidev/grovie#2: coder@${machineId}, reviewer@${machineId}. Pass --agent to choose one.`,
+    });
+  });
+
+  it("[UC-EXECUTION-01-S06] reports an active local execution lock", async () => {
+    const cwd = createTmpDir();
+    const machineId = resolveMachineId(hostname());
+    const agentId = `coder@${machineId}`;
+
+    expect(await runCliAsync(["run", "fankaidev/grovie#2", "--agent", agentId], {
+      cwd,
+      localState: new FakeLocalState(createTmpDir(), {
+        daemonRunning: true,
+        lockedAgents: [agentId],
+      }),
+    })).toEqual({
+      exitCode: 1,
+      stderr: `Grovie execution is already active for fankaidev/grovie#2 and ${agentId}.`,
     });
   });
 
@@ -731,6 +739,7 @@ function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGatewa
 class FakeLocalState implements RunLocalState {
   readonly paths: LocalStatePaths;
   readonly registeredAgents: AgentMetadata[] = [];
+  readonly requests: Array<{ repository: string; issueNumber: number; agentId: string; path: string }> = [];
   readonly run: PreparedRun = {
     sessionId: "fankaidev-grovie-issue-2-codex",
     runId: "fankaidev-grovie-issue-2",
@@ -746,7 +755,10 @@ class FakeLocalState implements RunLocalState {
     stderrPath: "/tmp/grovie/runs/fankaidev-grovie-issue-2/stderr.log",
   };
 
-  constructor(root = "/tmp/grovie") {
+  constructor(
+    root = "/tmp/grovie",
+    private readonly options: { daemonRunning?: boolean; lockedAgents?: string[] } = {},
+  ) {
     this.paths = {
       root,
       reposDir: `${root}/repos`,
@@ -754,6 +766,7 @@ class FakeLocalState implements RunLocalState {
       runsDir: `${root}/runs`,
       agentsDir: `${root}/agents`,
       locksDir: `${root}/locks`,
+      requestsDir: `${root}/requests`,
       sessionsDir: `${root}/sessions`,
     };
   }
@@ -770,6 +783,27 @@ class FakeLocalState implements RunLocalState {
 
   registerAgent(metadata: AgentMetadata): void {
     this.registeredAgents.push(metadata);
+  }
+
+  isDaemonRunning(): boolean {
+    return this.options.daemonRunning === true;
+  }
+
+  hasExecutionLock(input: { agentId: string }): boolean {
+    return this.options.lockedAgents?.includes(input.agentId) === true;
+  }
+
+  enqueueRunRequest(input: { repository: string; issueNumber: number; agentId: string }): { id: string; repository: string; issueNumber: number; agentId: string; createdAt: string; path: string } {
+    const request = {
+      id: `request-${this.requests.length + 1}`,
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      agentId: input.agentId,
+      createdAt: "2026-05-23T00:00:00.000Z",
+      path: `${this.paths.requestsDir}/request-${this.requests.length + 1}.json`,
+    };
+    this.requests.push(request);
+    return request;
   }
 }
 

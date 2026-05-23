@@ -1,4 +1,4 @@
-import { buildAgentLabel, parseAgentId } from "./assignment.js";
+import { buildAgentLabel, getAssignedAgentIds, parseAgentId } from "./assignment.js";
 import {
   addWatchedRepository,
   CONFIG_FILE_NAME,
@@ -14,7 +14,7 @@ import { runDaemon, runDaemonForRepositories } from "./daemon.js";
 import { formatIssueReference, GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
 import { LocalState } from "./local-state.js";
-import { runClaimedIssueAsync, type RunLocalState } from "./run.js";
+import type { RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
 import { findLocalRun, listLocalRuns, renderRunDetail, renderRunsList } from "./status.js";
 import { GROVIE_VERSION } from "./version.js";
@@ -235,8 +235,8 @@ const commandDefinitions = [
   },
   {
     name: "run",
-    description: "Run one GitHub issue through a local agent.",
-    usage: "grovie run owner/repo#123 --agent codex",
+    description: "Request one daemon-owned agent run for a GitHub issue.",
+    usage: "grovie run owner/repo#123 [--agent coder@machine]",
     issue: "#7",
     run: (args: string[], context: CliContext) => {
       const issueRef = args.find((arg) => parseIssueReference(arg).ok);
@@ -244,7 +244,7 @@ const commandDefinitions = [
       if (issueRef === undefined) {
         return {
           exitCode: 1,
-          stderr: "Missing issue reference. Usage: grovie run owner/repo#123 --agent codex",
+          stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
         };
       }
 
@@ -262,34 +262,63 @@ const commandDefinitions = [
 
       try {
         const targetRepository = formatIssueRepository(parsedIssueReference.value);
-        const config = defaultConfig();
+        const identity = resolveLocalIdentity();
 
-        const requestedAgent = agentOption.value ?? config.runtime.default;
-        const workerId = requestedAgent.includes("@") ? requestedAgent : undefined;
-        const agent = requestedAgent.includes("@") ? config.runtime.default : requestedAgent;
-
-        if (workerId !== undefined) {
-          parseAgentId(workerId);
-        }
-
-        if (agent !== "codex") {
+        if (context.localState.isDaemonRunning?.(identity.machineId) !== true) {
           return {
             exitCode: 1,
-            stderr: `Unsupported agent runtime: ${agent}. Only codex is supported.`,
+            stderr: `No Grovie daemon is running for machine ${identity.machineId}. Start one with \`grovie daemon\`.`,
           };
         }
 
-        return runClaimedIssueAsync({
+        const agentResult = resolveManualRunAgent({
+          explicitAgentId: agentOption.value,
           issueReference: parsedIssueReference.value,
-          repository: targetRepository,
-          config,
-          configPath: "built-in defaults",
-          agent,
           github: context.github,
-          runtime: context.runtime,
-          localState: context.localState,
-          workerId,
+          machineId: identity.machineId,
         });
+
+        if (!agentResult.ok) {
+          return {
+            exitCode: 1,
+            stderr: agentResult.message,
+          };
+        }
+
+        if (context.localState.hasExecutionLock?.({
+          repository: targetRepository,
+          issueNumber: parsedIssueReference.value.number,
+          agentId: agentResult.agentId,
+        }) === true) {
+          return {
+            exitCode: 1,
+            stderr: `Grovie execution is already active for ${formatIssueReference(parsedIssueReference.value)} and ${agentResult.agentId}.`,
+          };
+        }
+
+        const request = context.localState.enqueueRunRequest?.({
+          repository: targetRepository,
+          issueNumber: parsedIssueReference.value.number,
+          agentId: agentResult.agentId,
+        });
+
+        if (request === undefined) {
+          return {
+            exitCode: 1,
+            stderr: "Local state does not support daemon run requests.",
+          };
+        }
+
+        return {
+          exitCode: 0,
+          stdout: [
+            "grovie run",
+            "",
+            `Requested daemon execution for ${formatIssueReference(parsedIssueReference.value)}.`,
+            `Agent: ${agentResult.agentId}`,
+            `Request: ${request.path}`,
+          ].join("\n"),
+        };
       } catch (error) {
         return errorResult(error);
       }
@@ -545,6 +574,52 @@ function renderCommandHelp(command: CliCommand): string {
 
 function formatIssueRepository(reference: { owner: string; repo: string }): string {
   return `${reference.owner}/${reference.repo}`;
+}
+
+function resolveManualRunAgent(input: {
+  explicitAgentId: string | undefined;
+  issueReference: { owner: string; repo: string; number: number };
+  github: GitHubGateway;
+  machineId: string;
+}): { ok: true; agentId: string } | { ok: false; message: string } {
+  if (input.explicitAgentId !== undefined) {
+    parseAgentId(input.explicitAgentId);
+    return {
+      ok: true,
+      agentId: input.explicitAgentId,
+    };
+  }
+
+  const issueResult = input.github.readIssue(input.issueReference);
+
+  if (!issueResult.ok) {
+    return {
+      ok: false,
+      message: issueResult.error.message,
+    };
+  }
+
+  const localAgentIds = getAssignedAgentIds(issueResult.value.labels)
+    .filter((agentId) => agentId.endsWith(`@${input.machineId}`));
+
+  if (localAgentIds.length === 0) {
+    return {
+      ok: false,
+      message: `No local agent assignment found for ${formatIssueReference(input.issueReference)}. Pass --agent or add an agent:<name>@${input.machineId} label.`,
+    };
+  }
+
+  if (localAgentIds.length > 1) {
+    return {
+      ok: false,
+      message: `Multiple local agent assignments found for ${formatIssueReference(input.issueReference)}: ${localAgentIds.join(", ")}. Pass --agent to choose one.`,
+    };
+  }
+
+  return {
+    ok: true,
+    agentId: localAgentIds[0] ?? "",
+  };
 }
 
 function renderConfigSource(loaded: LoadedConfig): string {

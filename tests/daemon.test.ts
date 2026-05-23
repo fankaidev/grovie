@@ -160,6 +160,50 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
+  it("[UC-EXECUTION-01-S01] consumes one manual run request before scheduled issues", async () => {
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie"],
+      }),
+    ]);
+    localState.enqueueRunRequest({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "coder@fankai-mac",
+      now: NOW,
+    });
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran request",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran request",
+    });
+    expect(runs[0]?.issueReference.number).toBe(8);
+    expect(runs[0]?.agentId).toBe("coder@fankai-mac");
+    expect(github.createdComments[0]).toContain("- Worker: `coder@fankai-mac`");
+    expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
+  });
+
   it("[UC-WORKER-04-S03] creates one run for a locally assigned agent with unhandled activity", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
