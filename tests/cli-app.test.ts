@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe("CLI command registration", () => {
   it("registers the MVP command set", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "run", "daemon", "watch"]);
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "daemon", "watch"]);
   });
 
   it("renders help with the MVP commands", () => {
@@ -486,6 +486,76 @@ describe("CLI command registration", () => {
         runtime: "codex",
         envKeys: ["OPENAI_API_KEY"],
       }),
+    ]);
+  });
+
+  it("[UC-WORKER-03-S01] assigns an issue to an agent label", () => {
+    const addedLabels: Array<{ reference: IssueReference; labels: string[] }> = [];
+
+    expect(
+      runCli(["issue", "assign", "fankaidev/grovie#123", "coder@fankai-mac"], {
+        github: fakeGitHubGateway({
+          addLabels: (reference, labels) => {
+            addedLabels.push({ reference, labels });
+            return {
+              ok: true,
+              value: undefined,
+            };
+          },
+        }),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie issue assign",
+        "",
+        "Added agent:coder@fankai-mac to fankaidev/grovie#123.",
+      ].join("\n"),
+    });
+    expect(addedLabels).toEqual([
+      {
+        reference: {
+          owner: "fankaidev",
+          repo: "grovie",
+          number: 123,
+        },
+        labels: ["agent:coder@fankai-mac"],
+      },
+    ]);
+  });
+
+  it("[UC-WORKER-03-S02] unassigns only the matching agent label", () => {
+    const removedLabels: Array<{ reference: IssueReference; label: string }> = [];
+
+    expect(
+      runCli(["issue", "unassign", "fankaidev/grovie#123", "coder@fankai-mac"], {
+        github: fakeGitHubGateway({
+          removeLabel: (reference, label) => {
+            removedLabels.push({ reference, label });
+            return {
+              ok: true,
+              value: undefined,
+            };
+          },
+        }),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie issue unassign",
+        "",
+        "Removed agent:coder@fankai-mac from fankaidev/grovie#123.",
+      ].join("\n"),
+    });
+    expect(removedLabels).toEqual([
+      {
+        reference: {
+          owner: "fankaidev",
+          repo: "grovie",
+          number: 123,
+        },
+        label: "agent:coder@fankai-mac",
+      },
     ]);
   });
 
