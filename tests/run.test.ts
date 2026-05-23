@@ -12,7 +12,7 @@ import type { HandleRunResultResult, ResultHandler } from "../src/result.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
 
 describe("runIssue", () => {
-  it("runs an allowed issue and posts a success comment", () => {
+  it("[UC-GITHUB-01-S01] [UC-EXECUTION-05-S01] runs an allowed issue and posts a concise success comment", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -70,8 +70,12 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("Grovie session succeeded.");
     expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"codex"} -->');
     expect(github.comments[0]).toContain("- Session status: succeeded");
+    expect(github.comments[0]).toContain("- Agent: `codex`");
+    expect(github.comments[0]).toContain("- Machine: `");
     expect(github.comments[0]).toContain("- Changes: none");
     expect(github.comments[0]).toContain("- Branch: `grovie/issue-7` (local; not pushed)");
+    expect(github.comments[0]).not.toContain("Prompt will be generated");
+    expect(github.comments[0]).not.toContain("raw log");
     expect(localState.events.map((event) => event.type)).toEqual([
       "run.started",
       "result.handled",
@@ -80,7 +84,7 @@ describe("runIssue", () => {
     ]);
   });
 
-  it("posts a concise failure comment when the runtime fails", () => {
+  it("[UC-GITHUB-01-S01] posts a concise failure comment when the runtime fails", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -115,7 +119,7 @@ describe("runIssue", () => {
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.failed", "comment.created"]);
   });
 
-  it("includes pull request output when result handling creates one", () => {
+  it("[UC-GITHUB-01-S02] includes pull request output when result handling creates one", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -159,7 +163,7 @@ describe("runIssue", () => {
     ]);
   });
 
-  it("marks the session failed when result handling fails after a successful runtime", () => {
+  it("[UC-GITHUB-01-S04] marks the session failed when result handling fails after a successful runtime", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -199,7 +203,7 @@ describe("runIssue", () => {
     ]);
   });
 
-  it("posts a canceled comment when the async runtime is canceled", async () => {
+  it("[UC-GITHUB-01-S01] posts a canceled comment when the async runtime is canceled", async () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -237,7 +241,7 @@ describe("runIssue", () => {
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.canceled", "comment.created"]);
   });
 
-  it("posts a failure comment with the deterministic run directory when preparation fails", () => {
+  it("[UC-GITHUB-01-S01] posts a failure comment with the deterministic run directory when preparation fails", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState({
       prepareError: new Error("git clone failed"),
@@ -367,6 +371,7 @@ class FakeLocalState implements RunLocalState {
   readonly run: PreparedRun = {
     sessionId: "fankaidev-grovie-issue-7-codex",
     runId: "fankaidev-grovie-issue-7",
+    agentId: "codex",
     branchName: "grovie/issue-7",
     sessionDir: "/tmp/grovie/sessions/fankaidev-grovie-issue-7-codex",
     repositoryCachePath: "/tmp/grovie/repos/fankaidev-grovie.git",

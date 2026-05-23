@@ -291,6 +291,7 @@ function fakeRun(root: string): PreparedRun {
   return {
     sessionId: "fankaidev-grovie-issue-6-codex",
     runId: "fankaidev-grovie-issue-6",
+    agentId: "codex",
     branchName: "grovie/issue-6",
     sessionDir: join(root, "sessions", "fankaidev-grovie-issue-6-codex"),
     repositoryCachePath: join(root, "repos", "fankaidev-grovie.git"),

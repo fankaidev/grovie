@@ -14,7 +14,7 @@ import {
   type GitHubIssue,
   type IssueReference,
 } from "./github.js";
-import type { AgentMetadata } from "./identity.js";
+import { resolveLocalIdentity, type AgentMetadata } from "./identity.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type RunRequest } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
@@ -90,6 +90,8 @@ type RunSummary = {
   branchName: string;
   runDir: string;
   runtime: "codex";
+  agentId: string;
+  machineId: string;
   result?: HandleRunResultResult;
   comment?: CreatedComment;
   error?: string;
@@ -298,6 +300,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   const runtime = input.runtime ?? new CodexRuntime();
   const now = new Date();
   const agentId = input.agentId ?? input.agent;
+  const machineId = resolveSummaryMachineId(agentId);
   const sessionId = buildSessionId(repository, input.issueReference.number, agentId);
   const task = buildTaskContext({
     issue,
@@ -325,6 +328,8 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
       localState,
       sessionId,
       runId: buildRunId(sessionId, buildRunTimestamp(now)),
+      agentId,
+      machineId,
       error: toErrorMessage(error),
     });
     const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
@@ -405,6 +410,7 @@ function finishRun(input: {
     issue: input.issue,
     run: input.run,
     runtimeResult: input.runtimeResult,
+    agentId: input.run.agentId,
     result,
     resultError,
   });
@@ -467,6 +473,8 @@ function fallbackRunSummary(input: {
   localState: RunLocalState;
   sessionId: string;
   runId: string;
+  agentId: string;
+  machineId: string;
   error: string;
 }): RunSummary {
   return {
@@ -476,6 +484,8 @@ function fallbackRunSummary(input: {
     branchName: buildBranchName(input.config.branches.prefix, input.sessionId),
     runDir: join(input.localState.getPaths().runsDir, input.runId),
     runtime: "codex",
+    agentId: input.agentId,
+    machineId: input.machineId,
     error: input.error,
   };
 }
@@ -484,9 +494,11 @@ function runSummaryFromRuntimeResult(input: {
   issue: GitHubIssue;
   run: PreparedRun;
   runtimeResult: RuntimeRunResult;
+  agentId: string;
   result?: HandleRunResultResult;
   resultError?: string;
 }): RunSummary {
+  const machineId = resolveSummaryMachineId(input.agentId);
   const status = input.runtimeResult.ok
     ? input.resultError === undefined
       ? "succeeded"
@@ -502,6 +514,8 @@ function runSummaryFromRuntimeResult(input: {
     branchName: input.run.branchName,
     runDir: input.run.runDir,
     runtime: input.runtimeResult.execution.runtime,
+    agentId: input.agentId,
+    machineId,
     result: input.result,
     error: input.resultError ?? (input.runtimeResult.ok ? undefined : input.runtimeResult.error.message),
   };
@@ -519,6 +533,8 @@ function renderRunComment(summary: RunSummary): string {
     "",
     `- Session status: ${summary.status}`,
     `- Runtime: ${summary.runtime}`,
+    `- Agent: \`${summary.agentId}\``,
+    `- Machine: \`${summary.machineId}\``,
     `- Issue: ${formatIssueReference(summary.issue.reference)}`,
     `- Branch: \`${summary.branchName}\` (local; not pushed)`,
     `- Run id: \`${summary.runId}\``,
@@ -581,4 +597,8 @@ function toErrorMessage(error: unknown): string {
 function summarizeError(error: string): string {
   const singleLine = error.replace(/\s+/g, " ").trim();
   return singleLine.length > 300 ? `${singleLine.slice(0, 297)}...` : singleLine;
+}
+
+function resolveSummaryMachineId(agentId: string): string {
+  return agentId.includes("@") ? agentId.split("@")[1] ?? resolveLocalIdentity().machineId : resolveLocalIdentity().machineId;
 }
