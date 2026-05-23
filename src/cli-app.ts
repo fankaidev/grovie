@@ -1,4 +1,5 @@
 import { buildAgentLabel, getAssignedAgentIds, parseAgentId } from "./assignment.js";
+import { resolveAdminConsoleConfig, startAdminConsoleServer } from "./admin-console.js";
 import {
   addWatchedRepository,
   CONFIG_FILE_NAME,
@@ -635,6 +636,39 @@ const commandDefinitions = [
           localState: context.localState,
           once: runArgs.includes("--once"),
         });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  },
+  {
+    name: "admin",
+    description: "Run the opt-in local admin console.",
+    usage: "grovie admin serve",
+    issue: "#71",
+    run: async (args: string[], context: CliContext) => {
+      const [subcommand] = args;
+
+      if (subcommand !== "serve") {
+        return {
+          exitCode: 1,
+          stderr: "Missing admin subcommand. Usage: grovie admin serve",
+        };
+      }
+
+      try {
+        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+        const config = resolveAdminConsoleConfig(globalConfig.config);
+        const started = await startAdminConsoleServer({ config });
+
+        return {
+          exitCode: 0,
+          stdout: [
+            "grovie admin serve",
+            "",
+            `Admin console listening at ${started.url}.`,
+          ].join("\n"),
+        };
       } catch (error) {
         return errorResult(error);
       }

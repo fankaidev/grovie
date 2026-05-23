@@ -20,11 +20,11 @@ afterEach(() => {
 });
 
 describe("CLI command registration", () => {
-  it("[UC-WORKER-03-S01] [UC-WORKER-05-S01] registers issue assignment and queue commands", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "watch"]);
+  it("[UC-WORKER-03-S01] [UC-WORKER-05-S01] [UC-ADMIN-01-S02] registers issue assignment, queue, daemon, and admin commands", () => {
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "admin", "watch"]);
   });
 
-  it("[UC-WORKER-05-S01] [UC-WORKER-06-S01] renders help with queue and daemon commands", () => {
+  it("[UC-WORKER-05-S01] [UC-WORKER-06-S01] [UC-ADMIN-01-S02] renders help with queue, daemon, and admin commands", () => {
     const help = renderHelp();
 
     expect(help).toContain("grovie <command>");
@@ -36,6 +36,7 @@ describe("CLI command registration", () => {
     expect(help).toContain("run");
     expect(help).toContain("queue");
     expect(help).toContain("daemon");
+    expect(help).toContain("admin");
     expect(help).toContain("watch");
   });
 
@@ -185,6 +186,15 @@ describe("CLI command registration", () => {
     ).toEqual({
       exitCode: 1,
       stderr: "gh auth required",
+    });
+  });
+
+  it("[UC-ADMIN-01-S01] fails clearly when the admin console is disabled", async () => {
+    const localState = new FakeLocalState(createTmpDir());
+
+    await expect(runCliAsync(["admin", "serve"], { localState })).resolves.toEqual({
+      exitCode: 1,
+      stderr: "Admin console is disabled. Set adminConsole.enabled: true in the global config.",
     });
   });
 
