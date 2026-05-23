@@ -2,10 +2,7 @@ import type { GrovieConfig } from "./config.js";
 import { getAssignedAgentIds, isAssignedToLocalMachine } from "./assignment.js";
 import {
   createIssueClaim,
-  DEFAULT_STALE_CLAIM_MS,
   hasCancelRequest,
-  isIssueClaimable,
-  selectActiveClaim,
   updateIssueClaim,
 } from "./claim.js";
 import {
@@ -14,6 +11,7 @@ import {
   type IssueReference,
 } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
+import type { DaemonLock, ExecutionLock } from "./local-state.js";
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
 import { runIssueAsync } from "./run.js";
 import type { AgentRuntime } from "./runtime.js";
@@ -29,7 +27,6 @@ export type DaemonInput = {
   once: boolean;
   workerId?: string;
   pollIntervalMs?: number;
-  staleClaimMs?: number;
   now?: () => Date;
   sleep?: (ms: number) => void | Promise<void>;
   issueRunner?: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
@@ -51,19 +48,47 @@ type DaemonCycleResult = RunIssueResult & {
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 
 export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
-  if (input.once) {
-    return toRunIssueResult(await runDaemonCycle(input));
+  const daemonLockResult = acquireDaemonLock(input);
+
+  if (!daemonLockResult.ok) {
+    return {
+      exitCode: 1,
+      stderr: daemonLockResult.message,
+    };
   }
 
-  while (true) {
-    await runDaemonCycle(input);
-    const sleep = input.sleep ?? sleepSync;
-    await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+  if (input.once) {
+    try {
+      return toRunIssueResult(await runDaemonCycle(input));
+    } finally {
+      releaseDaemonLock(input, daemonLockResult.lock);
+    }
+  }
+
+  try {
+    while (true) {
+      await runDaemonCycle(input);
+      const sleep = input.sleep ?? sleepSync;
+      await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+    }
+  } finally {
+    releaseDaemonLock(input, daemonLockResult.lock);
   }
 }
 
 export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput): Promise<RunIssueResult> {
+  const daemonLockResult = acquireDaemonLock(input);
+
+  if (!daemonLockResult.ok) {
+    return {
+      exitCode: 1,
+      stderr: daemonLockResult.message,
+    };
+  }
+
   if (input.repositories.length === 0) {
+    releaseDaemonLock(input, daemonLockResult.lock);
+
     return {
       exitCode: 1,
       stderr: "No watched repositories configured. Add one with `grovie watch add owner/repo`.",
@@ -71,14 +96,22 @@ export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput
   }
 
   if (!input.once) {
-    while (true) {
-      await runDaemonRepositoryCycle(input);
-      const sleep = input.sleep ?? sleepSync;
-      await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+    try {
+      while (true) {
+        await runDaemonRepositoryCycle(input);
+        const sleep = input.sleep ?? sleepSync;
+        await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+      }
+    } finally {
+      releaseDaemonLock(input, daemonLockResult.lock);
     }
   }
 
-  return toRunIssueResult(await runDaemonRepositoryCycle(input));
+  try {
+    return toRunIssueResult(await runDaemonRepositoryCycle(input));
+  } finally {
+    releaseDaemonLock(input, daemonLockResult.lock);
+  }
 }
 
 async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Promise<DaemonCycleResult> {
@@ -119,7 +152,6 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const now = input.now ?? (() => new Date());
   const identity = resolveLocalIdentity();
   input.localState?.registerAgent?.(identity.defaultAgent);
-  const workerId = input.workerId ?? identity.defaultAgent.agentId;
   const issueRunner = input.issueRunner ?? runIssueAsync;
   const listResult = input.github.listOpenIssues(input.repository, input.label);
 
@@ -142,24 +174,37 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       };
     }
 
-    if (!isIssueClaimable(issueResult.value, input.label, now(), input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS)) {
+    if (hasCancelRequest(issueResult.value, input.label)) {
       continue;
     }
 
-    if (
-      getAssignedAgentIds(issueResult.value.labels).length > 0 &&
-      !isAssignedToLocalMachine(issueResult.value.labels, identity.machineId)
-    ) {
-      continue;
-    }
-
-    return claimAndRun({
-      ...input,
-      issueReference: summary.reference,
-      workerId,
-      now,
-      issueRunner,
+    const candidateAgentIds = getCandidateAgentIds({
+      labels: issueResult.value.labels,
+      machineId: identity.machineId,
+      fallbackAgentId: input.workerId ?? identity.defaultAgent.agentId,
     });
+
+    if (candidateAgentIds.length === 0) {
+      continue;
+    }
+
+    for (const agentId of candidateAgentIds) {
+      if (input.localState?.hasExecutionLock?.({
+        repository: input.repository,
+        issueNumber: summary.reference.number,
+        agentId,
+      })) {
+        continue;
+      }
+
+      return claimAndRun({
+        ...input,
+        issueReference: summary.reference,
+        workerId: agentId,
+        now,
+        issueRunner,
+      });
+    }
   }
 
   return {
@@ -179,6 +224,25 @@ async function claimAndRun(input: DaemonInput & {
   now: () => Date;
   issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
 }): Promise<DaemonCycleResult> {
+  const executionLockResult = input.localState?.acquireExecutionLock?.({
+    repository: input.repository,
+    issueNumber: input.issueReference.number,
+    agentId: input.workerId,
+    now: input.now(),
+  });
+
+  if (executionLockResult !== undefined && !executionLockResult.ok) {
+    return {
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        `Skipped ${formatIssueReference(input.issueReference)} because local execution is already active for ${input.workerId}.`,
+      ].join("\n"),
+    };
+  }
+
   const claimResult = createIssueClaim({
     github: input.github,
     issueReference: input.issueReference,
@@ -188,6 +252,8 @@ async function claimAndRun(input: DaemonInput & {
   });
 
   if (!claimResult.ok) {
+    releaseExecutionLock(input, executionLockResult?.lock);
+
     return Promise.resolve({
       exitCode: 1,
       processed: false,
@@ -198,6 +264,8 @@ async function claimAndRun(input: DaemonInput & {
   const rereadResult = input.github.readIssue(input.issueReference);
 
   if (!rereadResult.ok) {
+    releaseExecutionLock(input, executionLockResult?.lock);
+
     return Promise.resolve({
       exitCode: 1,
       processed: false,
@@ -206,25 +274,6 @@ async function claimAndRun(input: DaemonInput & {
   }
 
   const rereadIssue = rereadResult.value;
-  const claimOwner = selectActiveClaim(
-    rereadIssue,
-    input.now(),
-    input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS,
-  );
-
-  if (claimOwner?.id !== claimResult.claim.commentId) {
-    updateIssueClaim(input.github, claimResult.claim, "released", input.now(), "Another visible task claim owns this issue.");
-
-    return Promise.resolve({
-      exitCode: 0,
-      processed: false,
-      stdout: [
-        "grovie daemon",
-        "",
-        `Skipped ${formatIssueReference(input.issueReference)} because another claim is visible.`,
-      ].join("\n"),
-    });
-  }
 
   if (hasCancelRequest(rereadIssue, input.label)) {
     updateIssueClaim(
@@ -234,6 +283,7 @@ async function claimAndRun(input: DaemonInput & {
       input.now(),
       "Session canceled before runtime start.",
     );
+    releaseExecutionLock(input, executionLockResult?.lock);
 
     return Promise.resolve({
       exitCode: 0,
@@ -248,48 +298,90 @@ async function claimAndRun(input: DaemonInput & {
 
   updateIssueClaim(input.github, claimResult.claim, "active", input.now());
 
-  const result = await input.issueRunner({
-    issueReference: input.issueReference,
-    repository: input.repository,
-    config: input.config,
-    configPath: input.configPath,
-    agent: "codex",
-    github: input.github,
-    runtime: input.runtime,
-    localState: input.localState,
-    monitor: {
-      heartbeatIntervalMs: input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
-      onHeartbeat: () => {
-        updateIssueClaim(input.github, claimResult.claim, "active", input.now());
+  try {
+    const result = await input.issueRunner({
+      issueReference: input.issueReference,
+      repository: input.repository,
+      config: input.config,
+      configPath: input.configPath,
+      agent: "codex",
+      github: input.github,
+      runtime: input.runtime,
+      localState: input.localState,
+      monitor: {
+        heartbeatIntervalMs: input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+        onHeartbeat: () => {
+          updateIssueClaim(input.github, claimResult.claim, "active", input.now());
+        },
+        shouldCancel: () => {
+          const latestIssue = input.github.readIssue(input.issueReference);
+
+          if (!latestIssue.ok) {
+            return false;
+          }
+
+          return hasCancelRequest(latestIssue.value, input.label);
+        },
       },
-      shouldCancel: () => {
-        const latestIssue = input.github.readIssue(input.issueReference);
+    });
 
-        if (!latestIssue.ok) {
-          return false;
-        }
+    updateIssueClaim(
+      input.github,
+      claimResult.claim,
+      "released",
+      input.now(),
+      result.canceled === true
+        ? "Session canceled."
+        : result.exitCode === 0
+          ? "Session succeeded."
+          : "Session failed. See the Grovie result comment and local run logs.",
+    );
 
-        return hasCancelRequest(latestIssue.value, input.label);
-      },
-    },
-  });
+    return {
+      ...result,
+      processed: true,
+    };
+  } finally {
+    releaseExecutionLock(input, executionLockResult?.lock);
+  }
+}
 
-  updateIssueClaim(
-    input.github,
-    claimResult.claim,
-    "released",
-    input.now(),
-    result.canceled === true
-      ? "Session canceled."
-      : result.exitCode === 0
-        ? "Session succeeded."
-        : "Session failed. See the Grovie result comment and local run logs.",
-  );
+function getCandidateAgentIds(input: {
+  labels: string[];
+  machineId: string;
+  fallbackAgentId: string;
+}): string[] {
+  const assignedAgentIds = getAssignedAgentIds(input.labels);
 
-  return {
-    ...result,
-    processed: true,
+  if (assignedAgentIds.length === 0) {
+    return [input.fallbackAgentId];
+  }
+
+  if (!isAssignedToLocalMachine(input.labels, input.machineId)) {
+    return [];
+  }
+
+  return assignedAgentIds.filter((agentId) => agentId.endsWith(`@${input.machineId}`));
+}
+
+function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {
+  const identity = resolveLocalIdentity();
+  return input.localState?.acquireDaemonLock?.(identity.machineId, input.now?.() ?? new Date()) ?? {
+    ok: true as const,
+    lock: undefined,
   };
+}
+
+function releaseDaemonLock(input: Pick<DaemonInput, "localState">, lock: DaemonLock | undefined): void {
+  if (lock !== undefined) {
+    input.localState?.releaseDaemonLock?.(lock);
+  }
+}
+
+function releaseExecutionLock(input: Pick<DaemonInput, "localState">, lock: ExecutionLock | undefined): void {
+  if (lock !== undefined) {
+    input.localState?.releaseExecutionLock?.(lock);
+  }
 }
 
 function sleepSync(ms: number): Promise<void> {
