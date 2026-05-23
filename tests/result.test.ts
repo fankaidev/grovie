@@ -111,6 +111,58 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests[0]?.body).toContain("No validation output captured.");
   });
 
+  it("reports deterministic branch push conflicts without opening a PR", () => {
+    const runner = new FakeRunner([
+      {
+        stdout: " M src/index.ts\n",
+      },
+      {},
+      {},
+      {},
+      {
+        exitCode: 1,
+        stderr: "! [rejected] HEAD -> grovie/issue-9 (non-fast-forward)",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    expect(() =>
+      handler.handle({
+        run: fakeRun(),
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/project/.grovie.yml",
+        repository: "fankaidev/grovie",
+        runtime: "codex",
+        execution: fakeExecution(),
+      }),
+    ).toThrow(
+      [
+        "Could not push result branch grovie/issue-9.",
+        "Another Grovie worker may have already pushed this issue branch.",
+        "Grovie will not force-push or overwrite remote work.",
+        "! [rejected] HEAD -> grovie/issue-9 (non-fast-forward)",
+      ].join(" "),
+    );
+    expect(runner.calls.map((call) => call.args)).toEqual([
+      ["status", "--short", "--", ".", ":(exclude).grovie"],
+      ["add", "--all", "--", ".", ":(exclude).grovie"],
+      ["restore", "--staged", "--", ".grovie"],
+      [
+        "commit",
+        "-m",
+        "grovie: Implement result handling",
+        "-m",
+        "Source issue: fankaidev/grovie#9",
+        "-m",
+        "Run id: fankaidev-grovie-issue-9",
+      ],
+      ["push", "-u", "origin", "HEAD:grovie/issue-9"],
+    ]);
+    expect(github.pullRequests).toHaveLength(0);
+  });
+
   it("refuses to push the default branch", () => {
     const runner = new FakeRunner([]);
     const handler = new GitResultHandler(new FakeGitHub(), runner);

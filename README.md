@@ -58,22 +58,22 @@ The current implementation includes config initialization and validation, GitHub
 
 `grovie init` writes an optional, documented `.grovie.yml` with safe local-runner policy defaults. When the file is absent, Grovie uses the same built-in defaults. `grovie doctor` validates the config when present, infers the GitHub repository from the current checkout's `origin` remote, and confirms the current `gh` login plus Codex CLI availability. Grovie stores local runner state under `~/.grovie/`.
 
-`grovie run owner/repo#123 --agent codex` reads the issue, prepares an isolated local worktree, runs Codex there, and comments back with the result, local branch, and run id. If files changed, Grovie commits the worktree, pushes the Grovie branch, and opens a pull request. No-change runs comment back without opening an empty PR.
+`grovie run owner/repo#123 --agent codex` reads the issue, refuses to start when another active Grovie claim owns the issue, prepares an isolated per-attempt local worktree, runs Codex there, and comments back with the result, local branch, and run id. If files changed, Grovie commits the worktree, pushes the deterministic issue branch, and opens a pull request. No-change runs comment back without opening an empty PR.
 
-`grovie daemon --label grovie` polls open issues in the current checkout repository with the queue label, claims one visible issue at a time with an editable comment marker, and runs the same one-shot path. Use `--once` for a single polling cycle. A `/grovie cancel` comment or `<label>:cancel` label cancels a claimed run; while Codex is running, the daemon checks cancellation on each heartbeat and terminates the child process.
+`grovie daemon --label grovie` polls open issues in the current checkout repository with the queue label, claims one visible issue at a time with an editable comment marker, and runs the same one-shot path. The claim is an advisory GitHub issue comment, not a hard distributed lock; the final fixed issue branch push remains the race detector, and Grovie does not force-push over remote work. Use `--once` for a single polling cycle. A `/grovie cancel` comment or `<label>:cancel` label cancels a claimed run; while Codex is running, the daemon checks cancellation on each heartbeat and terminates the child process.
 
 ## Safety Model
 
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The MVP keeps the safety boundary simple:
 
 - It only runs the GitHub repository inferred from the current checkout's `origin` remote.
-- It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
+- It prepares issue work in per-attempt isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
 - It refuses config that enables default-branch pushes.
 - It pushes only the generated Grovie branch, then opens a pull request.
 - It excludes `.grovie/` handoff files from commits and unstages them before commit.
 - It does not open empty pull requests for no-change runs.
-- It claims daemon work with visible issue comments and supports explicit cancellation.
+- It coordinates run and daemon work with visible advisory issue comments and supports explicit cancellation for daemon-owned runs.
 
 Current MVP limitations:
 

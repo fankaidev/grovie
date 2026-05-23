@@ -198,6 +198,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState();
     let runtimeInput: AgentRunInput | undefined;
+    const issueComments: GitHubIssue["comments"] = [];
     initGitHubOrigin(cwd);
     runCli(["init"], { cwd });
 
@@ -206,16 +207,36 @@ describe("CLI command registration", () => {
       github: fakeGitHubGateway({
         readIssue: (reference) => ({
           ok: true,
-          value: fakeIssue(reference),
-        }),
-        createIssueComment: (_reference, body) => ({
-          ok: true,
           value: {
-            id: 1,
-            body,
-            url: "https://github.com/fankaidev/grovie/issues/2#issuecomment-1",
-          } satisfies CreatedComment,
+            ...fakeIssue(reference),
+            comments: [...issueComments],
+          },
         }),
+        createIssueComment: (_reference, body) => {
+          const comment = addIssueComment(issueComments, body);
+
+          return {
+            ok: true,
+            value: comment,
+          };
+        },
+        updateIssueComment: (_repository, commentId, body) => {
+          const comment = issueComments.find((candidate) => candidate.id === commentId);
+
+          if (comment !== undefined) {
+            comment.body = body;
+            comment.updatedAt = "2026-05-23T00:00:01Z";
+          }
+
+          return {
+            ok: true,
+            value: {
+              id: commentId,
+              body,
+              url: `https://github.com/fankaidev/grovie/issues/2#issuecomment-${commentId}`,
+            } satisfies CreatedComment,
+          };
+        },
       }),
       localState,
       runtime: {
@@ -242,6 +263,50 @@ describe("CLI command registration", () => {
     expect(result.stderr).toBe("async runtime failed");
     expect(result.stdout).toContain("Result: failure");
     expect(runtimeInput?.run).toBe(localState.run);
+    expect(issueComments[0]?.body).toContain("Grovie run failed.");
+    expect(issueComments[1]?.body).toContain("Grovie run failed.");
+  });
+
+  it("does not start manual issue execution when another active claim owns the issue", async () => {
+    const cwd = createTmpDir();
+    initGitHubOrigin(cwd);
+    runCli(["init"], { cwd });
+
+    const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "codex"], {
+      cwd,
+      github: fakeGitHubGateway({
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            comments: [
+              {
+                id: 42,
+                body: '<!-- grovie:claim {"workerId":"other-worker","status":"running"} -->\nGrovie daemon running.',
+                author: "fankaidev",
+                createdAt: "2026-05-23T00:00:00Z",
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+          },
+        }),
+      }),
+      runtime: {
+        ...fakeRuntime(),
+        runAsync: () => {
+          throw new Error("runtime run was not expected");
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      stderr: [
+        "Issue fankaidev/grovie#2 already has an active Grovie claim.",
+        "Claim owner: other-worker.",
+        "Claim comment: 42.",
+      ].join(" "),
+    });
   });
 
   it("runs one daemon polling cycle with the current checkout repository and explicit label", async () => {
@@ -394,6 +459,25 @@ function fakeIssue(reference: IssueReference): GitHubIssue {
     labels: ["mvp", "type:task"],
     comments: [],
     defaultBranch: "main",
+  };
+}
+
+function addIssueComment(comments: GitHubIssue["comments"], body: string): CreatedComment {
+  const id = comments.length + 1;
+  const timestamp = new Date().toISOString();
+
+  comments.push({
+    id,
+    body,
+    author: "fankaidev",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+
+  return {
+    id,
+    body,
+    url: `https://github.com/fankaidev/grovie/issues/2#issuecomment-${id}`,
   };
 }
 

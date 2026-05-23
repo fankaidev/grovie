@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +16,7 @@ export type PrepareRunInput = {
   issueNumber: number;
   defaultBranch: string;
   branchPrefix: string;
+  attemptId?: string;
   prompt: string;
   task: Record<string, unknown>;
 };
@@ -60,8 +62,10 @@ export class LocalState {
   prepareRun(input: PrepareRunInput): PreparedRun {
     this.ensureBaseDirectories();
 
-    const runId = buildRunId(input.repository, input.issueNumber);
+    const attemptId = input.attemptId ?? buildAttemptId();
+    const runId = buildRunId(input.repository, input.issueNumber, attemptId);
     const branchName = buildBranchName(input.branchPrefix, input.issueNumber);
+    const localBranchName = buildLocalBranchName(input.branchPrefix, input.issueNumber, attemptId);
     const repositoryCachePath = this.getRepositoryCachePath(input.repository);
     const worktreePath = join(this.paths.worktreesDir, runId);
     const runDir = join(this.paths.runsDir, runId);
@@ -98,6 +102,7 @@ export class LocalState {
       repository: input.repository,
       issueNumber: input.issueNumber,
       branchName,
+      localBranchName,
       defaultBranch: input.defaultBranch,
       repositoryCachePath,
       worktreePath,
@@ -115,7 +120,7 @@ export class LocalState {
       this.ensureWorktree({
         repositoryCachePath,
         worktreePath,
-        branchName,
+        branchName: localBranchName,
         baseBranch: input.defaultBranch,
       });
 
@@ -125,6 +130,7 @@ export class LocalState {
         repository: input.repository,
         issueNumber: input.issueNumber,
         branchName,
+        localBranchName,
         defaultBranch: input.defaultBranch,
         repositoryCachePath,
         worktreePath,
@@ -262,8 +268,8 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
   };
 }
 
-export function buildRunId(repository: string, issueNumber: number): string {
-  return `${sanitizeRepository(repository)}-issue-${issueNumber}`;
+export function buildRunId(repository: string, issueNumber: number, attemptId = buildAttemptId()): string {
+  return `${sanitizeRepository(repository)}-issue-${issueNumber}-${sanitizePathPart(attemptId)}`;
 }
 
 export function buildBranchName(branchPrefix: string, issueNumber: number): string {
@@ -271,8 +277,21 @@ export function buildBranchName(branchPrefix: string, issueNumber: number): stri
   return `${normalizedPrefix}issue-${issueNumber}`;
 }
 
+export function buildLocalBranchName(branchPrefix: string, issueNumber: number, attemptId: string): string {
+  return `${buildBranchName(branchPrefix, issueNumber)}-${sanitizePathPart(attemptId)}`;
+}
+
+export function buildAttemptId(now = new Date(), uniqueId = randomUUID()): string {
+  const timestamp = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  return `${timestamp}-${uniqueId.slice(0, 8)}`;
+}
+
 function sanitizeRepository(repository: string): string {
   return repository.replace(/[^A-Za-z0-9._-]/g, "-");
+}
+
+function sanitizePathPart(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, "-");
 }
 
 function appendRunEvent(run: Pick<PreparedRun, "eventsPath">, type: string, data: Record<string, unknown> = {}): void {

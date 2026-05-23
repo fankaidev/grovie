@@ -1,4 +1,11 @@
 import { join } from "node:path";
+import {
+  createIssueClaim,
+  DEFAULT_STALE_CLAIM_MS,
+  renderActiveClaimMessage,
+  selectActiveClaim,
+  updateIssueClaim,
+} from "./claim.js";
 import type { GrovieConfig } from "./config.js";
 import {
   formatIssueReference,
@@ -7,7 +14,7 @@ import {
   type GitHubIssue,
   type IssueReference,
 } from "./github.js";
-import { buildBranchName, buildRunId, LocalState, type LocalStatePaths, type PreparedRun } from "./local-state.js";
+import { buildAttemptId, buildBranchName, buildRunId, LocalState, type LocalStatePaths, type PreparedRun } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
 
@@ -34,6 +41,12 @@ export type RunIssueAsyncInput = RunIssueInput & {
   monitor?: RuntimeMonitor;
 };
 
+export type RunClaimedIssueAsyncInput = RunIssueAsyncInput & {
+  workerId?: string;
+  now?: () => Date;
+  staleClaimMs?: number;
+};
+
 export type RunLocalState = {
   getPaths(): LocalStatePaths;
   prepareRun(input: {
@@ -41,6 +54,7 @@ export type RunLocalState = {
     issueNumber: number;
     defaultBranch: string;
     branchPrefix: string;
+    attemptId?: string;
     prompt: string;
     task: Record<string, unknown>;
   }): PreparedRun;
@@ -113,6 +127,109 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
   });
 }
 
+export async function runClaimedIssueAsync(input: RunClaimedIssueAsyncInput): Promise<RunIssueResult> {
+  const repository = `${input.issueReference.owner}/${input.issueReference.repo}`;
+
+  if (repository !== input.repository) {
+    return {
+      exitCode: 1,
+      stderr: `Repository ${repository} does not match current checkout repository ${input.repository}.`,
+    };
+  }
+
+  const now = input.now ?? (() => new Date());
+  const staleClaimMs = input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS;
+  const issueResult = input.github.readIssue(input.issueReference);
+
+  if (!issueResult.ok) {
+    return {
+      exitCode: 1,
+      stderr: issueResult.error.message,
+    };
+  }
+
+  const activeClaim = selectActiveClaim(issueResult.value, now(), staleClaimMs);
+
+  if (activeClaim !== undefined) {
+    return {
+      exitCode: 1,
+      stderr: renderActiveClaimMessage(input.issueReference, activeClaim),
+    };
+  }
+
+  const claimResult = createIssueClaim({
+    github: input.github,
+    issueReference: input.issueReference,
+    actor: "run",
+    workerId: input.workerId ?? `grovie-run-${process.pid}`,
+    now: now(),
+  });
+
+  if (!claimResult.ok) {
+    return {
+      exitCode: 1,
+      stderr: claimResult.message,
+    };
+  }
+
+  const rereadResult = input.github.readIssue(input.issueReference);
+
+  if (!rereadResult.ok) {
+    return {
+      exitCode: 1,
+      stderr: rereadResult.error.message,
+    };
+  }
+
+  const claimOwner = selectActiveClaim(rereadResult.value, now(), staleClaimMs);
+
+  if (claimOwner === undefined) {
+    updateIssueClaim(input.github, claimResult.claim, "skipped", now(), "Could not confirm this claim after creation.");
+
+    return {
+      exitCode: 1,
+      stderr: `Could not confirm Grovie claim for ${formatIssueReference(input.issueReference)} after creating comment ${claimResult.claim.commentId}.`,
+    };
+  }
+
+  if (claimOwner.id !== claimResult.claim.commentId) {
+    updateIssueClaim(input.github, claimResult.claim, "skipped", now(), "Another visible claim owns this issue.");
+
+    return {
+      exitCode: 1,
+      stderr: renderActiveClaimMessage(input.issueReference, claimOwner),
+    };
+  }
+
+  updateIssueClaim(input.github, claimResult.claim, "running", now());
+
+  const result = await runIssueAsync({
+    ...input,
+    monitor: {
+      heartbeatIntervalMs: input.monitor?.heartbeatIntervalMs,
+      onHeartbeat: async (event) => {
+        updateIssueClaim(input.github, claimResult.claim, "running", now());
+        await input.monitor?.onHeartbeat?.(event);
+      },
+      shouldCancel: input.monitor?.shouldCancel,
+    },
+  });
+
+  updateIssueClaim(
+    input.github,
+    claimResult.claim,
+    result.canceled === true ? "canceled" : result.exitCode === 0 ? "completed" : "failed",
+    now(),
+    result.canceled === true
+      ? "Run canceled."
+      : result.exitCode === 0
+        ? "Run completed."
+        : "Run failed. See the Grovie result comment and local run logs.",
+  );
+
+  return result;
+}
+
 type PreparedIssueRun =
   | {
     ok: true;
@@ -154,6 +271,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   const issue = issueResult.value;
   const localState = input.localState ?? new LocalState();
   const runtime = input.runtime ?? new CodexRuntime();
+  const attemptId = buildAttemptId();
   const task = buildTaskContext({
     issue,
     configPath: input.configPath,
@@ -168,6 +286,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
       issueNumber: input.issueReference.number,
       defaultBranch: issue.defaultBranch,
       branchPrefix: input.config.branches.prefix,
+      attemptId,
       prompt: "Prompt will be generated by the selected runtime.",
       task,
     });
@@ -176,6 +295,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
       issue,
       config: input.config,
       localState,
+      attemptId,
       error: toErrorMessage(error),
     });
     const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
@@ -316,10 +436,11 @@ function fallbackRunSummary(input: {
   issue: GitHubIssue;
   config: GrovieConfig;
   localState: RunLocalState;
+  attemptId: string;
   error: string;
 }): RunSummary {
   const repository = `${input.issue.reference.owner}/${input.issue.reference.repo}`;
-  const runId = buildRunId(repository, input.issue.reference.number);
+  const runId = buildRunId(repository, input.issue.reference.number, input.attemptId);
 
   return {
     status: "failure",
