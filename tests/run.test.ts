@@ -361,6 +361,7 @@ class FakeLocalState implements RunLocalState {
     runsDir: "/tmp/grovie/runs",
     agentsDir: "/tmp/grovie/agents",
     locksDir: "/tmp/grovie/locks",
+    sessionsDir: "/tmp/grovie/sessions",
   };
   readonly run: PreparedRun = {
     runId: "fankaidev-grovie-issue-7",
@@ -462,6 +463,7 @@ function fakeIssue(reference: IssueReference): GitHubIssue {
     title: "Implement one-shot run",
     body: "Run this issue once.",
     state: "open",
+    updatedAt: "2026-05-22T00:00:00Z",
     labels: ["mvp", "type:task"],
     comments: [
       {

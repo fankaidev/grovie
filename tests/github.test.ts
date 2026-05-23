@@ -67,6 +67,7 @@ describe("GhGitHubGateway", () => {
           title: "Implement config",
           body: null,
           state: "open",
+          updated_at: "2026-05-22T00:00:02Z",
           labels: [{ name: "mvp" }, { name: "type:task" }],
         }),
       },
@@ -102,6 +103,7 @@ describe("GhGitHubGateway", () => {
         title: "Implement config",
         body: "",
         state: "open",
+        updatedAt: "2026-05-22T00:00:02Z",
         labels: ["mvp", "type:task"],
         comments: [
           {

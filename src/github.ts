@@ -61,6 +61,7 @@ export type GitHubIssue = {
   title: string;
   body: string;
   state: string;
+  updatedAt: string;
   labels: string[];
   comments: GitHubComment[];
   defaultBranch: string;
@@ -190,6 +191,7 @@ export class GhGitHubGateway implements GitHubGateway {
         title: issueResult.value.title,
         body: issueResult.value.body ?? "",
         state: issueResult.value.state,
+        updatedAt: issueResult.value.updated_at,
         labels: issueResult.value.labels.map((label) => label.name),
         comments: commentsResult.value.flat().map(toComment),
         defaultBranch: repoResult.value.default_branch,
@@ -462,6 +464,7 @@ type GitHubIssueResponse = {
   title: string;
   body: string | null;
   state: string;
+  updated_at: string;
   labels: GitHubLabel[];
 };
 

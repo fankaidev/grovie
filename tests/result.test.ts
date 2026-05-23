@@ -309,6 +309,7 @@ function fakeIssue(): GitHubIssue {
     title: "Implement result handling",
     body: "Push the branch and open a PR.",
     state: "open",
+    updatedAt: "2026-05-22T00:00:00Z",
     labels: ["mvp"],
     comments: [],
     defaultBranch: "main",
