@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SpawnCommandRunner, type CommandRunner, type GitHubIssue } from "./github.js";
 import type { PreparedRun } from "./local-state.js";
@@ -110,12 +110,8 @@ export class CodexRuntime implements AgentRuntime {
   }
 
   async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
-    if (input.monitor === undefined) {
-      return this.run(input);
-    }
-
     const preparedInput = prepareCodexInput(input);
-    const result = await runMonitoredCommand(input, preparedInput);
+    const result = await runStreamingCommand(input, preparedInput);
 
     return finishCodexRun(input, preparedInput, result);
   }
@@ -135,6 +131,7 @@ type CodexCommandResult = {
   stderr: string;
   signal?: string;
   canceled?: boolean;
+  streamed?: boolean;
 };
 
 function prepareCodexInput(input: AgentRunInput): PreparedCodexInput {
@@ -207,8 +204,13 @@ function finishCodexRun(
       canceled: result.canceled,
     };
 
-    writeFileSync(input.run.stdoutPath, result.stdout, "utf8");
-    writeFileSync(input.run.stderrPath, result.stderr, "utf8");
+    if (result.streamed !== true && result.stdout.length > 0) {
+      writeFileSync(input.run.stdoutPath, result.stdout, "utf8");
+    }
+
+    if (result.streamed !== true && result.stderr.length > 0) {
+      writeFileSync(input.run.stderrPath, result.stderr, "utf8");
+    }
 
     appendRuntimeEvent(input.run, "runtime.finished", {
       runtime: "codex",
@@ -241,14 +243,15 @@ function finishCodexRun(
     };
 }
 
-function runMonitoredCommand(input: AgentRunInput, preparedInput: PreparedCodexInput): Promise<CodexCommandResult> {
+function runStreamingCommand(input: AgentRunInput, preparedInput: PreparedCodexInput): Promise<CodexCommandResult> {
   return new Promise((resolve) => {
+    writeFileSync(input.run.stdoutPath, "", "utf8");
+    writeFileSync(input.run.stderrPath, "", "utf8");
+
     const child = spawn(preparedInput.command[0] ?? "codex", preparedInput.command.slice(1), {
       cwd: input.run.worktreePath,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
     const event = {
       run: input.run,
       issue: input.issue,
@@ -258,9 +261,17 @@ function runMonitoredCommand(input: AgentRunInput, preparedInput: PreparedCodexI
     let canceled = false;
     let finished = false;
     let checking = false;
+    let stdoutTail = "";
+    let stderrTail = "";
 
-    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    child.stdout.on("data", (chunk: Buffer) => {
+      appendFileSync(input.run.stdoutPath, chunk);
+      stdoutTail = appendBoundedTail(stdoutTail, chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      appendFileSync(input.run.stderrPath, chunk);
+      stderrTail = appendBoundedTail(stderrTail, chunk);
+    });
     child.stdin.end(preparedInput.prompt);
 
     const cancelChild = () => {
@@ -302,11 +313,14 @@ function runMonitoredCommand(input: AgentRunInput, preparedInput: PreparedCodexI
     child.on("error", (error) => {
       finished = true;
       clearInterval(timer);
+      appendFileSync(input.run.stderrPath, `${error.message}\n`, "utf8");
+      stderrTail = appendBoundedTail(stderrTail, Buffer.from(`${error.message}\n`));
       resolve({
         exitCode: 1,
-        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
-        stderr: error.message,
+        stdout: stdoutTail,
+        stderr: stderrTail,
         canceled,
+        streamed: true,
       });
     });
 
@@ -315,13 +329,26 @@ function runMonitoredCommand(input: AgentRunInput, preparedInput: PreparedCodexI
       clearInterval(timer);
       resolve({
         exitCode: code ?? 130,
-        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
-        stderr: Buffer.concat(stderrChunks).toString("utf8"),
+        stdout: stdoutTail,
+        stderr: stderrTail,
         signal: signal ?? undefined,
         canceled,
+        streamed: true,
       });
     });
   });
+}
+
+const MAX_CAPTURED_OUTPUT_CHARS = 64 * 1024;
+
+function appendBoundedTail(current: string, chunk: Buffer): string {
+  const next = `${current}${chunk.toString("utf8")}`;
+
+  if (next.length <= MAX_CAPTURED_OUTPUT_CHARS) {
+    return next;
+  }
+
+  return next.slice(next.length - MAX_CAPTURED_OUTPUT_CHARS);
 }
 
 export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; task: unknown }): string {

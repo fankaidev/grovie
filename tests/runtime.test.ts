@@ -147,6 +147,68 @@ describe("CodexRuntime", () => {
     expect(readFileSync(run.eventsPath, "utf8")).toContain('"exitCode":2');
   });
 
+  it("streams stdout and stderr to log files before the Codex process exits", async () => {
+    const root = createTmpDir();
+    const binDir = join(root, "bin");
+    const oldPath = process.env.PATH;
+    const run = fakeRun(root);
+
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(
+      join(binDir, "codex"),
+      [
+        "#!/bin/sh",
+        "echo streaming stdout",
+        "echo streaming stderr >&2",
+        "touch stream-ready",
+        "sleep 1",
+        "echo final stdout",
+        "echo final stderr >&2",
+        "exit 0",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    chmodSync(join(binDir, "codex"), 0o755);
+    process.env.PATH = `${binDir}:${oldPath ?? ""}`;
+    let resultPromise: Promise<Awaited<ReturnType<CodexRuntime["runAsync"]>>> | undefined;
+
+    try {
+      const runtime = new CodexRuntime();
+      let settled = false;
+      resultPromise = runtime
+        .runAsync({
+          run,
+          issue: fakeIssue(),
+        })
+        .finally(() => {
+          settled = true;
+        });
+
+      try {
+        await waitFor(() => existsSync(join(run.worktreePath, "stream-ready")));
+        await waitFor(() => readFileSync(run.stdoutPath, "utf8").includes("streaming stdout"));
+        await waitFor(() => readFileSync(run.stderrPath, "utf8").includes("streaming stderr"));
+
+        expect(settled).toBe(false);
+      } catch (error) {
+        await resultPromise.catch(() => undefined);
+        throw error;
+      }
+
+      const result = await resultPromise;
+      resultPromise = undefined;
+
+      expect(result.ok).toBe(true);
+      expect(readFileSync(run.stdoutPath, "utf8")).toContain("final stdout");
+      expect(readFileSync(run.stderrPath, "utf8")).toContain("final stderr");
+      expect(readFileSync(run.eventsPath, "utf8")).toContain('"type":"runtime.finished"');
+    } finally {
+      await resultPromise?.catch(() => undefined);
+      process.env.PATH = oldPath;
+    }
+  });
+
   it("terminates a monitored Codex process when cancellation is requested", async () => {
     const root = createTmpDir();
     const binDir = join(root, "bin");
@@ -269,4 +331,18 @@ function createTmpDir(): string {
   mkdirSync(dir, { recursive: true });
   tmpDirs.push(dir);
   return dir;
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const startedAt = Date.now();
+
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for condition.");
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
+  }
 }

@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
-import type { GitHubGateway } from "../src/github.js";
-import type { AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
+import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
+import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
+import type { RunLocalState } from "../src/run.js";
+import type { AgentRunInput, AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
 
 const tmpDirs: string[] = [];
 
@@ -184,6 +186,55 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("runs manual issue execution through the async runtime path", async () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState();
+    let runtimeInput: AgentRunInput | undefined;
+    runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
+
+    const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "codex"], {
+      cwd,
+      github: fakeGitHubGateway({
+        readIssue: (reference) => ({
+          ok: true,
+          value: fakeIssue(reference),
+        }),
+        createIssueComment: (_reference, body) => ({
+          ok: true,
+          value: {
+            id: 1,
+            body,
+            url: "https://github.com/fankaidev/grovie/issues/2#issuecomment-1",
+          } satisfies CreatedComment,
+        }),
+      }),
+      localState,
+      runtime: {
+        name: "codex",
+        checkAvailability: fakeRuntime().checkAvailability,
+        run: () => {
+          throw new Error("sync runtime path was not expected");
+        },
+        runAsync: (input) => {
+          runtimeInput = input;
+
+          return Promise.resolve({
+            ok: false,
+            execution: fakeExecution(localState.run, 2),
+            error: {
+              message: "async runtime failed",
+            },
+          });
+        },
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("async runtime failed");
+    expect(result.stdout).toContain("Result: failure");
+    expect(runtimeInput?.run).toBe(localState.run);
+  });
+
   it("runs one daemon polling cycle with the configured repository and label", async () => {
     const cwd = createTmpDir();
     runCli(["init", "--repo", "fankaidev/grovie"], { cwd });
@@ -324,5 +375,64 @@ function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGatewa
       throw new Error("createPullRequest was not expected");
     },
     ...overrides,
+  };
+}
+
+class FakeLocalState implements RunLocalState {
+  readonly paths: LocalStatePaths = {
+    root: "/tmp/grovie",
+    reposDir: "/tmp/grovie/repos",
+    worktreesDir: "/tmp/grovie/worktrees",
+    runsDir: "/tmp/grovie/runs",
+  };
+  readonly run: PreparedRun = {
+    runId: "fankaidev-grovie-issue-2",
+    branchName: "grovie/issue-2",
+    repositoryCachePath: "/tmp/grovie/repos/fankaidev-grovie.git",
+    worktreePath: "/tmp/grovie/worktrees/fankaidev-grovie-issue-2",
+    runDir: "/tmp/grovie/runs/fankaidev-grovie-issue-2",
+    taskPath: "/tmp/grovie/runs/fankaidev-grovie-issue-2/task.json",
+    promptPath: "/tmp/grovie/runs/fankaidev-grovie-issue-2/prompt.md",
+    eventsPath: "/tmp/grovie/runs/fankaidev-grovie-issue-2/events.jsonl",
+    stdoutPath: "/tmp/grovie/runs/fankaidev-grovie-issue-2/stdout.log",
+    stderrPath: "/tmp/grovie/runs/fankaidev-grovie-issue-2/stderr.log",
+  };
+
+  getPaths(): LocalStatePaths {
+    return this.paths;
+  }
+
+  prepareRun(): PreparedRun {
+    return this.run;
+  }
+
+  appendEvent(): void {}
+}
+
+function fakeIssue(reference: IssueReference): GitHubIssue {
+  return {
+    reference,
+    title: "Stream runtime output",
+    body: "Make runtime logs visible while Codex runs.",
+    state: "open",
+    labels: ["mvp", "type:task"],
+    comments: [],
+    defaultBranch: "main",
+  };
+}
+
+function fakeExecution(run: PreparedRun, exitCode: number) {
+  return {
+    runtime: "codex" as const,
+    command: ["codex", "exec"],
+    startedAt: "2026-05-23T00:00:00Z",
+    endedAt: "2026-05-23T00:00:01Z",
+    exitCode,
+    promptPath: run.promptPath,
+    taskPath: run.taskPath,
+    worktreePromptPath: `${run.worktreePath}/.grovie/prompt.md`,
+    worktreeTaskPath: `${run.worktreePath}/.grovie/task.json`,
+    stdoutPath: run.stdoutPath,
+    stderrPath: run.stderrPath,
   };
 }
