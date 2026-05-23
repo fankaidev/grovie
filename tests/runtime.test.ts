@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CommandResult, CommandRunner, CommandRunOptions, GitHubIssue } from "../src/github.js";
 import type { PreparedRun } from "../src/local-state.js";
-import { buildCodexPrompt, CodexRuntime } from "../src/runtime.js";
+import { buildCodexPrompt, CodexRuntime, LocalCliRuntime } from "../src/runtime.js";
 
 const tmpDirs: string[] = [];
 
@@ -246,6 +246,101 @@ describe("CodexRuntime", () => {
         },
       });
       expect(readFileSync(run.eventsPath, "utf8")).toContain('"canceled":true');
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+});
+
+describe("LocalCliRuntime", () => {
+  it("[UC-EXECUTION-06-S01] checks additional local CLI runtime availability", () => {
+    const runtime = new LocalCliRuntime(
+      "opencode",
+      new FakeRunner([
+        {
+          stdout: "opencode 1.2.3\n",
+        },
+      ]),
+    );
+
+    expect(runtime.checkAvailability()).toEqual({
+      runtime: "opencode",
+      command: "opencode",
+      available: true,
+      version: "opencode 1.2.3",
+      message: "available (opencode 1.2.3)",
+    });
+  });
+
+  it("[UC-EXECUTION-06-S02] runs an additional local CLI runtime through the runtime boundary", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root);
+    const runner = new FakeRunner([
+      {
+        stdout: "done\n",
+        stderr: "warning\n",
+      },
+    ]);
+    const runtime = new LocalCliRuntime("cc", runner);
+
+    const result = runtime.run({
+      run,
+      issue: fakeIssue(),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      execution: {
+        runtime: "cc",
+        command: ["cc", "-"],
+      },
+    });
+    expect(readFileSync(run.stdoutPath, "utf8")).toBe("done\n");
+    expect(readFileSync(run.stderrPath, "utf8")).toBe("warning\n");
+    expect(readFileSync(run.eventsPath, "utf8")).toContain('"runtime":"cc"');
+    expect(runner.calls[0]).toMatchObject({
+      command: "cc",
+      args: ["-"],
+      options: {
+        cwd: run.worktreePath,
+      },
+    });
+  });
+
+  it("[UC-EXECUTION-06-S03] cancels an additional local CLI runtime through the runtime monitor", async () => {
+    const root = createTmpDir();
+    const binDir = join(root, "bin");
+    const oldPath = process.env.PATH;
+    const run = fakeRun(root);
+
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(
+      join(binDir, "hermes"),
+      "#!/bin/sh\ntrap 'echo terminated >&2; exit 130' TERM\nwhile true; do sleep 1; done\n",
+      "utf8",
+    );
+    chmodSync(join(binDir, "hermes"), 0o755);
+    process.env.PATH = `${binDir}:${oldPath ?? ""}`;
+
+    try {
+      const runtime = new LocalCliRuntime("hermes");
+      const result = await runtime.runAsync({
+        run,
+        issue: fakeIssue(),
+        monitor: {
+          heartbeatIntervalMs: 10,
+          shouldCancel: () => true,
+        },
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        canceled: true,
+        execution: {
+          runtime: "hermes",
+          canceled: true,
+        },
+      });
     } finally {
       process.env.PATH = oldPath;
     }

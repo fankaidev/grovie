@@ -18,7 +18,7 @@ import {
 import { resolveLocalIdentity, type AgentMetadata } from "./identity.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type RunCancellation, type RunRequest } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
-import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
+import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeName, type RuntimeRunResult } from "./runtime.js";
 import type { SessionStatus } from "./task.js";
 
 export type RunIssueInput = {
@@ -97,7 +97,7 @@ type RunSummary = {
   runId: string;
   branchName: string;
   runDir: string;
-  runtime: "codex";
+  runtime: RuntimeName;
   agentId: string;
   machineId: string;
   result?: HandleRunResultResult;
