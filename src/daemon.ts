@@ -387,10 +387,21 @@ function getCandidateAgentIds(input: {
 }
 
 function getIssueActivityTimestamp(issue: GitHubIssue): string {
-  const timestamps = [issue.updatedAt, ...issue.comments
-    .filter((comment) => !isGrovieActivityComment(comment.body))
-    .map((comment) => comment.updatedAt)]
-    .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)));
+  const latestGrovieActivity = issue.comments
+    .filter((comment) => isGrovieActivityComment(comment.body))
+    .map((comment) => comment.updatedAt)
+    .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)))
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
+  const issueUpdatedAt =
+    latestGrovieActivity === undefined || Date.parse(issue.updatedAt) > Date.parse(latestGrovieActivity)
+      ? [issue.updatedAt]
+      : [];
+  const timestamps = [
+    ...issueUpdatedAt,
+    ...issue.comments
+      .filter((comment) => !isGrovieActivityComment(comment.body))
+      .map((comment) => comment.updatedAt),
+  ].filter((timestamp) => !Number.isNaN(Date.parse(timestamp)));
 
   if (timestamps.length === 0) {
     return "1970-01-01T00:00:00.000Z";

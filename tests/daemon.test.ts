@@ -359,7 +359,7 @@ describe("runDaemonCycle", () => {
     })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
   });
 
-  it("[UC-EXECUTION-02-S04] ignores Grovie claim comments when checking the handled cursor", async () => {
+  it("[UC-EXECUTION-02-S04] [UC-WORKER-04-S04] ignores Grovie claim comments when checking the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
@@ -371,7 +371,7 @@ describe("runDaemonCycle", () => {
           }),
         ],
       }),
-    ]);
+    ], { commentNow: () => new Date("2026-05-22T00:00:03.000Z") });
 
     await runDaemonCycle({
       repository: "fankaidev/grovie",
@@ -441,6 +441,7 @@ describe("runDaemonCycle", () => {
             updatedAt: "2026-05-22T00:00:02.000Z",
           }),
         );
+        issue.updatedAt = "2026-05-22T00:00:02.000Z";
         return {
           exitCode: 0,
         };
@@ -765,7 +766,11 @@ class FakeGitHub implements GitHubGateway {
 
   constructor(
     private readonly issues: GitHubIssue[],
-    private readonly options: { addCancelAfterClaim?: boolean; addCancelOnRunningUpdate?: boolean } = {},
+    private readonly options: {
+      addCancelAfterClaim?: boolean;
+      addCancelOnRunningUpdate?: boolean;
+      commentNow?: () => Date;
+    } = {},
   ) {}
 
   getAuthenticatedUser(): ReturnType<GitHubGateway["getAuthenticatedUser"]> {
@@ -814,20 +819,28 @@ class FakeGitHub implements GitHubGateway {
     const issue = this.findIssue(reference);
 
     this.createdComments.push(body);
+    const now = this.options.commentNow?.() ?? NOW;
     issue.comments.push(
       fakeComment({
         id,
         body,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
       }),
     );
+    issue.updatedAt = now.toISOString();
 
     if (this.options.addCancelAfterClaim) {
+      const cancelNow = this.options.commentNow?.() ?? NOW;
       issue.comments.push(
         fakeComment({
           id: this.nextCommentId++,
           body: "/grovie cancel",
+          createdAt: cancelNow.toISOString(),
+          updatedAt: cancelNow.toISOString(),
         }),
       );
+      issue.updatedAt = cancelNow.toISOString();
     }
 
     return {
@@ -842,22 +855,28 @@ class FakeGitHub implements GitHubGateway {
 
   updateIssueComment(_repository: string, commentId: number, body: string): ReturnType<GitHubGateway["updateIssueComment"]> {
     this.updatedComments.push({ commentId, body });
+    const now = this.options.commentNow?.() ?? NOW;
 
     for (const issue of this.issues) {
       const comment = issue.comments.find((candidate) => candidate.id === commentId);
 
       if (comment !== undefined) {
         comment.body = body;
-        comment.updatedAt = NOW.toISOString();
+        comment.updatedAt = now.toISOString();
+        issue.updatedAt = now.toISOString();
       }
 
       if (this.options.addCancelOnRunningUpdate === true && body.includes("Grovie daemon task claim active.")) {
+        const cancelNow = this.options.commentNow?.() ?? NOW;
         issue.comments.push(
           fakeComment({
             id: this.nextCommentId++,
             body: "/grovie cancel",
+            createdAt: cancelNow.toISOString(),
+            updatedAt: cancelNow.toISOString(),
           }),
         );
+        issue.updatedAt = cancelNow.toISOString();
         this.options.addCancelOnRunningUpdate = false;
       }
     }
