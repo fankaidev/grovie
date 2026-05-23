@@ -12,6 +12,7 @@ import {
   type CreatedComment,
   type GitHubGateway,
   type GitHubIssue,
+  type GitHubRelatedPullRequest,
   type IssueReference,
 } from "./github.js";
 import { resolveLocalIdentity, type AgentMetadata } from "./identity.js";
@@ -297,6 +298,21 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   }
 
   const issue = issueResult.value;
+  const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(input.issueReference) ?? {
+    ok: true as const,
+    value: [],
+  };
+
+  if (!relatedPullRequestsResult.ok) {
+    return {
+      ok: false,
+      result: {
+        exitCode: 1,
+        stderr: relatedPullRequestsResult.error.message,
+      },
+    };
+  }
+
   const localState = input.localState ?? new LocalState();
   const runtime = input.runtime ?? new CodexRuntime();
   const now = new Date();
@@ -305,6 +321,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   const sessionId = buildSessionId(repository, input.issueReference.number, agentId);
   const task = buildTaskContext({
     issue,
+    relatedPullRequests: relatedPullRequestsResult.value,
     configPath: input.configPath,
     agent: input.agent,
   });
@@ -450,7 +467,12 @@ function finishRun(input: {
   };
 }
 
-function buildTaskContext(input: { issue: GitHubIssue; configPath: string; agent: "codex" }): Record<string, unknown> {
+function buildTaskContext(input: {
+  issue: GitHubIssue;
+  relatedPullRequests: GitHubRelatedPullRequest[];
+  configPath: string;
+  agent: "codex";
+}): Record<string, unknown> {
   return {
     schemaVersion: 1,
     source: "grovie run",
@@ -466,6 +488,21 @@ function buildTaskContext(input: { issue: GitHubIssue; configPath: string; agent
       body: input.issue.body,
       comments: input.issue.comments,
     },
+    relatedPullRequests: input.relatedPullRequests.map((pullRequest) => ({
+      number: pullRequest.number,
+      title: pullRequest.title,
+      state: pullRequest.state,
+      url: pullRequest.url,
+      baseRef: pullRequest.baseRef,
+      headRef: pullRequest.headRef,
+      headSha: pullRequest.headSha,
+      updatedAt: pullRequest.updatedAt,
+      checks: pullRequest.checks,
+      reviews: pullRequest.reviews,
+      comments: pullRequest.comments,
+      reviewComments: pullRequest.reviewComments,
+      diffSummary: pullRequest.diffSummary,
+    })),
   };
 }
 

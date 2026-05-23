@@ -10,6 +10,7 @@ import {
   formatIssueReference,
   type GitHubGateway,
   type GitHubIssue,
+  type GitHubRelatedPullRequest,
   type IssueReference,
 } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
@@ -229,7 +230,20 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
         continue;
       }
 
-      const issueActivity = getIssueActivity(issueResult.value);
+      const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(summary.reference) ?? {
+        ok: true as const,
+        value: [],
+      };
+
+      if (!relatedPullRequestsResult.ok) {
+        return {
+          exitCode: 1,
+          processed: false,
+          stderr: relatedPullRequestsResult.error.message,
+        };
+      }
+
+      const issueActivity = getIssueActivity(issueResult.value, relatedPullRequestsResult.value);
       const handledCursor = input.localState?.readHandledCursor?.({
         repository: input.repository,
         issueNumber: summary.reference.number,
@@ -287,7 +301,7 @@ async function runRequestedIssue(input: DaemonInput & {
   return claimAndRun({
     ...input,
     issueReference,
-    issueActivity: getIssueActivity(issueResult.value),
+    issueActivity: getIssueActivity(issueResult.value, []),
   });
 }
 
@@ -457,7 +471,7 @@ function isHandledCursorCovered(
   );
 }
 
-function getIssueActivity(issue: GitHubIssue): IssueActivity {
+function getIssueActivity(issue: GitHubIssue, relatedPullRequests: GitHubRelatedPullRequest[]): IssueActivity {
   const latestGrovieActivity = issue.comments
     .filter((comment) => isGrovieActivityComment(comment.body))
     .map((comment) => comment.updatedAt)
@@ -472,18 +486,19 @@ function getIssueActivity(issue: GitHubIssue): IssueActivity {
     ...issue.comments
       .filter((comment) => !isGrovieActivityComment(comment.body))
       .map((comment) => comment.updatedAt),
+    ...relatedPullRequests.flatMap(getPullRequestActivityTimestamps),
   ].filter((timestamp) => !Number.isNaN(Date.parse(timestamp)));
 
   if (timestamps.length === 0) {
     return {
       timestamp: "1970-01-01T00:00:00.000Z",
-      issueFingerprint: getIssueFingerprint(issue),
+      issueFingerprint: getIssueFingerprint(issue, relatedPullRequests),
     };
   }
 
   return {
     timestamp: timestamps.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? "1970-01-01T00:00:00.000Z",
-    issueFingerprint: getIssueFingerprint(issue),
+    issueFingerprint: getIssueFingerprint(issue, relatedPullRequests),
   };
 }
 
@@ -491,15 +506,48 @@ function isGrovieActivityComment(body: string): boolean {
   return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:session ");
 }
 
-function getIssueFingerprint(issue: GitHubIssue): string {
+function getIssueFingerprint(issue: GitHubIssue, relatedPullRequests: GitHubRelatedPullRequest[] = []): string {
   return createHash("sha256")
     .update(JSON.stringify({
       title: issue.title,
       body: issue.body,
       state: issue.state,
       labels: [...issue.labels].sort(),
+      relatedPullRequests: relatedPullRequests.map((pullRequest) => ({
+        number: pullRequest.number,
+        title: pullRequest.title,
+        state: pullRequest.state,
+        baseRef: pullRequest.baseRef,
+        headRef: pullRequest.headRef,
+        headSha: pullRequest.headSha,
+        updatedAt: pullRequest.updatedAt,
+        comments: pullRequest.comments.map((comment) => ({
+          id: comment.id,
+          updatedAt: comment.updatedAt,
+        })),
+        reviewComments: pullRequest.reviewComments.map((comment) => ({
+          id: comment.id,
+          updatedAt: comment.updatedAt,
+        })),
+        reviews: pullRequest.reviews.map((review) => ({
+          id: review.id,
+          state: review.state,
+          submittedAt: review.submittedAt,
+        })),
+        checks: pullRequest.checks,
+        diffSummary: pullRequest.diffSummary,
+      })),
     }))
     .digest("hex");
+}
+
+function getPullRequestActivityTimestamps(pullRequest: GitHubRelatedPullRequest): string[] {
+  return [
+    pullRequest.updatedAt,
+    ...pullRequest.comments.map((comment) => comment.updatedAt),
+    ...pullRequest.reviewComments.map((comment) => comment.updatedAt),
+    ...pullRequest.reviews.map((review) => review.submittedAt),
+  ];
 }
 
 function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {

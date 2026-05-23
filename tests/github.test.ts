@@ -281,6 +281,140 @@ describe("GhGitHubGateway", () => {
     });
   });
 
+  it("[UC-GITHUB-02-S01] discovers related pull requests by branch and issue references", () => {
+    const runner = new FakeRunner([
+      {
+        stdout: JSON.stringify([
+          [
+            {
+              number: 20,
+              title: "Implement result handling",
+              state: "open",
+              html_url: "https://github.com/fankaidev/grovie/pull/20",
+              body: "Closes #9",
+              updated_at: "2026-05-22T00:00:04Z",
+              base: { ref: "main" },
+              head: { ref: "grovie/fankaidev-grovie-issue-9-coder-fankai-mac", sha: "abc123" },
+            },
+            {
+              number: 21,
+              title: "Unrelated",
+              state: "open",
+              html_url: "https://github.com/fankaidev/grovie/pull/21",
+              body: "No issue link.",
+              updated_at: "2026-05-22T00:00:04Z",
+              base: { ref: "main" },
+              head: { ref: "grovie/fankaidev-grovie-issue-8-coder-fankai-mac", sha: "def456" },
+            },
+          ],
+        ]),
+      },
+      {
+        stdout: JSON.stringify([[
+          {
+            id: 10,
+            body: "Please update tests.",
+            user: { login: "reviewer" },
+            created_at: "2026-05-22T00:00:05Z",
+            updated_at: "2026-05-22T00:00:05Z",
+          },
+        ]]),
+      },
+      {
+        stdout: JSON.stringify([[
+          {
+            id: 11,
+            body: "src/run.ts",
+            user: { login: "reviewer" },
+            created_at: "2026-05-22T00:00:06Z",
+            updated_at: "2026-05-22T00:00:06Z",
+          },
+        ]]),
+      },
+      {
+        stdout: JSON.stringify([[
+          {
+            id: 12,
+            state: "APPROVED",
+            body: "Looks good.",
+            user: { login: "reviewer" },
+            submitted_at: "2026-05-22T00:00:07Z",
+          },
+        ]]),
+      },
+      {
+        stdout: JSON.stringify({
+          total_count: 2,
+          check_runs: [{ conclusion: "success" }, { conclusion: null }],
+        }),
+      },
+      {
+        stdout: "src/run.ts\ntests/run.test.ts\n",
+      },
+    ]);
+    const gateway = new GhGitHubGateway(runner);
+
+    expect(gateway.readRelatedPullRequests({ owner: "fankaidev", repo: "grovie", number: 9 })).toEqual({
+      ok: true,
+      value: [
+        {
+          number: 20,
+          title: "Implement result handling",
+          state: "open",
+          url: "https://github.com/fankaidev/grovie/pull/20",
+          body: "Closes #9",
+          baseRef: "main",
+          headRef: "grovie/fankaidev-grovie-issue-9-coder-fankai-mac",
+          headSha: "abc123",
+          updatedAt: "2026-05-22T00:00:04Z",
+          comments: [
+            {
+              id: 10,
+              body: "Please update tests.",
+              author: "reviewer",
+              createdAt: "2026-05-22T00:00:05Z",
+              updatedAt: "2026-05-22T00:00:05Z",
+            },
+          ],
+          reviewComments: [
+            {
+              id: 11,
+              body: "src/run.ts",
+              author: "reviewer",
+              createdAt: "2026-05-22T00:00:06Z",
+              updatedAt: "2026-05-22T00:00:06Z",
+            },
+          ],
+          reviews: [
+            {
+              id: 12,
+              state: "APPROVED",
+              author: "reviewer",
+              body: "Looks good.",
+              submittedAt: "2026-05-22T00:00:07Z",
+            },
+          ],
+          checks: {
+            totalCount: 2,
+            conclusionCounts: {
+              pending: 1,
+              success: 1,
+            },
+          },
+          diffSummary: "src/run.ts\ntests/run.test.ts",
+        },
+      ],
+    });
+    expect(runner.calls.map((call) => call.args)).toEqual([
+      ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/pulls?state=all&per_page=100"],
+      ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/issues/20/comments"],
+      ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/pulls/20/comments"],
+      ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/pulls/20/reviews"],
+      ["api", "repos/fankaidev/grovie/commits/abc123/check-runs"],
+      ["pr", "diff", "20", "--repo", "fankaidev/grovie", "--name-only"],
+    ]);
+  });
+
   it("returns structured errors when gh fails", () => {
     const gateway = new GhGitHubGateway(
       new FakeRunner([
