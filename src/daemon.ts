@@ -1,4 +1,5 @@
 import type { GrovieConfig } from "./config.js";
+import { getAssignedAgentIds, isAssignedToLocalMachine } from "./assignment.js";
 import {
   createIssueClaim,
   DEFAULT_STALE_CLAIM_MS,
@@ -142,6 +143,13 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     }
 
     if (!isIssueClaimable(issueResult.value, input.label, now(), input.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS)) {
+      continue;
+    }
+
+    if (
+      getAssignedAgentIds(issueResult.value.labels).length > 0 &&
+      !isAssignedToLocalMachine(issueResult.value.labels, identity.machineId)
+    ) {
       continue;
     }
 

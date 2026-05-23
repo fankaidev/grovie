@@ -19,8 +19,8 @@ afterEach(() => {
 });
 
 describe("CLI command registration", () => {
-  it("registers the MVP command set", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "run", "daemon", "watch"]);
+  it("[UC-WORKER-03-S01] registers the issue assignment command", () => {
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "daemon", "watch"]);
   });
 
   it("renders help with the MVP commands", () => {
@@ -334,14 +334,14 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("runs manual issue execution through the async runtime path", async () => {
+  it("[UC-WORKER-03-S04] runs manual issue execution for an agent id without adding assignment labels", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState();
     let runtimeInput: AgentRunInput | undefined;
     const issueComments: GitHubIssue["comments"] = [];
     writeInvalidPolicyConfig(cwd);
 
-    const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "codex"], {
+    const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "coder@fankai-mac"], {
       cwd,
       github: fakeGitHubGateway({
         readIssue: (reference) => ({
@@ -403,6 +403,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("Session status: failed");
     expect(runtimeInput?.run).toBe(localState.run);
     expect(issueComments[0]?.body).toContain("Grovie run task claim released.");
+    expect(issueComments[0]?.body).toContain("- Worker: `coder@fankai-mac`");
     expect(issueComments[0]?.body).toContain("- Note: Session failed. See the Grovie result comment and local run logs.");
     expect(issueComments[1]?.body).toContain("Grovie session failed.");
     expect(issueComments[1]?.body).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-2","status":"failed","runtime":"codex"} -->');
@@ -486,6 +487,76 @@ describe("CLI command registration", () => {
         runtime: "codex",
         envKeys: ["OPENAI_API_KEY"],
       }),
+    ]);
+  });
+
+  it("[UC-WORKER-03-S01] assigns an issue to an agent label", () => {
+    const addedLabels: Array<{ reference: IssueReference; labels: string[] }> = [];
+
+    expect(
+      runCli(["issue", "assign", "fankaidev/grovie#123", "coder@fankai-mac"], {
+        github: fakeGitHubGateway({
+          addLabels: (reference, labels) => {
+            addedLabels.push({ reference, labels });
+            return {
+              ok: true,
+              value: undefined,
+            };
+          },
+        }),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie issue assign",
+        "",
+        "Added agent:coder@fankai-mac to fankaidev/grovie#123.",
+      ].join("\n"),
+    });
+    expect(addedLabels).toEqual([
+      {
+        reference: {
+          owner: "fankaidev",
+          repo: "grovie",
+          number: 123,
+        },
+        labels: ["agent:coder@fankai-mac"],
+      },
+    ]);
+  });
+
+  it("[UC-WORKER-03-S02] unassigns only the matching agent label", () => {
+    const removedLabels: Array<{ reference: IssueReference; label: string }> = [];
+
+    expect(
+      runCli(["issue", "unassign", "fankaidev/grovie#123", "coder@fankai-mac"], {
+        github: fakeGitHubGateway({
+          removeLabel: (reference, label) => {
+            removedLabels.push({ reference, label });
+            return {
+              ok: true,
+              value: undefined,
+            };
+          },
+        }),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie issue unassign",
+        "",
+        "Removed agent:coder@fankai-mac from fankaidev/grovie#123.",
+      ].join("\n"),
+    });
+    expect(removedLabels).toEqual([
+      {
+        reference: {
+          owner: "fankaidev",
+          repo: "grovie",
+          number: 123,
+        },
+        label: "agent:coder@fankai-mac",
+      },
     ]);
   });
 

@@ -75,6 +75,43 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments[0]).toContain(`- Worker: \`default@${machineId}\``);
   });
 
+  it("[UC-WORKER-03-S05] skips issues assigned only to another machine", async () => {
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", "agent:coder@other-machine"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(github.createdComments).toEqual([]);
+  });
+
   it("skips issues with a visible active claim", async () => {
     const github = new FakeGitHub([
       fakeIssue({
