@@ -60,7 +60,7 @@ export type RunLocalState = {
   acquireExecutionLock?(input: { repository: string; issueNumber: number; agentId: string; now?: Date }): LockResult<ExecutionLock>;
   hasExecutionLock?(input: { repository: string; issueNumber: number; agentId: string }): boolean;
   releaseExecutionLock?(lock: ExecutionLock): void;
-  enqueueRunRequest?(input: { repository: string; issueNumber: number; agentId: string; now?: Date }): RunRequest;
+  enqueueRunRequest?(input: { repository: string; issueNumber: number; agentId: string; now?: Date; sourceRunId?: string; reason?: RunRequest["reason"] }): RunRequest;
   takeRunRequest?(repository: string): RunRequest | undefined;
   readHandledCursor?(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined;
   writeHandledCursor?(input: {

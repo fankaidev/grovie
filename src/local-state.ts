@@ -78,6 +78,8 @@ export type RunRequest = {
   agentId: string;
   createdAt: string;
   path: string;
+  sourceRunId?: string;
+  reason?: "manual" | "retry" | "rerun";
 };
 
 export type LockResult<T> =
@@ -204,6 +206,8 @@ export class LocalState {
     issueNumber: number;
     agentId: string;
     now?: Date;
+    sourceRunId?: string;
+    reason?: RunRequest["reason"];
   }): RunRequest {
     this.ensureBaseDirectories();
     const createdAt = (input.now ?? new Date()).toISOString();
@@ -221,6 +225,8 @@ export class LocalState {
       agentId: input.agentId,
       createdAt,
       path: requestPath.path,
+      sourceRunId: input.sourceRunId,
+      reason: input.reason,
     };
 
     writeJsonFile(requestPath.path, request);

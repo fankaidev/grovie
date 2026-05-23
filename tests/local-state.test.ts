@@ -88,6 +88,32 @@ describe("LocalState", () => {
     expect(result.ok ? result.recoveredStale : false).toBe(true);
   });
 
+  it("[UC-EXECUTION-02-S09] preserves retry source metadata in daemon run requests", () => {
+    const root = createTmpDir();
+    const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
+
+    const request = state.enqueueRunRequest({
+      repository: "fankaidev/grovie",
+      issueNumber: 79,
+      agentId: "coder@fankai-mac",
+      sourceRunId: "failed-run",
+      reason: "retry",
+      now: new Date("2026-05-23T00:00:00Z"),
+    });
+
+    expect(JSON.parse(readFileSync(request.path, "utf8"))).toMatchObject({
+      repository: "fankaidev/grovie",
+      issueNumber: 79,
+      agentId: "coder@fankai-mac",
+      sourceRunId: "failed-run",
+      reason: "retry",
+    });
+    expect(state.takeRunRequest("fankaidev/grovie")).toMatchObject({
+      sourceRunId: "failed-run",
+      reason: "retry",
+    });
+  });
+
   it("[UC-WORKER-04-S05] blocks duplicate local execution locks for the same issue and agent", () => {
     const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
     const first = state.acquireExecutionLock({

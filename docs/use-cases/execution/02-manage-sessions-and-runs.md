@@ -22,3 +22,6 @@
 | UC-EXECUTION-02-S06 | P1 | If a generated run id would collide within the same second, the daemon waits, retries, or fails clearly rather than adding randomness. |
 | UC-EXECUTION-02-S07 | P1 | `grovie runs list` shows concise run history with issue reference, agent, runtime, status, branch, result links, times, and log paths. |
 | UC-EXECUTION-02-S08 | P1 | `grovie runs show <run-id>` shows readable run details with issue, worktree, run directory, stdout/stderr, events, branch, and GitHub result links. |
+| UC-EXECUTION-02-S09 | P2 | `grovie runs retry <run-id>` enqueues a new daemon run for a failed, canceled, or stale run without overwriting the original run history. |
+| UC-EXECUTION-02-S10 | P2 | `grovie runs rerun owner/repo#123 --agent coder@machine` enqueues a new daemon run in the existing issue-agent session and reports that the session worktree will be reused. |
+| UC-EXECUTION-02-S11 | P2 | Retry and rerun refuse to enqueue a duplicate when the same issue-agent execution is already active locally. |
