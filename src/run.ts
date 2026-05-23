@@ -133,7 +133,7 @@ export async function runClaimedIssueAsync(input: RunClaimedIssueAsyncInput): Pr
   if (repository !== input.repository) {
     return {
       exitCode: 1,
-      stderr: `Repository ${repository} does not match current checkout repository ${input.repository}.`,
+      stderr: `Issue repository ${repository} does not match runner repository ${input.repository}.`,
     };
   }
 
@@ -251,7 +251,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
       ok: false,
       result: {
         exitCode: 1,
-        stderr: `Repository ${repository} does not match current checkout repository ${input.repository}.`,
+        stderr: `Issue repository ${repository} does not match runner repository ${input.repository}.`,
       },
     };
   }

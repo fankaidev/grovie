@@ -33,6 +33,15 @@ export type DaemonInput = {
   issueRunner?: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
 };
 
+export type DaemonRepositoryInput = {
+  repository: string;
+  label: string;
+};
+
+export type MultiRepositoryDaemonInput = Omit<DaemonInput, "repository" | "label"> & {
+  repositories: DaemonRepositoryInput[];
+};
+
 type DaemonCycleResult = RunIssueResult & {
   processed: boolean;
 };
@@ -49,6 +58,51 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
     const sleep = input.sleep ?? sleepSync;
     await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
   }
+}
+
+export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput): Promise<RunIssueResult> {
+  if (input.repositories.length === 0) {
+    return {
+      exitCode: 1,
+      stderr: "No watched repositories configured. Add one with `grovie watch add owner/repo`.",
+    };
+  }
+
+  if (!input.once) {
+    while (true) {
+      await runDaemonRepositoryCycle(input);
+      const sleep = input.sleep ?? sleepSync;
+      await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+    }
+  }
+
+  return toRunIssueResult(await runDaemonRepositoryCycle(input));
+}
+
+async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Promise<DaemonCycleResult> {
+  const idleMessages: string[] = [];
+
+  for (const repository of input.repositories) {
+    const result = await runDaemonCycle({
+      ...input,
+      repository: repository.repository,
+      label: repository.label,
+    });
+
+    if (result.exitCode !== 0 || result.processed) {
+      return result;
+    }
+
+    if (result.stdout !== undefined) {
+      idleMessages.push(result.stdout);
+    }
+  }
+
+  return {
+    exitCode: 0,
+    processed: false,
+    stdout: idleMessages.join("\n\n"),
+  };
 }
 
 function toRunIssueResult(result: DaemonCycleResult): RunIssueResult {

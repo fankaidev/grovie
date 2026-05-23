@@ -225,7 +225,7 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 
-  it("rejects repositories outside the current checkout repository before reading from GitHub", () => {
+  it("rejects issue references that do not match the runner repository before reading from GitHub", () => {
     const github = new FakeGitHub();
 
     const result = runIssue({
@@ -243,7 +243,7 @@ describe("runIssue", () => {
 
     expect(result).toEqual({
       exitCode: 1,
-      stderr: "Repository other/repo does not match current checkout repository fankaidev/grovie.",
+      stderr: "Issue repository other/repo does not match runner repository fankaidev/grovie.",
     });
     expect(github.reads).toBe(0);
   });

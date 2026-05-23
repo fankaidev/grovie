@@ -2,7 +2,16 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadConfig, parseGitHubRemote, renderDefaultConfig } from "../src/config.js";
+import {
+  addWatchedRepository,
+  loadConfig,
+  loadGlobalConfig,
+  parseGitHubRemote,
+  removeWatchedRepository,
+  renderDefaultConfig,
+  renderGlobalConfig,
+  saveGlobalConfig,
+} from "../src/config.js";
 
 const tmpDirs: string[] = [];
 
@@ -110,6 +119,56 @@ describe("config helpers", () => {
     );
 
     expect(() => loadConfig(cwd)).toThrow("Unrecognized key: \"repositories\"");
+  });
+
+  it("loads an empty global worker config when config.yml is absent", () => {
+    const root = createTmpDir();
+
+    expect(loadGlobalConfig(root)).toEqual({
+      path: join(root, "config.yml"),
+      config: {
+        version: 1,
+        watchedRepositories: [],
+      },
+    });
+  });
+
+  it("saves and updates watched repositories in the global worker config", () => {
+    const root = createTmpDir();
+    const added = addWatchedRepository(loadGlobalConfig(root).config, {
+      repository: "fankaidev/grovie",
+      label: "ready",
+    });
+
+    saveGlobalConfig(root, added);
+
+    expect(loadGlobalConfig(root).config).toEqual({
+      version: 1,
+      watchedRepositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "ready",
+        },
+      ],
+    });
+
+    const removed = removeWatchedRepository(loadGlobalConfig(root).config, "fankaidev/grovie");
+    expect(removed.watchedRepositories).toEqual([]);
+  });
+
+  it("renders global config as a scheduling list, not an allowlist", () => {
+    const config = renderGlobalConfig({
+      version: 1,
+      watchedRepositories: [
+        {
+          repository: "fankaidev/grovie",
+        },
+      ],
+    });
+
+    expect(config).toContain("schedules repositories");
+    expect(config).toContain("not a security allowlist");
+    expect(config).toContain("repository: fankaidev/grovie");
   });
 });
 

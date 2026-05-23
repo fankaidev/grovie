@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
+import { parseRepositoryName } from "./github.js";
 
 export const CONFIG_FILE_NAME = ".grovie.yml";
+export const GLOBAL_CONFIG_FILE_NAME = "config.yml";
 
 export const repositoryNameSchema = z.string().regex(
   /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/,
@@ -43,6 +45,23 @@ export type LoadedConfig = {
   path?: string;
   config: GrovieConfig;
 };
+
+export const globalConfigSchema = z.strictObject({
+  version: z.literal(1),
+  watchedRepositories: z.array(z.strictObject({
+    repository: repositoryNameSchema,
+    label: z.string().min(1, "must not be empty").optional(),
+  })),
+});
+
+export type GlobalGrovieConfig = z.infer<typeof globalConfigSchema>;
+
+export type LoadedGlobalConfig = {
+  path: string;
+  config: GlobalGrovieConfig;
+};
+
+export type WatchedRepository = GlobalGrovieConfig["watchedRepositories"][number];
 
 export function getConfigPath(cwd: string): string {
   return join(cwd, CONFIG_FILE_NAME);
@@ -86,6 +105,89 @@ export function loadConfig(cwd: string): LoadedConfig {
   return {
     path: configPath,
     config: result.data,
+  };
+}
+
+export function getGlobalConfigPath(root: string): string {
+  return join(root, GLOBAL_CONFIG_FILE_NAME);
+}
+
+export function loadGlobalConfig(root: string): LoadedGlobalConfig {
+  const configPath = getGlobalConfigPath(root);
+
+  if (!existsSync(configPath)) {
+    return {
+      path: configPath,
+      config: defaultGlobalConfig(),
+    };
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = parse(readFileSync(configPath, "utf8"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not parse ${configPath}: ${message}`);
+  }
+
+  const result = globalConfigSchema.safeParse(parsed);
+
+  if (!result.success) {
+    throw new Error(renderValidationError(result.error, configPath));
+  }
+
+  return {
+    path: configPath,
+    config: result.data,
+  };
+}
+
+export function saveGlobalConfig(root: string, config: GlobalGrovieConfig): string {
+  const configPath = getGlobalConfigPath(root);
+  const result = globalConfigSchema.safeParse(config);
+
+  if (!result.success) {
+    throw new Error(renderValidationError(result.error, configPath));
+  }
+
+  mkdirSync(root, { recursive: true });
+  writeFileSync(configPath, renderGlobalConfig(result.data), "utf8");
+  return configPath;
+}
+
+export function addWatchedRepository(
+  config: GlobalGrovieConfig,
+  watchedRepository: WatchedRepository,
+): GlobalGrovieConfig {
+  assertValidRepository(watchedRepository.repository);
+
+  const existing = config.watchedRepositories.find((candidate) => candidate.repository === watchedRepository.repository);
+  const nextRepository = watchedRepository.label === undefined
+    ? { repository: watchedRepository.repository }
+    : { repository: watchedRepository.repository, label: watchedRepository.label };
+
+  if (existing === undefined) {
+    return {
+      ...config,
+      watchedRepositories: [...config.watchedRepositories, nextRepository],
+    };
+  }
+
+  return {
+    ...config,
+    watchedRepositories: config.watchedRepositories.map((candidate) =>
+      candidate.repository === watchedRepository.repository ? nextRepository : candidate,
+    ),
+  };
+}
+
+export function removeWatchedRepository(config: GlobalGrovieConfig, repository: string): GlobalGrovieConfig {
+  assertValidRepository(repository);
+
+  return {
+    ...config,
+    watchedRepositories: config.watchedRepositories.filter((candidate) => candidate.repository !== repository),
   };
 }
 
@@ -152,6 +254,13 @@ export function defaultConfig(): GrovieConfig {
   };
 }
 
+export function defaultGlobalConfig(): GlobalGrovieConfig {
+  return {
+    version: 1,
+    watchedRepositories: [],
+  };
+}
+
 export function renderDefaultConfig(): string {
   return `# Grovie configuration.
 # GitHub remains the source of truth; this file defines local runner policy.
@@ -183,11 +292,44 @@ safety:
 `;
 }
 
-function renderValidationError(error: z.ZodError): string {
+export function renderGlobalConfig(config: GlobalGrovieConfig): string {
+  const watchedRepositories = config.watchedRepositories.length === 0
+    ? "watchedRepositories: []"
+    : [
+      "watchedRepositories:",
+      config.watchedRepositories
+        .map((watchedRepository) => {
+          const lines = [`  - repository: ${watchedRepository.repository}`];
+
+          if (watchedRepository.label !== undefined) {
+            lines.push(`    label: ${watchedRepository.label}`);
+          }
+
+          return lines.join("\n");
+        })
+        .join("\n"),
+    ].join("\n");
+
+  return `# Grovie global worker configuration.
+# This file schedules repositories for the local daemon. It is not a security allowlist.
+version: 1
+${watchedRepositories}
+`;
+}
+
+function assertValidRepository(repository: string): void {
+  const result = parseRepositoryName(repository);
+
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+}
+
+function renderValidationError(error: z.ZodError, fileName = CONFIG_FILE_NAME): string {
   const issues = error.issues.map((issue) => {
-    const path = issue.path.length > 0 ? issue.path.join(".") : CONFIG_FILE_NAME;
+    const path = issue.path.length > 0 ? issue.path.join(".") : fileName;
     return `- ${path}: ${issue.message}`;
   });
 
-  return [`Invalid ${CONFIG_FILE_NAME}:`, ...issues].join("\n");
+  return [`Invalid ${fileName}:`, ...issues].join("\n");
 }
