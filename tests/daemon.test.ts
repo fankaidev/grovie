@@ -199,6 +199,47 @@ describe("runDaemonCycle", () => {
     expect(result.stdout).toContain(`- fankaidev/grovie#8 agent=coder@${machineId} reason=no unhandled activity`);
   });
 
+  it("[UC-WORKER-04-S11] reports canceled local assignments as skipped without claiming them", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`, "grovie:cancel"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+        "",
+        "Skipped assigned issues:",
+        `- fankaidev/grovie#8 agent=coder@${machineId} reason=canceled`,
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(github.createdComments).toEqual([]);
+  });
+
   it("[UC-EXECUTION-01-S01] consumes one manual run request before scheduled issues", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
