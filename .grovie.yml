@@ -1,0 +1,27 @@
+# Grovie configuration.
+# GitHub remains the source of truth; this file defines local runner policy.
+version: 1
+
+runtime:
+  default: codex
+
+queue:
+  label: grovie
+
+branches:
+  prefix: grovie/
+
+worktrees:
+  # Keep failed worktrees for inspection; successful runs can be cleaned up.
+  cleanup: on-success
+
+pullRequests:
+  create: true
+  draft: false
+
+comments:
+  mode: concise
+
+safety:
+  # This must stay false. Grovie should never push directly to the default branch.
+  allowDefaultBranchPush: false
