@@ -19,6 +19,7 @@ describe("local state paths", () => {
 
     expect(sessionId).toBe("fankaidev-grovie-issue-123-coder-fankai-mac");
     expect(buildRunTimestamp(new Date("2026-05-23T00:00:01Z"))).toBe("20260523T000001Z");
+    expect(buildRunTimestamp(new Date("2026-05-23T00:00:01.456Z"))).toBe("20260523T000001Z");
     expect(buildRunId(sessionId, "20260523T000001Z")).toBe(
       "fankaidev-grovie-issue-123-coder-fankai-mac-20260523T000001Z",
     );

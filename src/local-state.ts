@@ -459,7 +459,7 @@ export function buildLocalBranchName(branchPrefix: string, sessionId: string): s
 }
 
 export function buildRunTimestamp(now = new Date()): string {
-  return now.toISOString().replace(/[-:]/g, "").replace(".000", "");
+  return now.toISOString().replace(/\.\d{3}Z$/, "Z").replace(/[-:]/g, "");
 }
 
 function sanitizeRepository(repository: string): string {
