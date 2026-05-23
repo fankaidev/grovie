@@ -314,6 +314,7 @@ describe("admin console server", () => {
     expect(html).toContain("task.json");
     expect(html).toContain("stdout.log");
     expect(html).toContain("stderr.log");
+    expect(html).toContain("Result summary:");
     expect(html).toContain("comment.created");
     expect(html).toContain("https://github.com/fankaidev/grovie/issues/73#issuecomment-1");
   });

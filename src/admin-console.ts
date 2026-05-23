@@ -264,6 +264,7 @@ function renderRunDetailPage(run: LocalRunSummary): string {
     `<p>Branch: ${escapeHtml(run.branchName ?? "(unknown)")}</p>`,
     `<p>Started: ${escapeHtml(run.startedAt ?? "(unknown)")}</p>`,
     `<p>Ended: ${escapeHtml(run.endedAt ?? "(not ended)")}</p>`,
+    `<p>Result summary: ${escapeHtml(renderResultSummary(run))}</p>`,
     "</section>",
     "<section>",
     "<h2>Paths</h2>",
@@ -380,6 +381,14 @@ function renderIssueReference(run: LocalRunSummary): string {
   }
 
   return `${run.repository ?? "(unknown)"}${run.issueNumber === undefined ? "" : `#${run.issueNumber}`}`;
+}
+
+function renderResultSummary(run: LocalRunSummary): string {
+  if (run.resultLinks.length > 0) {
+    return `${run.status}; ${run.resultLinks.join(", ")}`;
+  }
+
+  return `${run.status}; last event ${run.lastEventType ?? "(none)"}`;
 }
 
 function readStatus(value: unknown): string {
