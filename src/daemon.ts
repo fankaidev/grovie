@@ -202,7 +202,7 @@ async function claimAndRun(input: DaemonInput & {
   );
 
   if (claimOwner?.id !== claimResult.claim.commentId) {
-    updateIssueClaim(input.github, claimResult.claim, "skipped", input.now(), "Another visible claim owns this issue.");
+    updateIssueClaim(input.github, claimResult.claim, "released", input.now(), "Another visible task claim owns this issue.");
 
     return Promise.resolve({
       exitCode: 0,
@@ -219,9 +219,9 @@ async function claimAndRun(input: DaemonInput & {
     updateIssueClaim(
       input.github,
       claimResult.claim,
-      "canceled",
+      "released",
       input.now(),
-      "Cancellation was requested before runtime start.",
+      "Session canceled before runtime start.",
     );
 
     return Promise.resolve({
@@ -235,7 +235,7 @@ async function claimAndRun(input: DaemonInput & {
     });
   }
 
-  updateIssueClaim(input.github, claimResult.claim, "running", input.now());
+  updateIssueClaim(input.github, claimResult.claim, "active", input.now());
 
   const result = await input.issueRunner({
     issueReference: input.issueReference,
@@ -249,7 +249,7 @@ async function claimAndRun(input: DaemonInput & {
     monitor: {
       heartbeatIntervalMs: input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
       onHeartbeat: () => {
-        updateIssueClaim(input.github, claimResult.claim, "running", input.now());
+        updateIssueClaim(input.github, claimResult.claim, "active", input.now());
       },
       shouldCancel: () => {
         const latestIssue = input.github.readIssue(input.issueReference);
@@ -266,13 +266,13 @@ async function claimAndRun(input: DaemonInput & {
   updateIssueClaim(
     input.github,
     claimResult.claim,
-    result.canceled === true ? "canceled" : result.exitCode === 0 ? "completed" : "failed",
+    "released",
     input.now(),
     result.canceled === true
-      ? "Run canceled."
+      ? "Session canceled."
       : result.exitCode === 0
-        ? "Run completed."
-        : "Run failed. See the Grovie result comment and local run logs.",
+        ? "Session succeeded."
+        : "Session failed. See the Grovie result comment and local run logs.",
   );
 
   return {

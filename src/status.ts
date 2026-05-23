@@ -12,7 +12,7 @@ export type LocalRunSummary = {
   runDir: string;
   repository?: string;
   issueNumber?: number;
-  status: "preparing" | "prepared" | "active" | "completed" | "failed" | "canceled" | "stale" | "unknown";
+  status: "preparing" | "prepared" | "running" | "succeeded" | "failed" | "canceled" | "stale" | "unknown";
   branchName?: string;
   localBranchName?: string;
   worktreePath?: string;
@@ -42,7 +42,7 @@ export type ListLocalRunsOptions = {
 
 const TERMINAL_STATUS_BY_EVENT: Record<string, LocalRunSummary["status"] | undefined> = {
   "prepare.failed": "failed",
-  "run.succeeded": "completed",
+  "run.succeeded": "succeeded",
   "run.failed": "failed",
   "run.canceled": "canceled",
 };
@@ -208,7 +208,7 @@ function deriveRunStatus(
   const startedEvent = [...events].reverse().find((event) => event.type === "runtime.started" || event.type === "run.started");
 
   if (startedEvent !== undefined) {
-    return isStale(startedEvent, events.at(-1), now, staleAfterMs) ? "stale" : "active";
+    return isStale(startedEvent, events.at(-1), now, staleAfterMs) ? "stale" : "running";
   }
 
   if (metadataStatus === "preparing" || metadataStatus === "prepared") {
@@ -223,7 +223,7 @@ function statusFromRuntimeFinished(event: RunEvent): LocalRunSummary["status"] {
     return "canceled";
   }
 
-  return event.data?.exitCode === 0 ? "completed" : "failed";
+  return event.data?.exitCode === 0 ? "succeeded" : "failed";
 }
 
 function isStale(startedEvent: RunEvent, lastEvent: RunEvent | undefined, now: Date, staleAfterMs: number): boolean {

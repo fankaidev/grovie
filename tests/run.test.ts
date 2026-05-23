@@ -45,7 +45,7 @@ describe("runIssue", () => {
       stdout: [
         "grovie run",
         "",
-        "Result: success",
+        "Session status: succeeded",
         "Issue: fankaidev/grovie#7",
         "Branch: grovie/issue-7",
         "Run id: fankaidev-grovie-issue-7",
@@ -67,7 +67,9 @@ describe("runIssue", () => {
       },
     });
     expect(runtime.runInput?.run).toBe(localState.run);
-    expect(github.comments[0]).toContain("Grovie run completed.");
+    expect(github.comments[0]).toContain("Grovie session succeeded.");
+    expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"codex"} -->');
+    expect(github.comments[0]).toContain("- Session status: succeeded");
     expect(github.comments[0]).toContain("- Changes: none");
     expect(github.comments[0]).toContain("- Branch: `grovie/issue-7` (local; not pushed)");
     expect(localState.events.map((event) => event.type)).toEqual([
@@ -106,8 +108,9 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("codex failed");
-    expect(result.stdout).toContain("Result: failure");
-    expect(github.comments[0]).toContain("Grovie run failed.");
+    expect(result.stdout).toContain("Session status: failed");
+    expect(github.comments[0]).toContain("Grovie session failed.");
+    expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"failed","runtime":"codex"} -->');
     expect(github.comments[0]).toContain("- Error: codex failed");
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.failed", "comment.created"]);
   });
@@ -189,8 +192,8 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.canceled).toBe(true);
-    expect(result.stdout).toContain("Result: canceled");
-    expect(github.comments[0]).toContain("Grovie run canceled.");
+    expect(result.stdout).toContain("Session status: canceled");
+    expect(github.comments[0]).toContain("Grovie session canceled.");
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.canceled", "comment.created"]);
   });
 
@@ -221,7 +224,7 @@ describe("runIssue", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("git clone failed");
     expect(result.stdout).toContain("Run directory: /tmp/grovie/runs/fankaidev-grovie-issue-7");
-    expect(github.comments[0]).toContain("Grovie run failed.");
+    expect(github.comments[0]).toContain("Grovie session failed.");
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 

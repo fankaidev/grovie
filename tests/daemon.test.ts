@@ -46,10 +46,10 @@ describe("runDaemonCycle", () => {
       repo: "grovie",
       number: 8,
     });
-    expect(github.createdComments[0]).toContain("Grovie daemon claimed.");
+    expect(github.createdComments[0]).toContain("Grovie daemon task claim active.");
     expect(github.updatedComments.map((comment) => comment.body)).toEqual([
-      expect.stringContaining("Grovie daemon running."),
-      expect.stringContaining("Grovie daemon completed."),
+      expect.stringContaining("Grovie daemon task claim active."),
+      expect.stringContaining("Grovie daemon task claim released."),
     ]);
   });
 
@@ -59,7 +59,7 @@ describe("runDaemonCycle", () => {
         comments: [
           fakeComment({
             id: 99,
-            body: '<!-- grovie:claim {"workerId":"other","status":"running"} -->\nGrovie daemon running.',
+            body: '<!-- grovie:claim {"workerId":"other","status":"active"} -->\nGrovie daemon task claim active.',
           }),
         ],
       }),
@@ -129,7 +129,8 @@ describe("runDaemonCycle", () => {
       ].join("\n"),
     });
     expect(runs).toHaveLength(0);
-    expect(github.updatedComments.at(-1)?.body).toContain("Grovie daemon canceled.");
+    expect(github.updatedComments.at(-1)?.body).toContain("Grovie daemon task claim released.");
+    expect(github.updatedComments.at(-1)?.body).toContain("- Note: Session canceled before runtime start.");
   });
 
   it("updates heartbeat and marks canceled when cancellation appears during runtime", async () => {
@@ -167,9 +168,9 @@ describe("runDaemonCycle", () => {
     });
     expect(runs).toHaveLength(1);
     expect(github.updatedComments.map((comment) => comment.body)).toEqual([
-      expect.stringContaining("Grovie daemon running."),
-      expect.stringContaining("Grovie daemon running."),
-      expect.stringContaining("Grovie daemon canceled."),
+      expect.stringContaining("Grovie daemon task claim active."),
+      expect.stringContaining("Grovie daemon task claim active."),
+      expect.stringContaining("Grovie daemon task claim released."),
     ]);
   });
 
@@ -197,11 +198,11 @@ describe("runDaemonCycle", () => {
       stderr: "runtime failed",
     });
     expect(github.updatedComments.map((comment) => comment.body)).toEqual([
-      expect.stringContaining("Grovie daemon running."),
-      expect.stringContaining("Grovie daemon failed."),
+      expect.stringContaining("Grovie daemon task claim active."),
+      expect.stringContaining("Grovie daemon task claim released."),
     ]);
     expect(github.updatedComments.at(-1)?.body).toContain(
-      "- Note: Run failed. See the Grovie result comment and local run logs.",
+      "- Note: Session failed. See the Grovie result comment and local run logs.",
     );
   });
 
@@ -211,7 +212,7 @@ describe("runDaemonCycle", () => {
         comments: [
           fakeComment({
             id: 99,
-            body: '<!-- grovie:claim {"workerId":"other","status":"running"} -->\nGrovie daemon running.',
+            body: '<!-- grovie:claim {"workerId":"other","status":"active"} -->\nGrovie daemon task claim active.',
             updatedAt: "2026-05-21T00:00:00Z",
           }),
         ],
@@ -240,7 +241,7 @@ describe("runDaemonCycle", () => {
 
     expect(result.processed).toBe(true);
     expect(runs).toHaveLength(1);
-    expect(github.createdComments[0]).toContain("Grovie daemon claimed.");
+    expect(github.createdComments[0]).toContain("Grovie daemon task claim active.");
   });
 
   it("checks multiple watched repositories sequentially until it finds queued work", async () => {
@@ -387,7 +388,7 @@ class FakeGitHub implements GitHubGateway {
         comment.updatedAt = NOW.toISOString();
       }
 
-      if (this.options.addCancelOnRunningUpdate === true && body.includes("Grovie daemon running.")) {
+      if (this.options.addCancelOnRunningUpdate === true && body.includes("Grovie daemon task claim active.")) {
         issue.comments.push(
           fakeComment({
             id: this.nextCommentId++,

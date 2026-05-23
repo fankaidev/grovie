@@ -45,8 +45,8 @@ describe("local run status", () => {
     const runs = listLocalRuns(runsDir, { now: new Date("2026-05-23T10:05:00.000Z") });
 
     expect(runs.map((run) => [run.runId, run.status])).toEqual([
-      ["active-run", "active"],
-      ["finished-run", "completed"],
+      ["active-run", "running"],
+      ["finished-run", "succeeded"],
     ]);
     expect(renderRunsList(runs)).toContain("Issue: fankaidev/grovie#8");
     expect(renderRunsList(runs)).toContain(`Logs: stdout=${join(runsDir, "active-run", "stdout.log")}`);

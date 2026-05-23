@@ -17,6 +17,7 @@ import {
 import { buildAttemptId, buildBranchName, buildRunId, LocalState, type LocalStatePaths, type PreparedRun } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
+import type { SessionStatus } from "./task.js";
 
 export type RunIssueInput = {
   issueReference: IssueReference;
@@ -62,7 +63,7 @@ export type RunLocalState = {
 };
 
 type RunSummary = {
-  status: "success" | "failure" | "canceled";
+  status: SessionStatus;
   issue: GitHubIssue;
   runId: string;
   branchName: string;
@@ -72,6 +73,8 @@ type RunSummary = {
   comment?: CreatedComment;
   error?: string;
 };
+
+const SESSION_MARKER = "grovie:session";
 
 export function runIssue(input: RunIssueInput): RunIssueResult {
   const prepared = prepareIssueRun(input);
@@ -184,7 +187,7 @@ export async function runClaimedIssueAsync(input: RunClaimedIssueAsyncInput): Pr
   const claimOwner = selectActiveClaim(rereadResult.value, now(), staleClaimMs);
 
   if (claimOwner === undefined) {
-    updateIssueClaim(input.github, claimResult.claim, "skipped", now(), "Could not confirm this claim after creation.");
+    updateIssueClaim(input.github, claimResult.claim, "released", now(), "Could not confirm this task claim after creation.");
 
     return {
       exitCode: 1,
@@ -193,7 +196,7 @@ export async function runClaimedIssueAsync(input: RunClaimedIssueAsyncInput): Pr
   }
 
   if (claimOwner.id !== claimResult.claim.commentId) {
-    updateIssueClaim(input.github, claimResult.claim, "skipped", now(), "Another visible claim owns this issue.");
+    updateIssueClaim(input.github, claimResult.claim, "released", now(), "Another visible task claim owns this issue.");
 
     return {
       exitCode: 1,
@@ -201,14 +204,14 @@ export async function runClaimedIssueAsync(input: RunClaimedIssueAsyncInput): Pr
     };
   }
 
-  updateIssueClaim(input.github, claimResult.claim, "running", now());
+  updateIssueClaim(input.github, claimResult.claim, "active", now());
 
   const result = await runIssueAsync({
     ...input,
     monitor: {
       heartbeatIntervalMs: input.monitor?.heartbeatIntervalMs,
       onHeartbeat: async (event) => {
-        updateIssueClaim(input.github, claimResult.claim, "running", now());
+        updateIssueClaim(input.github, claimResult.claim, "active", now());
         await input.monitor?.onHeartbeat?.(event);
       },
       shouldCancel: input.monitor?.shouldCancel,
@@ -218,13 +221,13 @@ export async function runClaimedIssueAsync(input: RunClaimedIssueAsyncInput): Pr
   updateIssueClaim(
     input.github,
     claimResult.claim,
-    result.canceled === true ? "canceled" : result.exitCode === 0 ? "completed" : "failed",
+    "released",
     now(),
     result.canceled === true
-      ? "Run canceled."
+      ? "Session canceled."
       : result.exitCode === 0
-        ? "Run completed."
-        : "Run failed. See the Grovie result comment and local run logs.",
+        ? "Session succeeded."
+        : "Session failed. See the Grovie result comment and local run logs.",
   );
 
   return result;
@@ -406,7 +409,7 @@ function finishRun(input: {
   });
 
   return {
-    exitCode: summary.status === "failure" ? 1 : 0,
+    exitCode: summary.status === "failed" ? 1 : 0,
     stdout: renderCliRunOutput({ ...summary, comment: commentResult.value }),
     stderr: summary.error,
     canceled: summary.status === "canceled" ? true : undefined,
@@ -443,7 +446,7 @@ function fallbackRunSummary(input: {
   const runId = buildRunId(repository, input.issue.reference.number, input.attemptId);
 
   return {
-    status: "failure",
+    status: "failed",
     issue: input.issue,
     runId,
     branchName: buildBranchName(input.config.branches.prefix, input.issue.reference.number),
@@ -462,11 +465,11 @@ function runSummaryFromRuntimeResult(input: {
 }): RunSummary {
   const status = input.runtimeResult.ok
     ? input.resultError === undefined
-      ? "success"
-      : "failure"
+      ? "succeeded"
+      : "failed"
     : input.runtimeResult.canceled === true
       ? "canceled"
-      : "failure";
+      : "failed";
 
   return {
     status,
@@ -481,10 +484,16 @@ function runSummaryFromRuntimeResult(input: {
 }
 
 function renderRunComment(summary: RunSummary): string {
+  const marker = `<!-- ${SESSION_MARKER} ${JSON.stringify({
+    runId: summary.runId,
+    status: summary.status,
+    runtime: summary.runtime,
+  })} -->`;
   const lines = [
-    `Grovie run ${runStatusVerb(summary.status)}.`,
+    marker,
+    `Grovie session ${summary.status}.`,
     "",
-    `- Result: ${summary.status}`,
+    `- Session status: ${summary.status}`,
     `- Runtime: ${summary.runtime}`,
     `- Issue: ${formatIssueReference(summary.issue.reference)}`,
     `- Branch: \`${summary.branchName}\` (local; not pushed)`,
@@ -515,23 +524,11 @@ function runEventType(runtimeResult: RuntimeRunResult): "run.succeeded" | "run.f
   return runtimeResult.canceled === true ? "run.canceled" : "run.failed";
 }
 
-function runStatusVerb(status: RunSummary["status"]): string {
-  if (status === "success") {
-    return "completed";
-  }
-
-  if (status === "failure") {
-    return "failed";
-  }
-
-  return status;
-}
-
 function renderCliRunOutput(summary: RunSummary): string {
   const lines = [
     "grovie run",
     "",
-    `Result: ${summary.status}`,
+    `Session status: ${summary.status}`,
     `Issue: ${formatIssueReference(summary.issue.reference)}`,
     `Branch: ${summary.branchName}`,
     `Run id: ${summary.runId}`,

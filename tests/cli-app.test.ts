@@ -198,7 +198,7 @@ describe("CLI command registration", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("grovie status");
     expect(result.stdout).toContain("- active-run");
-    expect(result.stdout).toContain("Status: active");
+    expect(result.stdout).toContain("Status: running");
     expect(result.stdout).toContain("Issue: fankaidev/grovie#36");
     expect(result.stdout).toContain(`Logs: stdout=${join(localState.paths.runsDir, "active-run", "stdout.log")}`);
   });
@@ -287,7 +287,7 @@ describe("CLI command registration", () => {
             comments: [
               {
                 id: 42,
-                body: '<!-- grovie:claim {"workerId":"other-worker","status":"running"} -->\nGrovie daemon running.',
+                body: '<!-- grovie:claim {"workerId":"other-worker","status":"active"} -->\nGrovie daemon task claim active.',
                 author: "fankaidev",
                 createdAt: "2026-05-23T00:00:00Z",
                 updatedAt: new Date().toISOString(),
@@ -384,10 +384,12 @@ describe("CLI command registration", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("async runtime failed");
-    expect(result.stdout).toContain("Result: failure");
+    expect(result.stdout).toContain("Session status: failed");
     expect(runtimeInput?.run).toBe(localState.run);
-    expect(issueComments[0]?.body).toContain("Grovie run failed.");
-    expect(issueComments[1]?.body).toContain("Grovie run failed.");
+    expect(issueComments[0]?.body).toContain("Grovie run task claim released.");
+    expect(issueComments[0]?.body).toContain("- Note: Session failed. See the Grovie result comment and local run logs.");
+    expect(issueComments[1]?.body).toContain("Grovie session failed.");
+    expect(issueComments[1]?.body).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-2","status":"failed","runtime":"codex"} -->');
   });
 
   it("does not start manual issue execution when another active claim owns the issue", async () => {
@@ -404,7 +406,7 @@ describe("CLI command registration", () => {
             comments: [
               {
                 id: 42,
-                body: '<!-- grovie:claim {"workerId":"other-worker","status":"running"} -->\nGrovie daemon running.',
+                body: '<!-- grovie:claim {"workerId":"other-worker","status":"active"} -->\nGrovie daemon task claim active.',
                 author: "fankaidev",
                 createdAt: "2026-05-23T00:00:00Z",
                 updatedAt: new Date().toISOString(),
