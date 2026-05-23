@@ -16,6 +16,7 @@ Keep the project small:
 - Mark active issues with `in-progress` and `worker:grovie`.
 - Create branches from `origin/main` with the format `issue-{number}`.
 - Never push directly to `main`.
+- Do not amend commits or force-push existing branches; add a new commit and use a normal push when updating a PR.
 - Open a pull request for every change, including small fixes.
 - Run `pnpm check` before opening a PR when possible.
 - After opening or materially updating a PR, automatically start an independent subagent review. The reviewer should read the linked issue and PR, inspect the diff, check that the implementation matches the issue intent, and submit the result with `gh pr review --comment`.
