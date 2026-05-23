@@ -122,6 +122,76 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
+  it("[UC-WORKER-04-S03] creates one run for a locally assigned agent with unhandled activity", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran coder",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran coder",
+    });
+    expect(runs).toHaveLength(1);
+    expect(github.createdComments[0]).toContain(`- Worker: \`coder@${machineId}\``);
+  });
+
+  it("[UC-WORKER-04-S07] creates a reviewer run before a related pull request exists", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:reviewer@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "reviewer decided no action was needed",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "reviewer decided no action was needed",
+    });
+    expect(runs).toHaveLength(1);
+    expect(github.createdComments[0]).toContain(`- Worker: \`reviewer@${machineId}\``);
+  });
+
   it("[UC-WORKER-04-S01] refuses to start when a live daemon lock exists", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const existingLock = localState.acquireDaemonLock(resolveMachineId(hostname()), NOW);
@@ -775,7 +845,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments[0]).toContain("Grovie daemon task claim active.");
   });
 
-  it("checks multiple watched repositories sequentially until it finds queued work", async () => {
+  it("[UC-WORKER-04-S08] checks multiple watched repositories sequentially until it finds queued work", async () => {
     const github = new FakeGitHub([
       fakeIssue({
         reference: {
