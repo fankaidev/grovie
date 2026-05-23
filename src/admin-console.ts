@@ -1,5 +1,9 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
-import type { GlobalGrovieConfig } from "./config.js";
+import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
+import type { DaemonLifecycle } from "./daemon-lifecycle.js";
+import type { LocalStatePaths } from "./local-state.js";
+import type { AgentRuntime } from "./runtime.js";
+import { findLocalRun, listLocalRuns } from "./status.js";
 
 export type AdminConsoleResolvedConfig = {
   enabled: boolean;
@@ -12,6 +16,12 @@ export type StartedAdminConsole = {
   url: string;
 };
 
+export type AdminConsoleContext = {
+  paths: LocalStatePaths;
+  daemonLifecycle: DaemonLifecycle;
+  runtime: AgentRuntime;
+};
+
 const DEFAULT_ADMIN_CONSOLE_PORT = 8765;
 
 export function resolveAdminConsoleConfig(config: GlobalGrovieConfig): AdminConsoleResolvedConfig {
@@ -22,14 +32,90 @@ export function resolveAdminConsoleConfig(config: GlobalGrovieConfig): AdminCons
   };
 }
 
-export function createAdminConsoleServer(): Server {
+export function createAdminConsoleServer(context?: AdminConsoleContext): Server {
   return createServer((request, response) => {
-    if (request.method === "GET" && request.url === "/health") {
+    const url = parseRequestUrl(request.url);
+
+    if (request.method === "GET" && url.pathname === "/health") {
       writeJson(response, 200, {
         ok: true,
         service: "grovie-admin-console",
       });
       return;
+    }
+
+    if (context !== undefined && request.method === "GET") {
+      if (url.pathname === "/api/health") {
+        writeJson(response, 200, {
+          ok: true,
+          daemon: context.daemonLifecycle.status({ root: context.paths.root }),
+          runtime: context.runtime.checkAvailability(),
+        });
+        return;
+      }
+
+      if (url.pathname === "/api/config") {
+        const globalConfig = loadGlobalConfig(context.paths.root);
+
+        writeJson(response, 200, {
+          path: globalConfig.path,
+          config: globalConfig.config,
+        });
+        return;
+      }
+
+      if (url.pathname === "/api/repos") {
+        writeJson(response, 200, {
+          repositories: loadGlobalConfig(context.paths.root).config.watchedRepositories,
+        });
+        return;
+      }
+
+      if (url.pathname === "/api/runs") {
+        writeJson(response, 200, {
+          runs: listLocalRuns(context.paths.runsDir),
+        });
+        return;
+      }
+
+      const runEventsMatch = /^\/api\/runs\/(?<runId>[^/]+)\/events$/.exec(url.pathname);
+
+      if (runEventsMatch?.groups?.runId !== undefined) {
+        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runEventsMatch.groups.runId));
+
+        if (run === undefined) {
+          writeJson(response, 404, {
+            error: "not_found",
+            message: "Run not found.",
+          });
+          return;
+        }
+
+        writeJson(response, 200, {
+          runId: run.runId,
+          events: run.events,
+        });
+        return;
+      }
+
+      const runMatch = /^\/api\/runs\/(?<runId>[^/]+)$/.exec(url.pathname);
+
+      if (runMatch?.groups?.runId !== undefined) {
+        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runMatch.groups.runId));
+
+        if (run === undefined) {
+          writeJson(response, 404, {
+            error: "not_found",
+            message: "Run not found.",
+          });
+          return;
+        }
+
+        writeJson(response, 200, {
+          run,
+        });
+        return;
+      }
     }
 
     writeJson(response, 404, {
@@ -79,4 +165,8 @@ function writeJson(response: ServerResponse, statusCode: number, value: unknown)
     "content-type": "application/json; charset=utf-8",
   });
   response.end(`${JSON.stringify(value)}\n`);
+}
+
+function parseRequestUrl(url: string | undefined): URL {
+  return new URL(url ?? "/", "http://127.0.0.1");
 }
