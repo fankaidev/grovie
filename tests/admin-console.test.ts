@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -443,6 +443,83 @@ describe("admin console server", () => {
     expect(await invalid.json()).toMatchObject({
       error: "invalid_stream",
     });
+  });
+
+  it("[UC-ADMIN-05-S01] records a local cancellation request for an active run", async () => {
+    const root = createTmpDir();
+    const paths = pathsForRoot(root);
+    writeRun(paths.runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 75,
+      },
+      events: [event("2999-05-23T10:00:00.000Z", "runtime.started")],
+    });
+    const started = await startTestServer(root);
+    const response = await fetch(`${started.url}/api/runs/run-1/cancel`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      cancellation: {
+        runId: "run-1",
+        reason: "Canceled from local admin console.",
+      },
+    });
+    expect(JSON.parse(readFileSync(join(paths.runsDir, "run-1", "cancel.json"), "utf8"))).toMatchObject({
+      runId: "run-1",
+    });
+    expect(readFileSync(join(paths.runsDir, "run-1", "events.jsonl"), "utf8")).toContain("run.cancel_requested");
+  });
+
+  it("[UC-ADMIN-05-S03] rejects missing or terminal run cancellation without destructive side effects", async () => {
+    const root = createTmpDir();
+    const paths = pathsForRoot(root);
+    writeRun(paths.runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 75,
+      },
+      events: [event("2026-05-23T10:00:00.000Z", "run.succeeded")],
+    });
+    const started = await startTestServer(root);
+
+    expect((await fetch(`${started.url}/api/runs/missing/cancel`, { method: "POST" })).status).toBe(404);
+    expect((await fetch(`${started.url}/api/runs/run-1/cancel`, { method: "POST" })).status).toBe(409);
+    expect(() => readFileSync(join(paths.runsDir, "run-1", "cancel.json"), "utf8")).toThrow();
+  });
+
+  it("[UC-ADMIN-05-S04] shows a confirmation-gated cancel action for active runs only", async () => {
+    const root = createTmpDir();
+    const paths = pathsForRoot(root);
+    writeRun(paths.runsDir, "active-run", {
+      metadata: {
+        runId: "active-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 75,
+      },
+      events: [event("2999-05-23T10:00:00.000Z", "runtime.started")],
+    });
+    writeRun(paths.runsDir, "done-run", {
+      metadata: {
+        runId: "done-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 75,
+      },
+      events: [event("2026-05-23T10:00:00.000Z", "run.succeeded")],
+    });
+    const started = await startTestServer(root);
+
+    const activeHtml = await (await fetch(`${started.url}/runs/active-run`)).text();
+    const doneHtml = await (await fetch(`${started.url}/runs/done-run`)).text();
+
+    expect(activeHtml).toContain("Cancel run");
+    expect(activeHtml).toContain("confirm('Cancel this local run?')");
+    expect(doneHtml).not.toContain("Cancel run");
   });
 });
 

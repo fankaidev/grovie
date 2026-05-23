@@ -141,6 +141,34 @@ describe("LocalState", () => {
     });
   });
 
+  it("[UC-ADMIN-05-S01] records local run cancellation requests on disk", () => {
+    const root = createTmpDir();
+    const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
+    const run = state.prepareRun({
+      repository: "fankaidev/grovie",
+      issueNumber: 75,
+      agentId: "coder@fankai-mac",
+      defaultBranch: "main",
+      branchPrefix: "grovie/",
+      now: new Date("2026-05-23T00:00:00Z"),
+      prompt: "Prompt",
+      task: {},
+    });
+
+    const cancellation = state.requestRunCancellation({
+      runId: run.runId,
+      reason: "Canceled from test.",
+      now: new Date("2026-05-23T00:01:00Z"),
+    });
+
+    expect(cancellation).toMatchObject({
+      runId: run.runId,
+      reason: "Canceled from test.",
+    });
+    expect(state.isRunCancellationRequested(run.runId)).toBe(true);
+    expect(readFileSync(run.eventsPath, "utf8")).toContain("run.cancel_requested");
+  });
+
   it("[UC-WORKER-04-S05] blocks duplicate local execution locks for the same issue and agent", () => {
     const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
     const first = state.acquireExecutionLock({

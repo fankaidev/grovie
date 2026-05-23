@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import { resolveLocalIdentity } from "./identity.js";
-import type { LocalStatePaths } from "./local-state.js";
+import { writeRunCancellation, type LocalStatePaths } from "./local-state.js";
 import type { AgentRuntime } from "./runtime.js";
 import { findLocalRun, listLocalRuns, type LocalRunSummary } from "./status.js";
 
@@ -44,6 +44,42 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
         service: "grovie-admin-console",
       });
       return;
+    }
+
+    if (context !== undefined && request.method === "POST") {
+      const cancelMatch = /^\/api\/runs\/(?<runId>[^/]+)\/cancel$/.exec(url.pathname);
+
+      if (cancelMatch?.groups?.runId !== undefined) {
+        const runId = decodeURIComponent(cancelMatch.groups.runId);
+        const run = findLocalRun(context.paths.runsDir, runId);
+
+        if (run === undefined) {
+          writeJson(response, 404, {
+            error: "not_found",
+            message: "Run not found.",
+          });
+          return;
+        }
+
+        if (!isCancelableRun(run)) {
+          writeJson(response, 409, {
+            error: "not_cancelable",
+            message: `Run ${run.runId} is ${run.status}; only active local runs can be canceled.`,
+          });
+          return;
+        }
+
+        const cancellation = writeRunCancellation(context.paths, {
+          runId,
+          reason: "Canceled from local admin console.",
+        });
+
+        writeJson(response, 202, {
+          ok: true,
+          cancellation,
+        });
+        return;
+      }
     }
 
     if (context !== undefined && request.method === "GET") {
@@ -332,6 +368,16 @@ function renderRunDetailPage(run: LocalRunSummary): string {
     renderLogPreview(run, "stdout"),
     renderLogPreview(run, "stderr"),
     "</section>",
+    ...(isCancelableRun(run)
+      ? [
+        "<section>",
+        "<h2>Actions</h2>",
+        `<form method="post" action="/api/runs/${encodeURIComponent(run.runId)}/cancel" onsubmit="return confirm('Cancel this local run?');">`,
+        '<button type="submit">Cancel run</button>',
+        "</form>",
+        "</section>",
+      ]
+      : []),
     "<section>",
     "<h2>Result Links</h2>",
     renderLinks(run.resultLinks),
@@ -572,6 +618,10 @@ function renderResultSummary(run: LocalRunSummary): string {
   }
 
   return `${run.status}; last event ${run.lastEventType ?? "(none)"}`;
+}
+
+function isCancelableRun(run: LocalRunSummary): boolean {
+  return run.status === "preparing" || run.status === "prepared" || run.status === "running" || run.status === "stale";
 }
 
 function readStatus(value: unknown): string {

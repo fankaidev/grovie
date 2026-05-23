@@ -401,6 +401,34 @@ describe("runIssue", () => {
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.canceled", "comment.created"]);
   });
 
+  it("[UC-ADMIN-05-S02] passes local run cancellation requests into the runtime monitor", async () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState({
+      cancellationRequested: true,
+    });
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    await runIssueAsync({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+    });
+
+    await expect(runtime.runInput?.monitor?.shouldCancel?.({} as never)).resolves.toBe(true);
+  });
+
   it("[UC-GITHUB-01-S01] posts a failure comment with the deterministic run directory when preparation fails", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState({
@@ -557,7 +585,7 @@ class FakeLocalState implements RunLocalState {
   readonly events: Array<{ type: string; data: Record<string, unknown> | undefined }> = [];
   prepareInput: Parameters<RunLocalState["prepareRun"]>[0] | undefined;
 
-  constructor(private readonly options: { prepareError?: Error } = {}) {}
+  constructor(private readonly options: { prepareError?: Error; cancellationRequested?: boolean } = {}) {}
 
   getPaths(): LocalStatePaths {
     return this.paths;
@@ -575,6 +603,10 @@ class FakeLocalState implements RunLocalState {
 
   appendEvent(_run: PreparedRun, type: string, data?: Record<string, unknown>): void {
     this.events.push({ type, data });
+  }
+
+  isRunCancellationRequested(): boolean {
+    return this.options.cancellationRequested === true;
   }
 }
 

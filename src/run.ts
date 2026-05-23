@@ -16,7 +16,7 @@ import {
   type IssueReference,
 } from "./github.js";
 import { resolveLocalIdentity, type AgentMetadata } from "./identity.js";
-import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type RunRequest } from "./local-state.js";
+import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type RunCancellation, type RunRequest } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { CodexRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeRunResult } from "./runtime.js";
 import type { SessionStatus } from "./task.js";
@@ -66,6 +66,8 @@ export type RunLocalState = {
   releaseExecutionLock?(lock: ExecutionLock): void;
   enqueueRunRequest?(input: { repository: string; issueNumber: number; agentId: string; now?: Date; sourceRunId?: string; reason?: RunRequest["reason"] }): RunRequest;
   takeRunRequest?(repository: string): RunRequest | undefined;
+  requestRunCancellation?(input: { runId: string; reason?: string; now?: Date }): RunCancellation;
+  isRunCancellationRequested?(runId: string): boolean;
   readHandledCursor?(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined;
   writeHandledCursor?(input: {
     repository: string;
@@ -140,12 +142,12 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
       ? prepared.runtime.run({
         run: prepared.run,
         issue: prepared.issue,
-        monitor: input.monitor,
+        monitor: mergeCancellationMonitor(prepared.localState, prepared.run, input.monitor),
       })
-      : await prepared.runtime.runAsync({
+    : await prepared.runtime.runAsync({
         run: prepared.run,
         issue: prepared.issue,
-        monitor: input.monitor,
+        monitor: mergeCancellationMonitor(prepared.localState, prepared.run, input.monitor),
       });
 
   return finishRun({
@@ -158,6 +160,28 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
     resultHandler: input.resultHandler,
     runtimeResult,
   });
+}
+
+function mergeCancellationMonitor(
+  localState: RunLocalState,
+  run: PreparedRun,
+  monitor: RuntimeMonitor | undefined,
+): RuntimeMonitor | undefined {
+  if (monitor === undefined && localState.isRunCancellationRequested === undefined) {
+    return undefined;
+  }
+
+  return {
+    heartbeatIntervalMs: monitor?.heartbeatIntervalMs,
+    onHeartbeat: monitor?.onHeartbeat,
+    shouldCancel: async (event) => {
+      if (localState.isRunCancellationRequested?.(run.runId) === true) {
+        return true;
+      }
+
+      return await monitor?.shouldCancel?.(event) === true;
+    },
+  };
 }
 
 export async function runClaimedIssueAsync(input: RunClaimedIssueAsyncInput): Promise<RunIssueResult> {
