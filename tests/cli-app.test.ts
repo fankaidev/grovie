@@ -3,6 +3,7 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
+import type { DaemonLifecycle, DaemonLifecycleStatus } from "../src/daemon-lifecycle.js";
 import { type AgentMetadata, resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
@@ -23,7 +24,7 @@ describe("CLI command registration", () => {
     expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "watch"]);
   });
 
-  it("[UC-WORKER-05-S01] renders help with the queue command", () => {
+  it("[UC-WORKER-05-S01] [UC-WORKER-06-S01] renders help with queue and daemon commands", () => {
     const help = renderHelp();
 
     expect(help).toContain("grovie <command>");
@@ -914,6 +915,122 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-WORKER-06-S01] runs the daemon foreground subcommand with built-in defaults", async () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    writeInvalidPolicyConfig(cwd);
+    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+
+    expect(
+      await runCliAsync(["daemon", "run", "--once"], {
+        cwd,
+        localState,
+        github: fakeGitHubGateway({
+          listOpenIssues: (repository, label) => {
+            expect(repository).toBe("fankaidev/grovie");
+            expect(label).toBe("grovie");
+
+            return {
+              ok: true,
+              value: [],
+            };
+          },
+        }),
+        runtime: fakeRuntime(),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+      ].join("\n"),
+    });
+  });
+
+  it("[UC-WORKER-06-S02] starts a detached background daemon and reports local state", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    const daemonLifecycle = fakeDaemonLifecycle({
+      start: ({ root, args }) => {
+        expect(root).toBe(localState.paths.root);
+        expect(args).toEqual(["start", "--repo", "fankaidev/grovie"]);
+
+        return {
+          ok: true,
+          state: fakeDaemonState(localState.paths.root, 1234),
+        };
+      },
+    });
+
+    expect(runCli(["daemon", "start", "--repo", "fankaidev/grovie"], { cwd, localState, daemonLifecycle })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie daemon start",
+        "",
+        "Started Grovie daemon pid 1234.",
+        `State: ${localState.paths.root}/daemon/daemon.json`,
+        `Stdout log: ${localState.paths.root}/daemon/stdout.log`,
+        `Stderr log: ${localState.paths.root}/daemon/stderr.log`,
+      ].join("\n"),
+    });
+  });
+
+  it("[UC-WORKER-06-S02] refuses to start another live background daemon", () => {
+    const localState = new FakeLocalState(createTmpDir());
+    const daemonLifecycle = fakeDaemonLifecycle({
+      start: () => ({
+        ok: false,
+        message: "Grovie daemon already appears to be running with pid 1234.",
+      }),
+    });
+
+    expect(runCli(["daemon", "start"], { localState, daemonLifecycle })).toEqual({
+      exitCode: 1,
+      stderr: "Grovie daemon already appears to be running with pid 1234.",
+    });
+  });
+
+  it("[UC-WORKER-06-S03] stops the recorded background daemon", () => {
+    const localState = new FakeLocalState(createTmpDir());
+    const daemonLifecycle = fakeDaemonLifecycle({
+      stop: ({ root }) => {
+        expect(root).toBe(localState.paths.root);
+
+        return {
+          ok: true,
+          message: "Stopped Grovie daemon pid 1234.",
+        };
+      },
+    });
+
+    expect(runCli(["daemon", "stop"], { localState, daemonLifecycle })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie daemon stop",
+        "",
+        "Stopped Grovie daemon pid 1234.",
+      ].join("\n"),
+    });
+  });
+
+  it("[UC-WORKER-06-S04] reports background daemon status", () => {
+    const localState = new FakeLocalState(createTmpDir());
+    const daemonLifecycle = fakeDaemonLifecycle({
+      status: () => ({
+        status: "running",
+        state: fakeDaemonState(localState.paths.root, 1234),
+      }),
+    });
+
+    const result = runCli(["daemon", "status"], { localState, daemonLifecycle });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Status: running");
+    expect(result.stdout).toContain("Pid: 1234");
+    expect(result.stdout).toContain(`Stdout log: ${localState.paths.root}/daemon/stdout.log`);
+  });
+
   it("runs an explicit daemon repository without reading the current checkout repository", async () => {
     const cwd = createTmpDir();
     writeInvalidPolicyConfig(cwd);
@@ -1046,6 +1163,35 @@ function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGatewa
       throw new Error("createPullRequest was not expected");
     },
     ...overrides,
+  };
+}
+
+function fakeDaemonLifecycle(overrides: Partial<DaemonLifecycle> = {}): DaemonLifecycle {
+  return {
+    start: () => ({
+      ok: false,
+      message: "daemon start was not expected",
+    }),
+    stop: () => ({
+      ok: false,
+      message: "daemon stop was not expected",
+    }),
+    status: () => ({
+      status: "stopped",
+      daemonDir: "/tmp/grovie/daemon",
+    }),
+    ...overrides,
+  };
+}
+
+function fakeDaemonState(root: string, pid: number): Extract<DaemonLifecycleStatus, { status: "running" | "stale" }>["state"] {
+  return {
+    pid,
+    command: [process.execPath, "/project/dist/cli.js", "daemon", "run"],
+    startedAt: "2026-05-23T00:00:00.000Z",
+    stdoutPath: `${root}/daemon/stdout.log`,
+    stderrPath: `${root}/daemon/stderr.log`,
+    statePath: `${root}/daemon/daemon.json`,
   };
 }
 
