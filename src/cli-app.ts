@@ -1,4 +1,4 @@
-import { buildAgentLabel } from "./assignment.js";
+import { buildAgentLabel, parseAgentId } from "./assignment.js";
 import {
   addWatchedRepository,
   CONFIG_FILE_NAME,
@@ -264,7 +264,13 @@ const commandDefinitions = [
         const targetRepository = formatIssueRepository(parsedIssueReference.value);
         const config = defaultConfig();
 
-        const agent = agentOption.value ?? config.runtime.default;
+        const requestedAgent = agentOption.value ?? config.runtime.default;
+        const workerId = requestedAgent.includes("@") ? requestedAgent : undefined;
+        const agent = requestedAgent.includes("@") ? config.runtime.default : requestedAgent;
+
+        if (workerId !== undefined) {
+          parseAgentId(workerId);
+        }
 
         if (agent !== "codex") {
           return {
@@ -282,6 +288,7 @@ const commandDefinitions = [
           github: context.github,
           runtime: context.runtime,
           localState: context.localState,
+          workerId,
         });
       } catch (error) {
         return errorResult(error);
