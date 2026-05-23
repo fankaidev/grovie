@@ -44,6 +44,8 @@ Prerequisites:
 
 Install the current source checkout:
 
+These source install commands require Node.js 20 or newer and pnpm 10.26.1.
+
 ```sh
 pnpm install
 pnpm build
@@ -85,7 +87,7 @@ grovie daemon --once
 
 ## Current Implementation
 
-The current implementation includes config initialization and validation, GitHub access through `gh`, local run state under `~/.grovie/`, the first Codex runtime adapter, one-shot issue execution, daemon polling and advisory claiming, cancellation, and result push/PR handling.
+The current implementation includes config initialization and validation, GitHub access through `gh`, local run state under `~/.grovie/`, the first Codex runtime adapter, one-shot issue execution, daemon polling and advisory claiming, cancellation, and GitHub result publishing.
 
 `~/.grovie/config.yml` is the global worker config. It contains the repositories the daemon should poll and optional per-repository queue labels. This is scheduling configuration, not a security allowlist; GitHub access is still governed by the local `gh` authentication and repository permissions.
 
@@ -99,20 +101,6 @@ The current implementation includes config initialization and validation, GitHub
 
 `grovie status` and `grovie runs list` read local run directories under `~/.grovie/runs/` and show recent session status, issue identity, branches, log paths, and last event time. `grovie runs show <run-id>` shows the worktree, run directory, stdout/stderr logs, and recent events for one run. Runs with a start event but no terminal event are shown as running, and older running-looking runs are marked stale instead of being hidden.
 
-## Use-Case Roadmap
-
-The use-case docs describe accepted product behavior, including behavior that is still being implemented. In particular, the roadmap includes:
-
-- Stable machine and agent identities such as `default@<machine-id>`.
-- Long-lived assignment labels using `agent:<agent-id>`.
-- Manual run requests that are owned by the daemon instead of the foreground CLI process.
-- Persistent sessions keyed by `(issue, agent)`, with deterministic run ids and handled cursors.
-- Local execution locks keyed by `(issue, agent)`.
-- GitHub-visible summaries that include concise status and PR links while keeping raw prompts and logs out of issue comments.
-- Optional private state repository sync for observability and recovery.
-
-Use [docs/use-cases](docs/use-cases) as the behavioral source of truth when adding or reviewing features. Keep README examples focused on the current CLI surface.
-
 ## Safety Model
 
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The safety boundary is intentionally simple:
@@ -122,19 +110,10 @@ Grovie is a local executor, so it runs with your local filesystem, GitHub creden
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
 - It refuses config that enables default-branch pushes.
-- It pushes only the generated Grovie branch, then opens a pull request.
+- It publishes code changes through a generated Grovie branch.
 - It excludes `.grovie/` handoff files from commits and unstages them before commit.
-- It does not open empty pull requests for no-change runs.
+- It does not publish empty code-change results for no-change runs.
 - It coordinates run and daemon work with visible advisory issue comments and supports explicit cancellation for daemon-owned runs.
-
-Current limitations:
-
-- Codex is the only runtime adapter.
-- GitHub access uses the local `gh` CLI.
-- There is no hosted coordination service; daemon availability depends on your machine.
-- Cancellation is cooperative around daemon heartbeats and runtime process termination.
-- Grovie does not review or merge generated pull requests for you.
-- Several behavior specs in [docs/use-cases](docs/use-cases) are roadmap items, not shipped behavior.
 
 ## Manual GitHub Checklist
 
@@ -147,7 +126,7 @@ Use this checklist before trusting a new machine or repository:
 5. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
 6. Run `grovie run owner/repo#123 --agent codex` from any directory.
 7. Confirm the issue receives a Grovie result comment with a run id and local run directory.
-8. Confirm changed runs push a Grovie branch and open a pull request against the default branch.
+8. For code-change runs, confirm Grovie publishes a generated branch and links the result from the issue.
 9. Confirm no direct push was made to the default branch.
 10. Run `grovie daemon --once` against another labeled issue.
 11. Add `/grovie cancel` to a claimed issue and confirm the daemon marks it canceled.
