@@ -121,7 +121,7 @@ describe("config helpers", () => {
     expect(() => loadConfig(cwd)).toThrow("Unrecognized key: \"repositories\"");
   });
 
-  it("loads an empty global worker config when config.yml is absent", () => {
+  it("[UC-ADMIN-01-S01] loads an empty global worker config with the admin console disabled when config.yml is absent", () => {
     const root = createTmpDir();
 
     expect(loadGlobalConfig(root)).toEqual({
@@ -129,11 +129,40 @@ describe("config helpers", () => {
       config: {
         version: 1,
         watchedRepositories: [],
+        adminConsole: {
+          enabled: false,
+        },
       },
     });
   });
 
-  it("saves and updates watched repositories in the global worker config", () => {
+  it("[UC-ADMIN-01-S01] keeps the admin console disabled by default", () => {
+    const root = createTmpDir();
+
+    expect(loadGlobalConfig(root).config.adminConsole).toEqual({
+      enabled: false,
+    });
+  });
+
+  it("[UC-ADMIN-01-S05] rejects non-local admin console bind hosts", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "watchedRepositories: []",
+        "adminConsole:",
+        "  enabled: true",
+        "  host: 0.0.0.0",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => loadGlobalConfig(root)).toThrow("adminConsole.host: Invalid input: expected \"127.0.0.1\"");
+  });
+
+  it("[UC-WORKER-02-S01] [UC-WORKER-02-S02] [UC-ADMIN-01-S01] saves watched repositories without enabling the admin console", () => {
     const root = createTmpDir();
     const added = addWatchedRepository(loadGlobalConfig(root).config, {
       repository: "fankaidev/grovie",
@@ -150,6 +179,9 @@ describe("config helpers", () => {
           label: "ready",
         },
       ],
+      adminConsole: {
+        enabled: false,
+      },
     });
 
     const removed = removeWatchedRepository(loadGlobalConfig(root).config, "fankaidev/grovie");

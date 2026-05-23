@@ -52,6 +52,11 @@ export const globalConfigSchema = z.strictObject({
     repository: repositoryNameSchema,
     label: z.string().min(1, "must not be empty").optional(),
   })),
+  adminConsole: z.strictObject({
+    enabled: z.boolean(),
+    host: z.literal("127.0.0.1").optional(),
+    port: z.number().int().min(1).max(65535).optional(),
+  }).optional(),
 });
 
 export type GlobalGrovieConfig = z.infer<typeof globalConfigSchema>;
@@ -258,6 +263,9 @@ export function defaultGlobalConfig(): GlobalGrovieConfig {
   return {
     version: 1,
     watchedRepositories: [],
+    adminConsole: {
+      enabled: false,
+    },
   };
 }
 
@@ -314,7 +322,9 @@ export function renderGlobalConfig(config: GlobalGrovieConfig): string {
 # This file schedules repositories for the local daemon. It is not a security allowlist.
 version: 1
 ${watchedRepositories}
-`;
+adminConsole:
+  enabled: ${config.adminConsole?.enabled ?? false}
+${config.adminConsole?.host === undefined ? "" : `  host: ${config.adminConsole.host}\n`}${config.adminConsole?.port === undefined ? "" : `  port: ${config.adminConsole.port}\n`}`;
 }
 
 function assertValidRepository(repository: string): void {
