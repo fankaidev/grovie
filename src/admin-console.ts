@@ -1,6 +1,7 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
+import { resolveLocalIdentity } from "./identity.js";
 import type { LocalStatePaths } from "./local-state.js";
 import type { AgentRuntime } from "./runtime.js";
 import { findLocalRun, listLocalRuns, type LocalRunSummary } from "./status.js";
@@ -222,9 +223,15 @@ function renderAdminHome(context: AdminConsoleContext): string {
   };
   const globalConfig = loadGlobalConfig(context.paths.root);
   const runs = listLocalRuns(context.paths.runsDir).slice(0, 20);
+  const identity = resolveLocalIdentity();
 
   return renderDocument("Grovie Admin Console", [
     "<h1>Grovie Admin Console</h1>",
+    "<section>",
+    "<h2>Machine</h2>",
+    `<p>Machine id: ${escapeHtml(identity.machineId)}</p>`,
+    `<p>State root: ${escapeHtml(context.paths.root)}</p>`,
+    "</section>",
     "<section>",
     "<h2>Daemon</h2>",
     `<p>Status: ${escapeHtml(readStatus(health.daemon))}</p>`,
@@ -262,6 +269,8 @@ function renderRunDetailPage(run: LocalRunSummary): string {
     "<h2>Paths</h2>",
     `<p>Worktree: ${escapeHtml(run.worktreePath ?? "(unknown)")}</p>`,
     `<p>Run directory: ${escapeHtml(run.runDir)}</p>`,
+    `<p>Prompt: ${escapeHtml(run.promptPath)}</p>`,
+    `<p>Task: ${escapeHtml(run.taskPath)}</p>`,
     `<p>Stdout: ${escapeHtml(run.stdoutPath)}</p>`,
     `<p>Stderr: ${escapeHtml(run.stderrPath)}</p>`,
     "</section>",

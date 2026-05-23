@@ -23,6 +23,8 @@ export type LocalRunSummary = {
   worktreePath?: string;
   stdoutPath: string;
   stderrPath: string;
+  promptPath: string;
+  taskPath: string;
   startedAt?: string;
   endedAt?: string;
   lastEventTime?: string;
@@ -179,6 +181,8 @@ function readLocalRun(runDir: string, directoryRunId: string, now: Date, staleAf
     worktreePath: metadata.worktreePath,
     stdoutPath: join(runDir, "stdout.log"),
     stderrPath: join(runDir, "stderr.log"),
+    promptPath: join(runDir, "prompt.md"),
+    taskPath: join(runDir, "task.json"),
     startedAt: findStartedAt(events),
     endedAt: findEndedAt(events),
     lastEventTime: lastEvent?.timestamp ?? metadata.createdAt ?? fallbackMtime(runDir),

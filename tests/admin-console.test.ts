@@ -278,6 +278,8 @@ describe("admin console server", () => {
     const html = await (await fetch(`${started.url}/`)).text();
 
     expect(html).toContain("Grovie Admin Console");
+    expect(html).toContain("Machine id:");
+    expect(html).toContain(root);
     expect(html).toContain("Daemon");
     expect(html).toContain("codex");
     expect(html).toContain("fankaidev/grovie label=ready");
@@ -308,6 +310,8 @@ describe("admin console server", () => {
     expect(html).toContain("coder@fankai-mac");
     expect(html).toContain("grovie/issue-73");
     expect(html).toContain("/tmp/grovie/worktrees/run-1");
+    expect(html).toContain("prompt.md");
+    expect(html).toContain("task.json");
     expect(html).toContain("stdout.log");
     expect(html).toContain("stderr.log");
     expect(html).toContain("comment.created");
