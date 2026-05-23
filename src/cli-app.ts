@@ -11,6 +11,7 @@ import {
   type LoadedConfig,
 } from "./config.js";
 import { runDaemon, runDaemonForRepositories } from "./daemon.js";
+import { followDaemonLogs, parseDaemonLogStream, readDaemonLogs } from "./daemon-logs.js";
 import { LocalDaemonLifecycle, renderDaemonLifecycleStatus, type DaemonLifecycle } from "./daemon-lifecycle.js";
 import { formatIssueReference, GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
@@ -388,7 +389,7 @@ const commandDefinitions = [
   {
     name: "daemon",
     description: "Run and control the local Grovie daemon.",
-    usage: "grovie daemon <run|start|stop|status> [--repo owner/repo] [--label grovie] [--once]",
+    usage: "grovie daemon <run|start|stop|status|logs> [--repo owner/repo] [--label grovie] [--once]",
     issue: "#77",
     run: (args: string[], context: CliContext) => {
       const [subcommand] = args;
@@ -446,6 +447,56 @@ const commandDefinitions = [
             root: context.localState.getPaths().root,
           })),
         };
+      }
+
+      if (subcommand === "logs") {
+        try {
+          const logArgs = args.slice(1);
+          const streamOption = readStringOption(logArgs, "--stream");
+
+          if (!streamOption.ok) {
+            return streamOption.result;
+          }
+
+          const linesOption = readNumberOption(logArgs, "--lines");
+
+          if (!linesOption.ok) {
+            return linesOption.result;
+          }
+
+          const input = {
+            root: context.localState.getPaths().root,
+            stream: parseDaemonLogStream(streamOption.value),
+            lines: linesOption.value,
+          };
+
+          if (logArgs.includes("--follow")) {
+            const result = followDaemonLogs(input);
+
+            return result.ok
+              ? {
+                exitCode: result.exitCode,
+              }
+              : {
+                exitCode: 1,
+                stderr: result.message,
+              };
+          }
+
+          const result = readDaemonLogs(input);
+
+          return result.ok
+            ? {
+              exitCode: 0,
+              stdout: result.output,
+            }
+            : {
+              exitCode: 1,
+              stderr: result.message,
+            };
+        } catch (error) {
+          return errorResult(error);
+        }
       }
 
       const runArgs = subcommand === "run" ? args.slice(1) : args;
@@ -773,6 +824,41 @@ function readStringOption(
       result: {
         exitCode: 1,
         stderr: `Missing value for ${name}.`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    value,
+  };
+}
+
+function readNumberOption(
+  args: string[],
+  name: string,
+): { ok: true; value: number | undefined } | { ok: false; result: CliResult } {
+  const option = readStringOption(args, name);
+
+  if (!option.ok) {
+    return option;
+  }
+
+  if (option.value === undefined) {
+    return {
+      ok: true,
+      value: undefined,
+    };
+  }
+
+  const value = Number(option.value);
+
+  if (!Number.isInteger(value) || value < 1) {
+    return {
+      ok: false,
+      result: {
+        exitCode: 1,
+        stderr: `Invalid value for ${name}. Expected a positive integer.`,
       },
     };
   }

@@ -1031,6 +1031,51 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain(`Stdout log: ${localState.paths.root}/daemon/stdout.log`);
   });
 
+  it("[UC-WORKER-06-S05] prints recent daemon logs from local daemon state", () => {
+    const localState = new FakeLocalState(createTmpDir());
+    writeDaemonLogs(localState.paths.root, {
+      stdout: "stdout old\nstdout new\n",
+      stderr: "stderr old\nstderr new\n",
+    });
+
+    expect(runCli(["daemon", "logs", "--lines", "1"], { localState })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie daemon logs",
+        "",
+        "Stream: combined",
+        `== stdout (${localState.paths.root}/daemon/stdout.log) ==`,
+        "stdout new",
+        `== stderr (${localState.paths.root}/daemon/stderr.log) ==`,
+        "stderr new",
+      ].join("\n"),
+    });
+  });
+
+  it("[UC-WORKER-06-S06] selects a daemon log stream through the CLI", () => {
+    const localState = new FakeLocalState(createTmpDir());
+    writeDaemonLogs(localState.paths.root, {
+      stdout: "daemon stdout\n",
+      stderr: "daemon stderr\n",
+    });
+
+    const result = runCli(["daemon", "logs", "--stream", "stderr"], { localState });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Stream: stderr");
+    expect(result.stdout).toContain("daemon stderr");
+    expect(result.stdout).not.toContain("daemon stdout");
+  });
+
+  it("[UC-WORKER-06-S07] reports missing daemon logs through the CLI", () => {
+    const localState = new FakeLocalState(createTmpDir());
+
+    expect(runCli(["daemon", "logs"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: `Daemon logs are not available because ${localState.paths.root}/daemon does not exist. Run \`grovie daemon start\` first.`,
+    });
+  });
+
   it("runs an explicit daemon repository without reading the current checkout repository", async () => {
     const cwd = createTmpDir();
     writeInvalidPolicyConfig(cwd);
@@ -1194,6 +1239,13 @@ function fakeDaemonState(root: string, pid: number): Extract<DaemonLifecycleStat
     statePath: `${root}/daemon/daemon.json`,
     token: "daemon-token",
   };
+}
+
+function writeDaemonLogs(root: string, input: { stdout: string; stderr: string }): void {
+  const daemonDir = join(root, "daemon");
+  mkdirSync(daemonDir, { recursive: true });
+  writeFileSync(join(daemonDir, "stdout.log"), input.stdout, "utf8");
+  writeFileSync(join(daemonDir, "stderr.log"), input.stderr, "utf8");
 }
 
 class FakeLocalState implements RunLocalState {
