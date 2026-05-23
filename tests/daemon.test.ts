@@ -241,6 +241,129 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments[0]).toContain(`- Worker: \`coder@${machineId}\``);
   });
 
+  it("[UC-WORKER-04-S09] picks runnable assigned issues by priority before GitHub list order", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: fakeReference(8),
+        labels: ["grovie", `agent:coder@${machineId}`, "priority:p2"],
+      }),
+      fakeIssue({
+        reference: fakeReference(9),
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+      fakeIssue({
+        reference: fakeReference(10),
+        labels: ["grovie", `agent:coder@${machineId}`, "priority:p0"],
+      }),
+      fakeIssue({
+        reference: fakeReference(11),
+        labels: ["grovie", `agent:coder@${machineId}`, "priority:p1"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran prioritized issue",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]?.issueReference.number).toBe(10);
+  });
+
+  it("[UC-WORKER-04-S09] uses older activity first within the same priority", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: fakeReference(8),
+        updatedAt: "2026-05-22T00:00:05.000Z",
+        labels: ["grovie", `agent:coder@${machineId}`, "priority:p1"],
+      }),
+      fakeIssue({
+        reference: fakeReference(9),
+        updatedAt: "2026-05-22T00:00:01.000Z",
+        labels: ["grovie", `agent:coder@${machineId}`, "priority:p1"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran older activity",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]?.issueReference.number).toBe(9);
+  });
+
+  it("[UC-WORKER-04-S10] skips a blocked high-priority issue and runs a lower-priority candidate", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.acquireExecutionLock({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `coder@${machineId}`,
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: fakeReference(8),
+        labels: ["grovie", `agent:coder@${machineId}`, "priority:p0"],
+      }),
+      fakeIssue({
+        reference: fakeReference(9),
+        labels: ["grovie", `agent:coder@${machineId}`, "priority:p1"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran lower priority",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]?.issueReference.number).toBe(9);
+  });
+
   it("[UC-EXECUTION-03-S02] skips assigned runs when Codex is unavailable", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
@@ -1301,6 +1424,14 @@ function fakeIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
     comments: [],
     defaultBranch: "main",
     ...overrides,
+  };
+}
+
+function fakeReference(number: number): IssueReference {
+  return {
+    owner: "fankaidev",
+    repo: "grovie",
+    number,
   };
 }
 

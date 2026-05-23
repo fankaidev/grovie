@@ -53,7 +53,22 @@ type IssueActivity = {
   issueFingerprint: string;
 };
 
+type RunnableCandidate = {
+  issueReference: IssueReference;
+  agentId: string;
+  issueActivity: IssueActivity;
+  priority: IssuePriority;
+};
+
+type IssuePriority = "p0" | "p1" | "p2" | "none";
+
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
+const PRIORITY_RANK: Record<IssuePriority, number> = {
+  p0: 0,
+  p1: 1,
+  p2: 2,
+  none: 3,
+};
 
 export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
   const daemonLockResult = acquireDaemonLock(input);
@@ -197,6 +212,8 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     };
   }
 
+  const runnableCandidates: RunnableCandidate[] = [];
+
   for (const summary of listResult.value) {
     const issueResult = input.github.readIssue(summary.reference);
 
@@ -254,15 +271,26 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
         continue;
       }
 
-      return claimAndRun({
-        ...input,
+      runnableCandidates.push({
         issueReference: summary.reference,
-        workerId: agentId,
+        agentId,
         issueActivity,
-        now,
-        issueRunner,
+        priority: getIssuePriority(issueResult.value.labels),
       });
     }
+  }
+
+  const candidate = runnableCandidates.sort(compareRunnableCandidates)[0];
+
+  if (candidate !== undefined) {
+    return claimAndRun({
+      ...input,
+      issueReference: candidate.issueReference,
+      workerId: candidate.agentId,
+      issueActivity: candidate.issueActivity,
+      now,
+      issueRunner,
+    });
   }
 
   return {
@@ -459,6 +487,31 @@ function getCandidateAgentIds(input: {
   }
 
   return assignedAgentIds.filter((agentId) => agentId.endsWith(`@${input.machineId}`));
+}
+
+function compareRunnableCandidates(left: RunnableCandidate, right: RunnableCandidate): number {
+  return (
+    PRIORITY_RANK[left.priority] - PRIORITY_RANK[right.priority] ||
+    Date.parse(left.issueActivity.timestamp) - Date.parse(right.issueActivity.timestamp) ||
+    left.issueReference.number - right.issueReference.number ||
+    left.agentId.localeCompare(right.agentId)
+  );
+}
+
+function getIssuePriority(labels: string[]): IssuePriority {
+  if (labels.includes("priority:p0")) {
+    return "p0";
+  }
+
+  if (labels.includes("priority:p1")) {
+    return "p1";
+  }
+
+  if (labels.includes("priority:p2")) {
+    return "p2";
+  }
+
+  return "none";
 }
 
 function isHandledCursorCovered(

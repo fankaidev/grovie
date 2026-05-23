@@ -22,3 +22,5 @@
 | UC-WORKER-04-S06 | P0 | An issue assigned to two local agents can create independent runs for both agents. |
 | UC-WORKER-04-S07 | P1 | A reviewer agent assigned before a PR exists can still run and decide from context that no action is needed. |
 | UC-WORKER-04-S08 | P1 | A daemon watching multiple repositories checks each configured repository for assigned local agents. |
+| UC-WORKER-04-S09 | P1 | Runnable assigned issues are picked by `priority:p0`, then `priority:p1`, then `priority:p2`, then no priority label, with older activity first within the same priority. |
+| UC-WORKER-04-S10 | P1 | A skipped high-priority issue does not block a lower-priority runnable assigned issue. |
