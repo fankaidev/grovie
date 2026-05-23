@@ -13,6 +13,7 @@ Keep the project small:
 - Use `pnpm` for dependency management and script execution.
 - Use the `gh` CLI for GitHub operations.
 - Use GitHub issues for non-trivial work.
+- For non-trivial behavior changes, follow `docs/bdd.md` and update the relevant use cases under `docs/use-cases/`.
 - Mark active issues with `in-progress` and `worker:grovie`.
 - Create branches from `origin/main` with the format `issue-{number}`.
 - Never push directly to `main`.
