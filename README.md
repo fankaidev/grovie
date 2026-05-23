@@ -71,6 +71,8 @@ The current implementation includes config initialization and validation, GitHub
 
 `grovie run owner/repo#123 --agent codex` derives the repository from the issue reference. It reads the issue, refuses to start when another active Grovie claim owns the issue, prepares an isolated per-attempt local worktree under `~/.grovie/`, runs Codex there, and comments back with the result, local branch, and run id. If files changed, Grovie commits the worktree, pushes the deterministic issue branch, and opens a pull request. No-change runs comment back without opening an empty PR.
 
+`grovie status` and `grovie runs list` read local run directories under `~/.grovie/runs/` and show recent run status, issue identity, branches, log paths, and last event time. `grovie runs show <run-id>` shows the worktree, run directory, stdout/stderr logs, and recent events for one run. Runs with a start event but no terminal event are shown as active, and older active-looking runs are marked stale instead of being hidden.
+
 `grovie daemon` polls watched repositories from `~/.grovie/config.yml`, claims one visible issue at a time with an editable comment marker, and runs the same one-shot path. The claim is an advisory GitHub issue comment, not a hard distributed lock; the final fixed issue branch push remains the race detector, and Grovie does not force-push over remote work. Use `--once` for a single polling cycle. Use `--repo owner/repo` for an explicit single-repository debugging cycle. A `/grovie cancel` comment or `<label>:cancel` label cancels a claimed run; while Codex is running, the daemon checks cancellation on each heartbeat and terminates the child process.
 
 ## Safety Model

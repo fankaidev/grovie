@@ -14,6 +14,7 @@ import { GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./gith
 import { LocalState } from "./local-state.js";
 import { runClaimedIssueAsync, type RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
+import { findLocalRun, listLocalRuns, renderRunDetail, renderRunsList } from "./status.js";
 import { GROVIE_VERSION } from "./version.js";
 
 export type CliResult = {
@@ -99,6 +100,73 @@ const commandDefinitions = [
         return {
           exitCode: 0,
           stdout: doctorOutput.join("\n"),
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  },
+  {
+    name: "status",
+    description: "Show active and recent local Grovie runs.",
+    usage: "grovie status",
+    issue: "#36",
+    run: (_args: string[], context: CliContext) => {
+      try {
+        const runs = listLocalRuns(context.localState.getPaths().runsDir);
+
+        return {
+          exitCode: 0,
+          stdout: renderRunsList(runs, "grovie status"),
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  },
+  {
+    name: "runs",
+    description: "Inspect local Grovie run history and logs.",
+    usage: "grovie runs <list|show> [run-id]",
+    issue: "#36",
+    run: (args: string[], context: CliContext) => {
+      const [subcommand, runId] = args;
+      const runsDir = context.localState.getPaths().runsDir;
+
+      try {
+        if (subcommand === "list") {
+          return {
+            exitCode: 0,
+            stdout: renderRunsList(listLocalRuns(runsDir)),
+          };
+        }
+
+        if (subcommand === "show") {
+          if (runId === undefined) {
+            return {
+              exitCode: 1,
+              stderr: "Missing run id. Usage: grovie runs show <run-id>",
+            };
+          }
+
+          const run = findLocalRun(runsDir, runId);
+
+          if (run === undefined) {
+            return {
+              exitCode: 1,
+              stderr: `Run not found: ${runId}`,
+            };
+          }
+
+          return {
+            exitCode: 0,
+            stdout: renderRunDetail(run),
+          };
+        }
+
+        return {
+          exitCode: 1,
+          stderr: "Missing runs subcommand. Usage: grovie runs <list|show> [run-id]",
         };
       } catch (error) {
         return errorResult(error);

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe("CLI command registration", () => {
   it("registers the MVP command set", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "run", "daemon", "watch"]);
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "run", "daemon", "watch"]);
   });
 
   it("renders help with the MVP commands", () => {
@@ -29,6 +29,8 @@ describe("CLI command registration", () => {
     expect(help).toContain("-v, --version");
     expect(help).toContain("init");
     expect(help).toContain("doctor");
+    expect(help).toContain("status");
+    expect(help).toContain("runs");
     expect(help).toContain("run");
     expect(help).toContain("daemon");
     expect(help).toContain("watch");
@@ -165,6 +167,89 @@ describe("CLI command registration", () => {
     ).toEqual({
       exitCode: 1,
       stderr: "gh auth required",
+    });
+  });
+
+  it("shows active and recent local runs through status", () => {
+    const cwd = createTmpDir();
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    writeLocalRun(localState.paths.runsDir, "active-run", {
+      metadata: {
+        runId: "active-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 36,
+        branchName: "grovie/issue-36",
+        worktreePath: "/tmp/grovie/worktrees/active-run",
+      },
+      events: [
+        {
+          timestamp: "2999-05-23T10:00:00.000Z",
+          type: "runtime.started",
+          data: {
+            runtime: "codex",
+          },
+        },
+      ],
+    });
+
+    const result = runCli(["status"], { cwd, localState });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("grovie status");
+    expect(result.stdout).toContain("- active-run");
+    expect(result.stdout).toContain("Status: active");
+    expect(result.stdout).toContain("Issue: fankaidev/grovie#36");
+    expect(result.stdout).toContain(`Logs: stdout=${join(localState.paths.runsDir, "active-run", "stdout.log")}`);
+  });
+
+  it("lists and shows local runs through runs subcommands", () => {
+    const cwd = createTmpDir();
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    writeLocalRun(localState.paths.runsDir, "failed-run", {
+      metadata: {
+        runId: "failed-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 37,
+        branchName: "grovie/issue-37",
+        localBranchName: "grovie/issue-37-attempt",
+        worktreePath: "/tmp/grovie/worktrees/failed-run",
+      },
+      events: [
+        {
+          timestamp: "2026-05-23T10:00:00.000Z",
+          type: "runtime.started",
+          data: {
+            runtime: "codex",
+          },
+        },
+        {
+          timestamp: "2026-05-23T10:01:00.000Z",
+          type: "run.failed",
+          data: {
+            exitCode: 1,
+          },
+        },
+      ],
+    });
+
+    expect(runCli(["runs", "list"], { cwd, localState }).stdout).toContain("Status: failed");
+
+    const detail = runCli(["runs", "show", "failed-run"], { cwd, localState });
+
+    expect(detail.exitCode).toBe(0);
+    expect(detail.stdout).toContain("grovie runs show");
+    expect(detail.stdout).toContain("Run id: failed-run");
+    expect(detail.stdout).toContain("Local branch: grovie/issue-37-attempt");
+    expect(detail.stdout).toContain(`Stderr log: ${join(localState.paths.runsDir, "failed-run", "stderr.log")}`);
+    expect(detail.stdout).toContain('run.failed {"exitCode":1}');
+  });
+
+  it("requires a run id for runs show", () => {
+    expect(runCli(["runs", "show"])).toEqual({
+      exitCode: 1,
+      stderr: "Missing run id. Usage: grovie runs show <run-id>",
     });
   });
 
@@ -479,6 +564,22 @@ function createTmpDir(): string {
 
 function writeInvalidPolicyConfig(cwd: string): void {
   writeFileSync(join(cwd, ".grovie.yml"), "version: 1\nunsupported: true\n", "utf8");
+}
+
+function writeLocalRun(
+  runsDir: string,
+  runId: string,
+  input: {
+    metadata: Record<string, unknown>;
+    events: Array<Record<string, unknown>>;
+  },
+): void {
+  const runDir = join(runsDir, runId);
+  mkdirSync(runDir, { recursive: true });
+  writeFileSync(join(runDir, "metadata.json"), `${JSON.stringify(input.metadata, null, 2)}\n`, "utf8");
+  writeFileSync(join(runDir, "events.jsonl"), input.events.map((event) => JSON.stringify(event)).join("\n"), "utf8");
+  writeFileSync(join(runDir, "stdout.log"), "", "utf8");
+  writeFileSync(join(runDir, "stderr.log"), "", "utf8");
 }
 
 function fakeRuntime(availability: Partial<RuntimeAvailability> = {}): AgentRuntime {
