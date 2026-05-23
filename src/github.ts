@@ -711,13 +711,14 @@ function summarizeCheckRuns(checkRuns: GitHubCheckRunResponse[]): GitHubCheckSum
 
 function isPullRequestRelatedToIssue(pullRequest: GitHubPullRequestListItemResponse, issueNumber: number): boolean {
   const issueReferencePattern = new RegExp(`(?:^|[^\\d])#${issueNumber}(?:\\D|$)`);
+  const branchIssuePattern = new RegExp(`(?:^|[^A-Za-z0-9])issue-${issueNumber}(?:[^A-Za-z0-9]|$)`);
   const closingKeywordPattern = new RegExp(
     `\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#${issueNumber}\\b`,
     "i",
   );
 
   return (
-    pullRequest.head.ref.includes(`issue-${issueNumber}`) ||
+    branchIssuePattern.test(pullRequest.head.ref) ||
     issueReferencePattern.test(pullRequest.body ?? "") ||
     closingKeywordPattern.test(pullRequest.body ?? "")
   );
