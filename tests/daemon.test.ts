@@ -1,7 +1,9 @@
-import { hostname } from "node:os";
-import { describe, expect, it } from "vitest";
+import { rmSync } from "node:fs";
+import { hostname, tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import type { GrovieConfig } from "../src/config.js";
-import { runDaemonCycle, runDaemonForRepositories } from "../src/daemon.js";
+import { runDaemon, runDaemonCycle, runDaemonForRepositories } from "../src/daemon.js";
 import type {
   CreatedComment,
   GitHubGateway,
@@ -10,9 +12,17 @@ import type {
   IssueReference,
 } from "../src/github.js";
 import { resolveMachineId } from "../src/identity.js";
+import { LocalState } from "../src/local-state.js";
 import type { RunIssueAsyncInput, RunIssueResult } from "../src/run.js";
 
 const NOW = new Date("2026-05-22T00:00:00Z");
+const tmpDirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of tmpDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 describe("runDaemonCycle", () => {
   it("claims one queued issue, runs it once, and updates the claim", async () => {
@@ -90,6 +100,68 @@ describe("runDaemonCycle", () => {
       configPath: "/project/.grovie.yml",
       github,
       once: true,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(github.createdComments).toEqual([]);
+  });
+
+  it("[UC-WORKER-04-S01] refuses to start when a live daemon lock exists", async () => {
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const existingLock = localState.acquireDaemonLock(resolveMachineId(hostname()), NOW);
+
+    expect(existingLock.ok).toBe(true);
+
+    await expect(runDaemon({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([]),
+      once: true,
+      localState,
+      now: () => NOW,
+    })).resolves.toEqual({
+      exitCode: 1,
+      stderr: `Grovie daemon already appears to be running for machine ${resolveMachineId(hostname())} with pid ${process.pid}.`,
+    });
+  });
+
+  it("[UC-WORKER-04-S05] skips an issue when a local execution lock already exists", async () => {
+    const github = new FakeGitHub([fakeIssue()]);
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.acquireExecutionLock({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${resolveMachineId(hostname())}`,
+      now: NOW,
+    });
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
       now: () => NOW,
       issueRunner: (input) => {
         runs.push(input);
@@ -542,4 +614,10 @@ function fakeComment(overrides: Partial<GitHubIssue["comments"][number]> = {}): 
     updatedAt: NOW.toISOString(),
     ...overrides,
   };
+}
+
+function createTmpDir(): string {
+  const dir = join(tmpdir(), `grovie-daemon-${Math.random().toString(16).slice(2)}`);
+  tmpDirs.push(dir);
+  return dir;
 }

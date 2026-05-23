@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -48,6 +48,76 @@ describe("LocalState", () => {
       envKeys: ["OPENAI_API_KEY"],
     });
     expect(JSON.stringify(metadata)).not.toContain("secret");
+  });
+
+  it("[UC-WORKER-04-S01] refuses a second live daemon lock for the same machine", () => {
+    const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
+    const first = state.acquireDaemonLock("fankai-mac", new Date("2026-05-23T00:00:00Z"));
+    const second = state.acquireDaemonLock("fankai-mac", new Date("2026-05-23T00:00:01Z"));
+
+    expect(first.ok).toBe(true);
+    expect(second).toEqual({
+      ok: false,
+      message: `Grovie daemon already appears to be running for machine fankai-mac with pid ${process.pid}.`,
+    });
+  });
+
+  it("[UC-WORKER-04-S02] recovers a stale daemon lock", () => {
+    const root = createTmpDir();
+    mkdirSync(join(root, "locks"), { recursive: true });
+    writeFileSync(
+      join(root, "locks", "daemon-fankai-mac.json"),
+      `${JSON.stringify({
+        machineId: "fankai-mac",
+        pid: -1,
+        acquiredAt: "2026-05-23T00:00:00Z",
+        path: join(root, "locks", "daemon-fankai-mac.json"),
+      })}\n`,
+      "utf8",
+    );
+
+    const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
+    const result = state.acquireDaemonLock("fankai-mac", new Date("2026-05-23T00:00:01Z"));
+
+    expect(result.ok).toBe(true);
+    expect(result.ok ? result.recoveredStale : false).toBe(true);
+  });
+
+  it("[UC-WORKER-04-S05] blocks duplicate local execution locks for the same issue and agent", () => {
+    const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
+    const first = state.acquireExecutionLock({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "default@fankai-mac",
+      now: new Date("2026-05-23T00:00:00Z"),
+    });
+    const second = state.acquireExecutionLock({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "default@fankai-mac",
+      now: new Date("2026-05-23T00:00:01Z"),
+    });
+
+    expect(first.ok).toBe(true);
+    expect(second).toEqual({
+      ok: false,
+      message: "Grovie execution already appears active for fankaidev/grovie#8 and default@fankai-mac.",
+    });
+  });
+
+  it("[UC-WORKER-04-S06] allows different agents to hold independent execution locks on one issue", () => {
+    const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
+
+    expect(state.acquireExecutionLock({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "coder@fankai-mac",
+    }).ok).toBe(true);
+    expect(state.acquireExecutionLock({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: "reviewer@fankai-mac",
+    }).ok).toBe(true);
   });
 
   it("creates repo cache, worktree, and run artifacts without touching the checkout", () => {

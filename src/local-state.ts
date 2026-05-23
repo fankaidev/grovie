@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
@@ -11,6 +11,7 @@ export type LocalStatePaths = {
   worktreesDir: string;
   runsDir: string;
   agentsDir: string;
+  locksDir: string;
 };
 
 export type PrepareRunInput = {
@@ -41,6 +42,32 @@ export type LocalStateOptions = {
   runner?: CommandRunner;
 };
 
+export type DaemonLock = {
+  machineId: string;
+  pid: number;
+  acquiredAt: string;
+  path: string;
+};
+
+export type ExecutionLock = {
+  repository: string;
+  issueNumber: number;
+  agentId: string;
+  acquiredAt: string;
+  path: string;
+};
+
+export type LockResult<T> =
+  | {
+    ok: true;
+    lock: T;
+    recoveredStale?: boolean;
+  }
+  | {
+    ok: false;
+    message: string;
+  };
+
 export class LocalState {
   private readonly paths: LocalStatePaths;
   private readonly runner: CommandRunner;
@@ -60,11 +87,86 @@ export class LocalState {
     mkdirSync(this.paths.worktreesDir, { recursive: true });
     mkdirSync(this.paths.runsDir, { recursive: true });
     mkdirSync(this.paths.agentsDir, { recursive: true });
+    mkdirSync(this.paths.locksDir, { recursive: true });
   }
 
   registerAgent(metadata: AgentMetadata): void {
     this.ensureBaseDirectories();
     writeJsonFile(join(this.paths.agentsDir, `${sanitizePathPart(metadata.agentId)}.json`), metadata);
+  }
+
+  acquireDaemonLock(machineId: string, now = new Date()): LockResult<DaemonLock> {
+    this.ensureBaseDirectories();
+    const path = join(this.paths.locksDir, `daemon-${sanitizePathPart(machineId)}.json`);
+    const existing = readJsonFile<Partial<DaemonLock>>(path);
+    const recoveredStale = existing !== undefined && !isLivePid(existing.pid);
+
+    if (existing !== undefined && !recoveredStale) {
+      return {
+        ok: false,
+        message: `Grovie daemon already appears to be running for machine ${machineId} with pid ${existing.pid}.`,
+      };
+    }
+
+    const lock = {
+      machineId,
+      pid: process.pid,
+      acquiredAt: now.toISOString(),
+      path,
+    };
+
+    writeJsonFile(path, lock);
+
+    return {
+      ok: true,
+      lock,
+      recoveredStale,
+    };
+  }
+
+  releaseDaemonLock(lock: DaemonLock): void {
+    removeFileIfExists(lock.path);
+  }
+
+  acquireExecutionLock(input: {
+    repository: string;
+    issueNumber: number;
+    agentId: string;
+    now?: Date;
+  }): LockResult<ExecutionLock> {
+    this.ensureBaseDirectories();
+    const path = this.getExecutionLockPath(input.repository, input.issueNumber, input.agentId);
+    const existing = readJsonFile<Partial<ExecutionLock>>(path);
+
+    if (existing !== undefined) {
+      return {
+        ok: false,
+        message: `Grovie execution already appears active for ${input.repository}#${input.issueNumber} and ${input.agentId}.`,
+      };
+    }
+
+    const lock = {
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      agentId: input.agentId,
+      acquiredAt: (input.now ?? new Date()).toISOString(),
+      path,
+    };
+
+    writeJsonFile(path, lock);
+
+    return {
+      ok: true,
+      lock,
+    };
+  }
+
+  hasExecutionLock(input: { repository: string; issueNumber: number; agentId: string }): boolean {
+    return existsSync(this.getExecutionLockPath(input.repository, input.issueNumber, input.agentId));
+  }
+
+  releaseExecutionLock(lock: ExecutionLock): void {
+    removeFileIfExists(lock.path);
   }
 
   prepareRun(input: PrepareRunInput): PreparedRun {
@@ -215,6 +317,13 @@ export class LocalState {
     return join(this.paths.reposDir, `${sanitizeRepository(repository)}.git`);
   }
 
+  private getExecutionLockPath(repository: string, issueNumber: number, agentId: string): string {
+    return join(
+      this.paths.locksDir,
+      `execution-${sanitizePathPart(repository)}-issue-${issueNumber}-${sanitizePathPart(agentId)}.json`,
+    );
+  }
+
   private ensureWorktree(input: {
     repositoryCachePath: string;
     worktreePath: string;
@@ -274,6 +383,7 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
     worktreesDir: overrides.worktreesDir ?? join(root, "worktrees"),
     runsDir: overrides.runsDir ?? join(root, "runs"),
     agentsDir: overrides.agentsDir ?? join(root, "agents"),
+    locksDir: overrides.locksDir ?? join(root, "locks"),
   };
 }
 
@@ -320,6 +430,33 @@ function appendRunEvent(run: Pick<PreparedRun, "eventsPath">, type: string, data
 
 function writeJsonFile(path: string, value: unknown): void {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function readJsonFile<T>(path: string): T | undefined {
+  if (!existsSync(path)) {
+    return undefined;
+  }
+
+  return JSON.parse(readFileSync(path, "utf8")) as T;
+}
+
+function removeFileIfExists(path: string): void {
+  if (existsSync(path)) {
+    unlinkSync(path);
+  }
+}
+
+function isLivePid(pid: unknown): boolean {
+  if (typeof pid !== "number" || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function toErrorMessage(error: unknown): string {

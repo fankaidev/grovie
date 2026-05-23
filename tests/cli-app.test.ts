@@ -751,6 +751,7 @@ class FakeLocalState implements RunLocalState {
       worktreesDir: `${root}/worktrees`,
       runsDir: `${root}/runs`,
       agentsDir: `${root}/agents`,
+      locksDir: `${root}/locks`,
     };
   }
 
