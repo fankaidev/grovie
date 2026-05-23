@@ -86,6 +86,13 @@ export type RunRequest = {
   reason?: "manual" | "retry" | "rerun";
 };
 
+export type RunCancellation = {
+  runId: string;
+  requestedAt: string;
+  reason: string;
+  path: string;
+};
+
 export type LockResult<T> =
   | {
     ok: true;
@@ -256,6 +263,15 @@ export class LocalState {
     }
 
     return undefined;
+  }
+
+  requestRunCancellation(input: { runId: string; reason?: string; now?: Date }): RunCancellation {
+    this.ensureBaseDirectories();
+    return writeRunCancellation(this.paths, input);
+  }
+
+  isRunCancellationRequested(runId: string): boolean {
+    return existsSync(getRunCancellationPath(this.paths, runId));
   }
 
   readHandledCursor(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined {
@@ -538,6 +554,35 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
   };
 }
 
+export function writeRunCancellation(
+  paths: LocalStatePaths,
+  input: { runId: string; reason?: string; now?: Date },
+): RunCancellation {
+  const runDir = join(paths.runsDir, sanitizePathPart(input.runId));
+  const path = join(runDir, "cancel.json");
+  const requestedAt = (input.now ?? new Date()).toISOString();
+  const cancellation = {
+    runId: input.runId,
+    requestedAt,
+    reason: input.reason ?? "Canceled from local admin console.",
+    path,
+  };
+
+  if (!existsSync(runDir)) {
+    throw new Error(`Run not found: ${input.runId}`);
+  }
+
+  writeJsonFile(path, cancellation);
+  appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "run.cancel_requested", {
+    reason: cancellation.reason,
+  });
+  return cancellation;
+}
+
+export function isRunCancellationRequested(paths: LocalStatePaths, runId: string): boolean {
+  return existsSync(getRunCancellationPath(paths, runId));
+}
+
 export function buildSessionId(repository: string, issueNumber: number, agentId: string): string {
   return `${sanitizeRepository(repository)}-issue-${issueNumber}-${sanitizePathPart(agentId)}`;
 }
@@ -561,6 +606,10 @@ export function buildRunTimestamp(now = new Date()): string {
 
 function sanitizeRepository(repository: string): string {
   return repository.replace(/[^A-Za-z0-9._-]/g, "-");
+}
+
+function getRunCancellationPath(paths: LocalStatePaths, runId: string): string {
+  return join(paths.runsDir, sanitizePathPart(runId), "cancel.json");
 }
 
 function sanitizePathPart(value: string): string {
