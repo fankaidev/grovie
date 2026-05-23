@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
 import type { GrovieConfig } from "./config.js";
-import { getAssignedAgentIds, isAssignedToLocalMachine } from "./assignment.js";
 import {
   createIssueClaim,
   hasCancelRequest,
@@ -9,12 +7,11 @@ import {
 import {
   formatIssueReference,
   type GitHubGateway,
-  type GitHubIssue,
-  type GitHubRelatedPullRequest,
   type IssueReference,
 } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
 import type { DaemonLock, ExecutionLock } from "./local-state.js";
+import { getIssueActivity, inspectQueue, selectNextRunnableCandidate, type IssueActivity } from "./queue.js";
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
 import { runIssueAsync } from "./run.js";
 import type { AgentRuntime } from "./runtime.js";
@@ -48,27 +45,7 @@ type DaemonCycleResult = RunIssueResult & {
   processed: boolean;
 };
 
-type IssueActivity = {
-  timestamp: string;
-  issueFingerprint: string;
-};
-
-type RunnableCandidate = {
-  issueReference: IssueReference;
-  agentId: string;
-  issueActivity: IssueActivity;
-  priority: IssuePriority;
-};
-
-type IssuePriority = "p0" | "p1" | "p2" | "none";
-
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
-const PRIORITY_RANK: Record<IssuePriority, number> = {
-  p0: 0,
-  p1: 1,
-  p2: 2,
-  none: 3,
-};
 
 export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
   const daemonLockResult = acquireDaemonLock(input);
@@ -202,92 +179,34 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     });
   }
 
-  const listResult = input.github.listOpenIssues(input.repository, input.label);
+  const queueResult = inspectQueue({
+    repositories: [
+      {
+        repository: input.repository,
+        label: input.label,
+      },
+    ],
+    github: input.github,
+    machineId: identity.machineId,
+    localState: input.localState,
+  });
 
-  if (!listResult.ok) {
+  if (!queueResult.ok) {
     return {
       exitCode: 1,
       processed: false,
-      stderr: listResult.error.message,
+      stderr: queueResult.message,
     };
   }
 
-  const runnableCandidates: RunnableCandidate[] = [];
-
-  for (const summary of listResult.value) {
-    const issueResult = input.github.readIssue(summary.reference);
-
-    if (!issueResult.ok) {
-      return {
-        exitCode: 1,
-        processed: false,
-        stderr: issueResult.error.message,
-      };
-    }
-
-    if (hasCancelRequest(issueResult.value, input.label)) {
-      continue;
-    }
-
-    const candidateAgentIds = getCandidateAgentIds({
-      labels: issueResult.value.labels,
-      machineId: identity.machineId,
-    });
-
-    if (candidateAgentIds.length === 0) {
-      continue;
-    }
-
-    for (const agentId of candidateAgentIds) {
-      if (input.localState?.hasExecutionLock?.({
-        repository: input.repository,
-        issueNumber: summary.reference.number,
-        agentId,
-      })) {
-        continue;
-      }
-
-      const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(summary.reference) ?? {
-        ok: true as const,
-        value: [],
-      };
-
-      if (!relatedPullRequestsResult.ok) {
-        return {
-          exitCode: 1,
-          processed: false,
-          stderr: relatedPullRequestsResult.error.message,
-        };
-      }
-
-      const issueActivity = getIssueActivity(issueResult.value, relatedPullRequestsResult.value);
-      const handledCursor = input.localState?.readHandledCursor?.({
-        repository: input.repository,
-        issueNumber: summary.reference.number,
-        agentId,
-      });
-
-      if (handledCursor !== undefined && isHandledCursorCovered(handledCursor, issueActivity)) {
-        continue;
-      }
-
-      runnableCandidates.push({
-        issueReference: summary.reference,
-        agentId,
-        issueActivity,
-        priority: getIssuePriority(issueResult.value.labels),
-      });
-    }
-  }
-
-  const candidate = runnableCandidates.sort(compareRunnableCandidates)[0];
+  const candidate = selectNextRunnableCandidate(queueResult.value);
 
   if (candidate !== undefined) {
     return claimAndRun({
       ...input,
       issueReference: candidate.issueReference,
-      workerId: candidate.agentId,
-      issueActivity: candidate.issueActivity,
+      workerId: candidate.agentId ?? input.workerId ?? `default@${identity.machineId}`,
+      issueActivity: candidate.activity,
       now,
       issueRunner,
     });
@@ -326,10 +245,23 @@ async function runRequestedIssue(input: DaemonInput & {
     };
   }
 
+  const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(issueReference) ?? {
+    ok: true as const,
+    value: [],
+  };
+
+  if (!relatedPullRequestsResult.ok) {
+    return {
+      exitCode: 1,
+      processed: false,
+      stderr: relatedPullRequestsResult.error.message,
+    };
+  }
+
   return claimAndRun({
     ...input,
     issueReference,
-    issueActivity: getIssueActivity(issueResult.value, []),
+    issueActivity: getIssueActivity(issueResult.value, relatedPullRequestsResult.value),
   });
 }
 
@@ -470,137 +402,6 @@ async function claimAndRun(input: DaemonInput & {
   } finally {
     releaseExecutionLock(input, executionLockResult?.lock);
   }
-}
-
-function getCandidateAgentIds(input: {
-  labels: string[];
-  machineId: string;
-}): string[] {
-  const assignedAgentIds = getAssignedAgentIds(input.labels);
-
-  if (assignedAgentIds.length === 0) {
-    return [];
-  }
-
-  if (!isAssignedToLocalMachine(input.labels, input.machineId)) {
-    return [];
-  }
-
-  return assignedAgentIds.filter((agentId) => agentId.endsWith(`@${input.machineId}`));
-}
-
-function compareRunnableCandidates(left: RunnableCandidate, right: RunnableCandidate): number {
-  return (
-    PRIORITY_RANK[left.priority] - PRIORITY_RANK[right.priority] ||
-    Date.parse(left.issueActivity.timestamp) - Date.parse(right.issueActivity.timestamp) ||
-    left.issueReference.number - right.issueReference.number ||
-    left.agentId.localeCompare(right.agentId)
-  );
-}
-
-function getIssuePriority(labels: string[]): IssuePriority {
-  if (labels.includes("priority:p0")) {
-    return "p0";
-  }
-
-  if (labels.includes("priority:p1")) {
-    return "p1";
-  }
-
-  if (labels.includes("priority:p2")) {
-    return "p2";
-  }
-
-  return "none";
-}
-
-function isHandledCursorCovered(
-  cursor: { handledThrough: string; issueFingerprint?: string },
-  activity: IssueActivity,
-): boolean {
-  return (
-    Date.parse(cursor.handledThrough) >= Date.parse(activity.timestamp) &&
-    (cursor.issueFingerprint === undefined || cursor.issueFingerprint === activity.issueFingerprint)
-  );
-}
-
-function getIssueActivity(issue: GitHubIssue, relatedPullRequests: GitHubRelatedPullRequest[]): IssueActivity {
-  const latestGrovieActivity = issue.comments
-    .filter((comment) => isGrovieActivityComment(comment.body))
-    .map((comment) => comment.updatedAt)
-    .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)))
-    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
-  const issueUpdatedAt =
-    latestGrovieActivity === undefined || Date.parse(issue.updatedAt) > Date.parse(latestGrovieActivity)
-      ? [issue.updatedAt]
-      : [];
-  const timestamps = [
-    ...issueUpdatedAt,
-    ...issue.comments
-      .filter((comment) => !isGrovieActivityComment(comment.body))
-      .map((comment) => comment.updatedAt),
-    ...relatedPullRequests.flatMap(getPullRequestActivityTimestamps),
-  ].filter((timestamp) => !Number.isNaN(Date.parse(timestamp)));
-
-  if (timestamps.length === 0) {
-    return {
-      timestamp: "1970-01-01T00:00:00.000Z",
-      issueFingerprint: getIssueFingerprint(issue, relatedPullRequests),
-    };
-  }
-
-  return {
-    timestamp: timestamps.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? "1970-01-01T00:00:00.000Z",
-    issueFingerprint: getIssueFingerprint(issue, relatedPullRequests),
-  };
-}
-
-function isGrovieActivityComment(body: string): boolean {
-  return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:session ");
-}
-
-function getIssueFingerprint(issue: GitHubIssue, relatedPullRequests: GitHubRelatedPullRequest[] = []): string {
-  return createHash("sha256")
-    .update(JSON.stringify({
-      title: issue.title,
-      body: issue.body,
-      state: issue.state,
-      labels: [...issue.labels].sort(),
-      relatedPullRequests: relatedPullRequests.map((pullRequest) => ({
-        number: pullRequest.number,
-        title: pullRequest.title,
-        state: pullRequest.state,
-        baseRef: pullRequest.baseRef,
-        headRef: pullRequest.headRef,
-        headSha: pullRequest.headSha,
-        updatedAt: pullRequest.updatedAt,
-        comments: pullRequest.comments.map((comment) => ({
-          id: comment.id,
-          updatedAt: comment.updatedAt,
-        })),
-        reviewComments: pullRequest.reviewComments.map((comment) => ({
-          id: comment.id,
-          updatedAt: comment.updatedAt,
-        })),
-        reviews: pullRequest.reviews.map((review) => ({
-          id: review.id,
-          state: review.state,
-          submittedAt: review.submittedAt,
-        })),
-        checks: pullRequest.checks,
-        diffSummary: pullRequest.diffSummary,
-      })),
-    }))
-    .digest("hex");
-}
-
-function getPullRequestActivityTimestamps(pullRequest: GitHubRelatedPullRequest): string[] {
-  return [
-    pullRequest.updatedAt,
-    ...pullRequest.comments.map((comment) => comment.updatedAt),
-    ...pullRequest.reviewComments.map((comment) => comment.updatedAt),
-    ...pullRequest.reviews.map((review) => review.submittedAt),
-  ];
 }
 
 function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {

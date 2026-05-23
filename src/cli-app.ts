@@ -14,6 +14,7 @@ import { runDaemon, runDaemonForRepositories } from "./daemon.js";
 import { formatIssueReference, GhGitHubGateway, type GitHubGateway, parseIssueReference } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
 import { LocalState } from "./local-state.js";
+import { inspectQueue, renderQueueInspection } from "./queue.js";
 import type { RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
 import { findLocalRun, listLocalRuns, renderRunDetail, renderRunsList } from "./status.js";
@@ -318,6 +319,64 @@ const commandDefinitions = [
             `Agent: ${agentResult.agentId}`,
             `Request: ${request.path}`,
           ].join("\n"),
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  },
+  {
+    name: "queue",
+    description: "List assigned issues and local daemon pick order.",
+    usage: "grovie queue list [--repo owner/repo]",
+    issue: "#40",
+    run: (args: string[], context: CliContext) => {
+      const [subcommand] = args;
+
+      if (subcommand !== "list") {
+        return {
+          exitCode: 1,
+          stderr: "Missing queue subcommand. Usage: grovie queue list [--repo owner/repo]",
+        };
+      }
+
+      const repoOption = readStringOption(args, "--repo");
+
+      if (!repoOption.ok) {
+        return repoOption.result;
+      }
+
+      try {
+        const config = defaultConfig();
+        const repositories = repoOption.value === undefined
+          ? loadGlobalConfig(context.localState.getPaths().root).config.watchedRepositories.map((watchedRepository) => ({
+            repository: watchedRepository.repository,
+            label: watchedRepository.label ?? config.queue.label,
+          }))
+          : [
+            {
+              repository: repoOption.value,
+              label: config.queue.label,
+            },
+          ];
+        const identity = resolveLocalIdentity();
+        const result = inspectQueue({
+          repositories,
+          github: context.github,
+          machineId: identity.machineId,
+          localState: context.localState,
+        });
+
+        if (!result.ok) {
+          return {
+            exitCode: 1,
+            stderr: result.message,
+          };
+        }
+
+        return {
+          exitCode: 0,
+          stdout: args.includes("--json") ? JSON.stringify(result.value, null, 2) : renderQueueInspection(result.value),
         };
       } catch (error) {
         return errorResult(error);
