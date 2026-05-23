@@ -56,6 +56,36 @@ export type GitHubComment = {
   updatedAt: string;
 };
 
+export type GitHubPullRequestReview = {
+  id: number;
+  state: string;
+  author: string;
+  body: string;
+  submittedAt: string;
+};
+
+export type GitHubCheckSummary = {
+  totalCount: number;
+  conclusionCounts: Record<string, number>;
+};
+
+export type GitHubRelatedPullRequest = {
+  number: number;
+  title: string;
+  state: string;
+  url: string;
+  body: string;
+  baseRef: string;
+  headRef: string;
+  headSha: string;
+  updatedAt: string;
+  comments: GitHubComment[];
+  reviewComments: GitHubComment[];
+  reviews: GitHubPullRequestReview[];
+  checks: GitHubCheckSummary;
+  diffSummary?: string;
+};
+
 export type GitHubIssue = {
   reference: IssueReference;
   title: string;
@@ -102,6 +132,7 @@ export type GitHubGateway = {
   createIssueComment(reference: IssueReference, body: string): Result<CreatedComment>;
   updateIssueComment(repository: string, commentId: number, body: string): Result<CreatedComment>;
   createPullRequest(input: CreatePullRequestInput): Result<CreatedPullRequest>;
+  readRelatedPullRequests?(reference: IssueReference): Result<GitHubRelatedPullRequest[]>;
 };
 
 export class GhGitHubGateway implements GitHubGateway {
@@ -296,6 +327,111 @@ export class GhGitHubGateway implements GitHubGateway {
         number: result.value.number,
         url: result.value.html_url,
       },
+    };
+  }
+
+  readRelatedPullRequests(reference: IssueReference): Result<GitHubRelatedPullRequest[]> {
+    const repository = formatRepository(reference);
+    const result = this.apiJson<GitHubPullRequestListItemResponse[][]>(
+      `repos/${repository}/pulls?state=all&per_page=100`,
+      {
+        paginate: true,
+        slurp: true,
+      },
+    );
+
+    if (!result.ok) {
+      return result;
+    }
+
+    const related = result.value
+      .flat()
+      .filter((pullRequest) => isPullRequestRelatedToIssue(pullRequest, reference.number));
+    const contexts: GitHubRelatedPullRequest[] = [];
+
+    for (const pullRequest of related) {
+      const commentsResult = this.apiJson<GitHubCommentResponse[][]>(
+        `repos/${repository}/issues/${pullRequest.number}/comments`,
+        {
+          paginate: true,
+          slurp: true,
+        },
+      );
+
+      if (!commentsResult.ok) {
+        return commentsResult;
+      }
+
+      const reviewCommentsResult = this.apiJson<GitHubCommentResponse[][]>(
+        `repos/${repository}/pulls/${pullRequest.number}/comments`,
+        {
+          paginate: true,
+          slurp: true,
+        },
+      );
+
+      if (!reviewCommentsResult.ok) {
+        return reviewCommentsResult;
+      }
+
+      const reviewsResult = this.apiJson<GitHubPullRequestReviewResponse[][]>(
+        `repos/${repository}/pulls/${pullRequest.number}/reviews`,
+        {
+          paginate: true,
+          slurp: true,
+        },
+      );
+
+      if (!reviewsResult.ok) {
+        return reviewsResult;
+      }
+
+      const checksResult = this.apiJson<GitHubCheckRunsResponse>(
+        `repos/${repository}/commits/${pullRequest.head.sha}/check-runs`,
+      );
+
+      if (!checksResult.ok) {
+        return checksResult;
+      }
+
+      const diffResult = this.runner.run("gh", ["pr", "diff", String(pullRequest.number), "--repo", repository, "--name-only"], undefined, {
+        maxBuffer: 1024 * 1024,
+      });
+
+      if (diffResult.exitCode !== 0) {
+        return {
+          ok: false,
+          error: {
+            code: "gh_failed",
+            message: diffResult.stderr.trim() || `gh pr diff ${pullRequest.number} failed with exit code ${diffResult.exitCode}.`,
+            command: `gh pr diff ${pullRequest.number} --repo ${repository} --name-only`,
+            exitCode: diffResult.exitCode,
+            stderr: diffResult.stderr,
+          },
+        };
+      }
+
+      contexts.push({
+        number: pullRequest.number,
+        title: pullRequest.title,
+        state: pullRequest.state,
+        url: pullRequest.html_url,
+        body: pullRequest.body ?? "",
+        baseRef: pullRequest.base.ref,
+        headRef: pullRequest.head.ref,
+        headSha: pullRequest.head.sha,
+        updatedAt: pullRequest.updated_at,
+        comments: commentsResult.value.flat().map(toComment),
+        reviewComments: reviewCommentsResult.value.flat().map(toComment),
+        reviews: reviewsResult.value.flat().map(toPullRequestReview),
+        checks: summarizeCheckRuns(checksResult.value.check_runs),
+        diffSummary: diffResult.stdout.trim() || undefined,
+      });
+    }
+
+    return {
+      ok: true,
+      value: contexts,
     };
   }
 
@@ -496,6 +632,41 @@ type GitHubPullRequestResponse = {
   html_url: string;
 };
 
+type GitHubPullRequestListItemResponse = {
+  number: number;
+  title: string;
+  state: string;
+  html_url: string;
+  body: string | null;
+  updated_at: string;
+  base: {
+    ref: string;
+  };
+  head: {
+    ref: string;
+    sha: string;
+  };
+};
+
+type GitHubPullRequestReviewResponse = {
+  id: number;
+  state: string;
+  body: string | null;
+  user: {
+    login: string;
+  };
+  submitted_at: string | null;
+};
+
+type GitHubCheckRunResponse = {
+  conclusion: string | null;
+};
+
+type GitHubCheckRunsResponse = {
+  total_count: number;
+  check_runs: GitHubCheckRunResponse[];
+};
+
 function toComment(comment: GitHubCommentResponse): GitHubComment {
   return {
     id: comment.id,
@@ -512,4 +683,43 @@ function toCreatedComment(comment: GitHubCommentMutationResponse): CreatedCommen
     body: comment.body,
     url: comment.html_url,
   };
+}
+
+function toPullRequestReview(review: GitHubPullRequestReviewResponse): GitHubPullRequestReview {
+  return {
+    id: review.id,
+    state: review.state,
+    author: review.user.login,
+    body: review.body ?? "",
+    submittedAt: review.submitted_at ?? "",
+  };
+}
+
+function summarizeCheckRuns(checkRuns: GitHubCheckRunResponse[]): GitHubCheckSummary {
+  const conclusionCounts: Record<string, number> = {};
+
+  for (const checkRun of checkRuns) {
+    const conclusion = checkRun.conclusion ?? "pending";
+    conclusionCounts[conclusion] = (conclusionCounts[conclusion] ?? 0) + 1;
+  }
+
+  return {
+    totalCount: checkRuns.length,
+    conclusionCounts,
+  };
+}
+
+function isPullRequestRelatedToIssue(pullRequest: GitHubPullRequestListItemResponse, issueNumber: number): boolean {
+  const issueReferencePattern = new RegExp(`(?:^|[^\\d])#${issueNumber}(?:\\D|$)`);
+  const branchIssuePattern = new RegExp(`(?:^|[^A-Za-z0-9])issue-${issueNumber}(?:[^A-Za-z0-9]|$)`);
+  const closingKeywordPattern = new RegExp(
+    `\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#${issueNumber}\\b`,
+    "i",
+  );
+
+  return (
+    branchIssuePattern.test(pullRequest.head.ref) ||
+    issueReferencePattern.test(pullRequest.body ?? "") ||
+    closingKeywordPattern.test(pullRequest.body ?? "")
+  );
 }

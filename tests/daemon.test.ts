@@ -9,6 +9,7 @@ import type {
   GitHubGateway,
   GitHubIssue,
   GitHubIssueSummary,
+  GitHubRelatedPullRequest,
   IssueReference,
 } from "../src/github.js";
 import { resolveMachineId } from "../src/identity.js";
@@ -425,6 +426,60 @@ describe("runDaemonCycle", () => {
       stdout: "ran new activity",
     });
     expect(runs).toHaveLength(1);
+  });
+
+  it("[UC-GITHUB-02-S02] creates a run when related pull request activity is newer than the handled cursor", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.writeHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+      handledThrough: "2026-05-22T00:00:01.000Z",
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        updatedAt: "2026-05-22T00:00:00.000Z",
+      }),
+    ], {
+      relatedPullRequests: [
+        fakeRelatedPullRequest({
+          updatedAt: "2026-05-22T00:00:02.000Z",
+        }),
+      ],
+    });
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran related PR activity",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran related PR activity",
+    });
+    expect(runs).toHaveLength(1);
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
   });
 
   it("[UC-EXECUTION-02-S03] creates a run when the issue itself is updated after the handled cursor", async () => {
@@ -1037,6 +1092,7 @@ class FakeGitHub implements GitHubGateway {
       addCancelAfterClaim?: boolean;
       addCancelOnRunningUpdate?: boolean;
       commentNow?: () => Date;
+      relatedPullRequests?: GitHubRelatedPullRequest[];
     } = {},
   ) {}
 
@@ -1162,6 +1218,13 @@ class FakeGitHub implements GitHubGateway {
     throw new Error("createPullRequest was not expected");
   }
 
+  readRelatedPullRequests(): ReturnType<NonNullable<GitHubGateway["readRelatedPullRequests"]>> {
+    return {
+      ok: true,
+      value: this.options.relatedPullRequests ?? [],
+    };
+  }
+
   private findIssue(reference: IssueReference): GitHubIssue {
     const issue = this.issues.find(
       (candidate) =>
@@ -1248,6 +1311,28 @@ function fakeComment(overrides: Partial<GitHubIssue["comments"][number]> = {}): 
     author: "fankaidev",
     createdAt: NOW.toISOString(),
     updatedAt: NOW.toISOString(),
+    ...overrides,
+  };
+}
+
+function fakeRelatedPullRequest(overrides: Partial<GitHubRelatedPullRequest> = {}): GitHubRelatedPullRequest {
+  return {
+    number: 20,
+    title: "Implement daemon",
+    state: "open",
+    url: "https://github.com/fankaidev/grovie/pull/20",
+    body: "Closes #8",
+    baseRef: "main",
+    headRef: "grovie/issue-8",
+    headSha: "abc123",
+    updatedAt: NOW.toISOString(),
+    comments: [],
+    reviewComments: [],
+    reviews: [],
+    checks: {
+      totalCount: 0,
+      conclusionCounts: {},
+    },
     ...overrides,
   };
 }

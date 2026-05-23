@@ -4,6 +4,7 @@ import type {
   CreatedComment,
   GitHubGateway,
   GitHubIssue,
+  GitHubRelatedPullRequest,
   IssueReference,
 } from "../src/github.js";
 import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
@@ -12,7 +13,7 @@ import type { HandleRunResultResult, ResultHandler } from "../src/result.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
 
 describe("runIssue", () => {
-  it("[UC-GITHUB-01-S01] [UC-EXECUTION-05-S01] runs an allowed issue and posts a concise success comment", () => {
+  it("[UC-GITHUB-01-S01] [UC-GITHUB-02-S04] [UC-EXECUTION-05-S01] runs an allowed issue and posts a concise success comment", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -207,6 +208,76 @@ describe("runIssue", () => {
     ]);
   });
 
+  it("[UC-GITHUB-02-S03] includes related pull request context in the local handoff", () => {
+    const github = new FakeGitHub({
+      relatedPullRequests: [
+        fakeRelatedPullRequest(),
+      ],
+    });
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(localState.prepareInput?.task).toMatchObject({
+      relatedPullRequests: [
+        {
+          number: 20,
+          title: "Implement result handling",
+          state: "open",
+          baseRef: "main",
+          headRef: "grovie/issue-7",
+          headSha: "abc123",
+          checks: {
+            totalCount: 1,
+            conclusionCounts: {
+              success: 1,
+            },
+          },
+          reviews: [
+            {
+              state: "APPROVED",
+              author: "reviewer",
+            },
+          ],
+          comments: [
+            {
+              body: "Please add BDD coverage.",
+            },
+          ],
+          reviewComments: [
+            {
+              body: "tests/run.test.ts",
+            },
+          ],
+          diffSummary: "tests/run.test.ts | 10 ++++++++++",
+        },
+      ],
+    });
+  });
+
   it("[UC-GITHUB-01-S04] marks the session failed when result handling fails after a successful runtime", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
@@ -344,6 +415,10 @@ class FakeGitHub implements GitHubGateway {
   readonly comments: string[] = [];
   reads = 0;
 
+  constructor(private readonly options: {
+    relatedPullRequests?: GitHubRelatedPullRequest[];
+  } = {}) {}
+
   getAuthenticatedUser(): ReturnType<GitHubGateway["getAuthenticatedUser"]> {
     throw new Error("getAuthenticatedUser was not expected");
   }
@@ -398,6 +473,13 @@ class FakeGitHub implements GitHubGateway {
 
   createPullRequest(_input: Parameters<GitHubGateway["createPullRequest"]>[0]): ReturnType<GitHubGateway["createPullRequest"]> {
     throw new Error("createPullRequest was not expected");
+  }
+
+  readRelatedPullRequests(): ReturnType<NonNullable<GitHubGateway["readRelatedPullRequests"]>> {
+    return {
+      ok: true as const,
+      value: this.options.relatedPullRequests ?? [],
+    };
   }
 }
 
@@ -543,5 +625,53 @@ function fakeExecution(run: PreparedRun, exitCode: number) {
     worktreeTaskPath: `${run.worktreePath}/.grovie/task.json`,
     stdoutPath: run.stdoutPath,
     stderrPath: run.stderrPath,
+  };
+}
+
+function fakeRelatedPullRequest(): GitHubRelatedPullRequest {
+  return {
+    number: 20,
+    title: "Implement result handling",
+    state: "open",
+    url: "https://github.com/fankaidev/grovie/pull/20",
+    body: "Closes #7",
+    baseRef: "main",
+    headRef: "grovie/issue-7",
+    headSha: "abc123",
+    updatedAt: "2026-05-22T00:00:02Z",
+    checks: {
+      totalCount: 1,
+      conclusionCounts: {
+        success: 1,
+      },
+    },
+    reviews: [
+      {
+        id: 3,
+        state: "APPROVED",
+        author: "reviewer",
+        body: "Looks good.",
+        submittedAt: "2026-05-22T00:00:05Z",
+      },
+    ],
+    comments: [
+      {
+        id: 1,
+        body: "Please add BDD coverage.",
+        author: "reviewer",
+        createdAt: "2026-05-22T00:00:03Z",
+        updatedAt: "2026-05-22T00:00:03Z",
+      },
+    ],
+    reviewComments: [
+      {
+        id: 2,
+        body: "tests/run.test.ts",
+        author: "reviewer",
+        createdAt: "2026-05-22T00:00:04Z",
+        updatedAt: "2026-05-22T00:00:04Z",
+      },
+    ],
+    diffSummary: "tests/run.test.ts | 10 ++++++++++",
   };
 }
