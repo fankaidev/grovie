@@ -160,6 +160,18 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const identity = resolveLocalIdentity();
   input.localState?.registerAgent?.(identity.defaultAgent);
   const issueRunner = input.issueRunner ?? runIssueAsync;
+  const request = input.localState?.takeRunRequest?.(input.repository);
+
+  if (request !== undefined) {
+    return runRequestedIssue({
+      ...input,
+      issueNumber: request.issueNumber,
+      workerId: request.agentId,
+      now,
+      issueRunner,
+    });
+  }
+
   const listResult = input.github.listOpenIssues(input.repository, input.label);
 
   if (!listResult.ok) {
@@ -234,6 +246,35 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       `No queued issues found for ${input.repository} with label ${input.label}.`,
     ].join("\n"),
   };
+}
+
+async function runRequestedIssue(input: DaemonInput & {
+  issueNumber: number;
+  workerId: string;
+  now: () => Date;
+  issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
+}): Promise<DaemonCycleResult> {
+  const [owner, repo] = input.repository.split("/");
+  const issueReference = {
+    owner: owner ?? "",
+    repo: repo ?? "",
+    number: input.issueNumber,
+  };
+  const issueResult = input.github.readIssue(issueReference);
+
+  if (!issueResult.ok) {
+    return {
+      exitCode: 1,
+      processed: false,
+      stderr: issueResult.error.message,
+    };
+  }
+
+  return claimAndRun({
+    ...input,
+    issueReference,
+    issueActivity: getIssueActivity(issueResult.value),
+  });
 }
 
 async function claimAndRun(input: DaemonInput & {
