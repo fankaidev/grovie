@@ -43,6 +43,15 @@ docs/use-cases/
     {use-case-name}.md
 ```
 
+Domains should follow user/system boundaries, not internal nouns:
+
+| Domain | Boundary |
+|--------|----------|
+| `worker` | Who watches GitHub and decides what should run. |
+| `execution` | How one agent run is requested, executed, preserved, and published. |
+| `github` | What humans see in project repositories. |
+| `state-repo` | Optional remote observability and recovery storage. |
+
 Each file contains one use case:
 
 - title with use case ID
