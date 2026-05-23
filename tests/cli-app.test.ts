@@ -1246,7 +1246,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).not.toContain("daemon stdout");
   });
 
-  it("[UC-WORKER-06-S09] reports daemon service paths through the CLI", () => {
+  it("[UC-WORKER-06-S12] reports daemon service paths through the CLI", () => {
     const localState = new FakeLocalState(createTmpDir());
 
     const result = runCli(["daemon", "service", "path", "--platform", "systemd"], { localState });

@@ -22,6 +22,7 @@
 | UC-WORKER-06-S06 | P1 | `grovie daemon logs --stream stdout|stderr|combined` selects which daemon process logs to read without reading run logs. |
 | UC-WORKER-06-S07 | P1 | `grovie daemon logs --follow` tails selected daemon process logs and reports a clear error when daemon log files are unavailable. |
 | UC-WORKER-06-S08 | P1 | `grovie status` summarizes daemon state, watched repositories, useful local paths, active runs, and recent failures. |
-| UC-WORKER-06-S09 | P3 | `grovie daemon service install --platform launchd` writes a user LaunchAgent file that runs `grovie daemon run` and logs under `~/.grovie/daemon`. |
-| UC-WORKER-06-S10 | P3 | `grovie daemon service install --platform systemd` writes a user systemd service file that runs `grovie daemon run` and logs under `~/.grovie/daemon`. |
-| UC-WORKER-06-S11 | P3 | `grovie daemon service uninstall` removes the generated user service file without stopping or deleting local daemon state. |
+| UC-WORKER-06-S09 | P2 | `grovie daemon service install --platform launchd` writes a Grovie-managed user LaunchAgent file that runs `grovie daemon run` and logs under `~/.grovie/daemon`. |
+| UC-WORKER-06-S10 | P2 | `grovie daemon service install --platform systemd` writes a Grovie-managed user systemd service file that runs `grovie daemon run` and logs under `~/.grovie/daemon`. |
+| UC-WORKER-06-S11 | P2 | `grovie daemon service uninstall` removes only generated Grovie-managed user service files without stopping or deleting local daemon state. |
+| UC-WORKER-06-S12 | P2 | `grovie daemon service path` reports the platform-specific user service file path without creating, starting, or deleting service files. |
