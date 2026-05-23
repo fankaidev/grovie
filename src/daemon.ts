@@ -160,6 +160,20 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const identity = resolveLocalIdentity();
   input.localState?.registerAgent?.(identity.defaultAgent);
   const issueRunner = input.issueRunner ?? runIssueAsync;
+  const runtimeAvailability = input.runtime?.checkAvailability();
+
+  if (runtimeAvailability !== undefined && !runtimeAvailability.available) {
+    return {
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        `Skipped assigned runs because Codex runtime is unavailable: ${runtimeAvailability.message}`,
+      ].join("\n"),
+    };
+  }
+
   const request = input.localState?.takeRunRequest?.(input.repository);
 
   if (request !== undefined) {
