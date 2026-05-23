@@ -188,10 +188,11 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("shows active and recent local runs through status", () => {
+  it("[UC-WORKER-06-S08] shows daemon state, watched repositories, useful paths, active runs, and failures through status", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
+    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
     writeLocalRun(localState.paths.runsDir, "active-run", {
       metadata: {
         runId: "active-run",
@@ -215,13 +216,14 @@ describe("CLI command registration", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("grovie status");
-    expect(result.stdout).toContain("- active-run");
-    expect(result.stdout).toContain("Status: running");
-    expect(result.stdout).toContain("Issue: fankaidev/grovie#36");
-    expect(result.stdout).toContain(`Logs: stdout=${join(localState.paths.runsDir, "active-run", "stdout.log")}`);
+    expect(result.stdout).toContain("Daemon:");
+    expect(result.stdout).toContain("Status: stopped");
+    expect(result.stdout).toContain("- fankaidev/grovie");
+    expect(result.stdout).toContain(`Runs: ${localState.paths.runsDir}`);
+    expect(result.stdout).toContain("active-run fankaidev/grovie#36 status=running");
   });
 
-  it("lists and shows local runs through runs subcommands", () => {
+  it("[UC-EXECUTION-02-S07] [UC-EXECUTION-02-S08] lists and shows local runs through runs subcommands", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -230,6 +232,7 @@ describe("CLI command registration", () => {
         runId: "failed-run",
         repository: "fankaidev/grovie",
         issueNumber: 37,
+        agentId: "coder@fankai-mac",
         branchName: "grovie/issue-37",
         localBranchName: "grovie/issue-37-attempt",
         worktreePath: "/tmp/grovie/worktrees/failed-run",
@@ -243,6 +246,13 @@ describe("CLI command registration", () => {
           },
         },
         {
+          timestamp: "2026-05-23T10:00:30.000Z",
+          type: "comment.created",
+          data: {
+            url: "https://github.com/fankaidev/grovie/issues/37#issuecomment-1",
+          },
+        },
+        {
           timestamp: "2026-05-23T10:01:00.000Z",
           type: "run.failed",
           data: {
@@ -252,7 +262,13 @@ describe("CLI command registration", () => {
       ],
     });
 
-    expect(runCli(["runs", "list"], { cwd, localState }).stdout).toContain("Status: failed");
+    const list = runCli(["runs", "list"], { cwd, localState });
+
+    expect(list.stdout).toContain("Status: failed");
+    expect(list.stdout).toContain("Agent: coder@fankai-mac");
+    expect(list.stdout).toContain("Runtime: codex");
+    expect(list.stdout).toContain("Started: 2026-05-23T10:00:00.000Z");
+    expect(list.stdout).toContain("Ended: 2026-05-23T10:01:00.000Z");
 
     const detail = runCli(["runs", "show", "failed-run"], { cwd, localState });
 
@@ -261,6 +277,7 @@ describe("CLI command registration", () => {
     expect(detail.stdout).toContain("Run id: failed-run");
     expect(detail.stdout).toContain("Local branch: grovie/issue-37-attempt");
     expect(detail.stdout).toContain(`Stderr log: ${join(localState.paths.runsDir, "failed-run", "stderr.log")}`);
+    expect(detail.stdout).toContain("Result links: https://github.com/fankaidev/grovie/issues/37#issuecomment-1");
     expect(detail.stdout).toContain('run.failed {"exitCode":1}');
   });
 

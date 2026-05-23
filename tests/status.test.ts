@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { listLocalRuns, renderRunDetail, renderRunsList } from "../src/status.js";
+import { listLocalRuns, renderLocalStatusOverview, renderRunDetail, renderRunsList } from "../src/status.js";
 
 const tmpDirs: string[] = [];
 
@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("local run status", () => {
-  it("lists runs from metadata and events newest first", () => {
+  it("[UC-EXECUTION-02-S07] lists runs with issue, agent, runtime, result links, times, and logs newest first", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "finished-run", {
       metadata: {
@@ -21,12 +21,14 @@ describe("local run status", () => {
         runId: "finished-run",
         repository: "fankaidev/grovie",
         issueNumber: 7,
+        agentId: "coder@fankai-mac",
         branchName: "grovie/issue-7",
         worktreePath: "/tmp/grovie/worktrees/finished-run",
       },
       events: [
         event("2026-05-23T09:00:00.000Z", "run.started"),
-        event("2026-05-23T09:02:00.000Z", "run.succeeded", { runtime: "codex", exitCode: 0 }),
+        event("2026-05-23T09:01:00.000Z", "result.handled", { runtime: "codex", pullRequestUrl: "https://github.com/fankaidev/grovie/pull/20" }),
+        event("2026-05-23T09:02:00.000Z", "run.succeeded", { exitCode: 0 }),
       ],
     });
     writeRun(runsDir, "active-run", {
@@ -34,6 +36,7 @@ describe("local run status", () => {
         runId: "active-run",
         repository: "fankaidev/grovie",
         issueNumber: 8,
+        agentId: "reviewer@fankai-mac",
         branchName: "grovie/issue-8",
       },
       events: [
@@ -49,10 +52,15 @@ describe("local run status", () => {
       ["finished-run", "succeeded"],
     ]);
     expect(renderRunsList(runs)).toContain("Issue: fankaidev/grovie#8");
+    expect(renderRunsList(runs)).toContain("Agent: reviewer@fankai-mac");
+    expect(renderRunsList(runs)).toContain("Runtime: codex");
+    expect(renderRunsList(runs)).toContain("Started: 2026-05-23T10:00:00.000Z");
+    expect(renderRunsList(runs)).toContain("Ended: 2026-05-23T09:02:00.000Z");
+    expect(renderRunsList(runs)).toContain("Result links: https://github.com/fankaidev/grovie/pull/20");
     expect(renderRunsList(runs)).toContain(`Logs: stdout=${join(runsDir, "active-run", "stdout.log")}`);
   });
 
-  it("surfaces stale-looking active runs", () => {
+  it("[UC-WORKER-06-S08] surfaces stale-looking active runs as recent failures in local status", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "stale-run", {
       metadata: {
@@ -73,13 +81,14 @@ describe("local run status", () => {
     expect(renderRunsList(run === undefined ? [] : [run])).toContain("Status: stale");
   });
 
-  it("renders detailed paths and recent events for one run", () => {
+  it("[UC-EXECUTION-02-S08] renders detailed paths, GitHub result links, and recent events for one run", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "detail-run", {
       metadata: {
         runId: "detail-run",
         repository: "fankaidev/grovie",
         issueNumber: 10,
+        agentId: "coder@fankai-mac",
         branchName: "grovie/issue-10",
         localBranchName: "grovie/issue-10-attempt",
         worktreePath: "/tmp/grovie/worktrees/detail-run",
@@ -88,6 +97,7 @@ describe("local run status", () => {
         event("2026-05-23T10:00:00.000Z", "run.started"),
         event("2026-05-23T10:01:00.000Z", "runtime.started", { runtime: "codex" }),
         event("2026-05-23T10:02:00.000Z", "runtime.finished", { exitCode: 1 }),
+        event("2026-05-23T10:02:30.000Z", "comment.created", { url: "https://github.com/fankaidev/grovie/issues/10#issuecomment-1" }),
         event("2026-05-23T10:03:00.000Z", "run.failed", { exitCode: 1 }),
       ],
     });
@@ -97,9 +107,70 @@ describe("local run status", () => {
     expect(run).toBeDefined();
     expect(renderRunDetail(run!)).toContain("Run id: detail-run");
     expect(renderRunDetail(run!)).toContain("Status: failed");
+    expect(renderRunDetail(run!)).toContain("Agent: coder@fankai-mac");
+    expect(renderRunDetail(run!)).toContain("Runtime: codex");
     expect(renderRunDetail(run!)).toContain("Local branch: grovie/issue-10-attempt");
     expect(renderRunDetail(run!)).toContain(`Stdout log: ${join(runsDir, "detail-run", "stdout.log")}`);
+    expect(renderRunDetail(run!)).toContain("Result links: https://github.com/fankaidev/grovie/issues/10#issuecomment-1");
     expect(renderRunDetail(run!)).toContain("2026-05-23T10:03:00.000Z run.failed");
+  });
+
+  it("[UC-WORKER-06-S08] renders local status with daemon state, watched repositories, paths, active runs, and failures", () => {
+    const root = mkTmpDir();
+    const runsDir = join(root, "runs");
+    mkdirSync(runsDir, { recursive: true });
+    writeRun(runsDir, "active-run", {
+      metadata: {
+        runId: "active-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 11,
+        branchName: "grovie/issue-11",
+      },
+      events: [event("2026-05-23T10:00:00.000Z", "runtime.started", { runtime: "codex" })],
+    });
+    writeRun(runsDir, "failed-run", {
+      metadata: {
+        runId: "failed-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 12,
+        branchName: "grovie/issue-12",
+      },
+      events: [event("2026-05-23T09:00:00.000Z", "run.failed", { exitCode: 1 })],
+    });
+    const runs = listLocalRuns(runsDir, { now: new Date("2026-05-23T10:05:00.000Z") });
+
+    const output = renderLocalStatusOverview({
+      runs,
+      daemonStatus: {
+        status: "running",
+        state: {
+          pid: 1234,
+          command: ["node", "dist/cli.js", "daemon", "run"],
+          startedAt: "2026-05-23T08:00:00.000Z",
+          stdoutPath: join(root, "daemon", "stdout.log"),
+          stderrPath: join(root, "daemon", "stderr.log"),
+          statePath: join(root, "daemon", "daemon.json"),
+          token: "token",
+        },
+      },
+      watchedRepositories: [{ repository: "fankaidev/grovie", label: "grovie" }],
+      paths: {
+        root,
+        reposDir: join(root, "repos"),
+        worktreesDir: join(root, "worktrees"),
+        runsDir,
+        agentsDir: join(root, "agents"),
+        locksDir: join(root, "locks"),
+        requestsDir: join(root, "requests"),
+        sessionsDir: join(root, "sessions"),
+      },
+    });
+
+    expect(output).toContain("Status: running");
+    expect(output).toContain("- fankaidev/grovie label=grovie");
+    expect(output).toContain(`Runs: ${runsDir}`);
+    expect(output).toContain("active-run fankaidev/grovie#11 status=running");
+    expect(output).toContain("failed-run fankaidev/grovie#12 status=failed");
   });
 });
 

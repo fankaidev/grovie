@@ -20,3 +20,5 @@
 | UC-EXECUTION-02-S04 | P0 | Reprocessing an unchanged issue does not create another run for the same agent. |
 | UC-EXECUTION-02-S05 | P0 | Two agents on the same issue keep separate handled cursors and can be at different points in the issue timeline. |
 | UC-EXECUTION-02-S06 | P1 | If a generated run id would collide within the same second, the daemon waits, retries, or fails clearly rather than adding randomness. |
+| UC-EXECUTION-02-S07 | P1 | `grovie runs list` shows concise run history with issue reference, agent, runtime, status, branch, result links, times, and log paths. |
+| UC-EXECUTION-02-S08 | P1 | `grovie runs show <run-id>` shows readable run details with issue, worktree, run directory, stdout/stderr, events, branch, and GitHub result links. |

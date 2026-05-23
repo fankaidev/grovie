@@ -21,3 +21,4 @@
 | UC-WORKER-06-S05 | P1 | `grovie daemon logs` prints recent daemon stdout and stderr from `~/.grovie/daemon`. |
 | UC-WORKER-06-S06 | P1 | `grovie daemon logs --stream stdout|stderr|combined` selects which daemon process logs to read without reading run logs. |
 | UC-WORKER-06-S07 | P1 | `grovie daemon logs --follow` tails selected daemon process logs and reports a clear error when daemon log files are unavailable. |
+| UC-WORKER-06-S08 | P1 | `grovie status` summarizes daemon state, watched repositories, useful local paths, active runs, and recent failures. |
