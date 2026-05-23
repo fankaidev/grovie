@@ -8,7 +8,7 @@ import {
 } from "./github.js";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
 import type { PreparedRun } from "./local-state.js";
-import type { RuntimeExecution } from "./runtime.js";
+import type { RuntimeExecution, RuntimeName } from "./runtime.js";
 
 export type ResultHandler = {
   handle(input: HandleRunResultInput): HandleRunResultResult;
@@ -20,7 +20,7 @@ export type HandleRunResultInput = {
   config: GrovieConfig;
   configPath: string;
   repository: string;
-  runtime: "codex";
+  runtime: RuntimeName;
   execution: RuntimeExecution;
 };
 
@@ -142,7 +142,7 @@ export class GitResultHandler implements ResultHandler {
 function renderPullRequestBody(input: {
   issue: GitHubIssue;
   run: PreparedRun;
-  runtime: "codex";
+  runtime: RuntimeName;
   validationSummary: string;
 }): string {
   return [
