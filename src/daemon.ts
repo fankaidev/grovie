@@ -350,11 +350,17 @@ async function claimAndRun(input: DaemonInput & {
           ? "Session succeeded."
           : "Session failed. See the Grovie result comment and local run logs.",
     );
+
+    const latestIssueResult = input.github.readIssue(input.issueReference);
+    const handledThrough = latestIssueResult.ok
+      ? getIssueActivityTimestamp(latestIssueResult.value)
+      : input.activityTimestamp;
+
     input.localState?.writeHandledCursor?.({
       repository: input.repository,
       issueNumber: input.issueReference.number,
       agentId: input.workerId,
-      handledThrough: input.activityTimestamp,
+      handledThrough,
       now: input.now(),
     });
 
@@ -386,8 +392,7 @@ function getCandidateAgentIds(input: {
 }
 
 function getIssueActivityTimestamp(issue: GitHubIssue): string {
-  const timestamps = issue.comments
-    .map((comment) => comment.updatedAt)
+  const timestamps = [issue.updatedAt, ...issue.comments.map((comment) => comment.updatedAt)]
     .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)));
 
   if (timestamps.length === 0) {

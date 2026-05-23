@@ -231,6 +231,49 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(1);
   });
 
+  it("[UC-EXECUTION-02-S03] creates a run when the issue itself is updated after the handled cursor", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.writeHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+      handledThrough: "2026-05-22T00:00:00.000Z",
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        updatedAt: "2026-05-22T00:00:01.000Z",
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran issue update",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran issue update",
+    });
+    expect(runs).toHaveLength(1);
+  });
+
   it("[UC-EXECUTION-02-S04] skips unchanged issue activity covered by the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
@@ -313,7 +356,57 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       issueNumber: 8,
       agentId: `default@${machineId}`,
-    })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
+    })?.handledThrough).toBe(NOW.toISOString());
+  });
+
+  it("[UC-EXECUTION-02-S04] includes Grovie result comments in the terminal handled cursor", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const github = new FakeGitHub([
+      fakeIssue({
+        updatedAt: "2026-05-22T00:00:00.000Z",
+        comments: [
+          fakeComment({
+            updatedAt: "2026-05-22T00:00:01.000Z",
+          }),
+        ],
+      }),
+    ]);
+
+    await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => ({
+        exitCode: 0,
+      }),
+    });
+
+    const secondResult = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("second run was not expected");
+      },
+    });
+
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    })?.handledThrough).toBe(NOW.toISOString());
+    expect(secondResult.processed).toBe(false);
   });
 
   it("[UC-GITHUB-01-S05] ignores visible claim comments when choosing local execution", async () => {
@@ -768,6 +861,7 @@ function fakeIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
     title: "Implement daemon",
     body: "Run queued work.",
     state: "open",
+    updatedAt: NOW.toISOString(),
     labels: ["grovie"],
     comments: [],
     defaultBranch: "main",

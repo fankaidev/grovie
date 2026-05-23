@@ -777,6 +777,7 @@ function fakeIssue(reference: IssueReference): GitHubIssue {
     title: "Stream runtime output",
     body: "Make runtime logs visible while Codex runs.",
     state: "open",
+    updatedAt: "2026-05-22T00:00:00Z",
     labels: ["mvp", "type:task"],
     comments: [],
     defaultBranch: "main",
