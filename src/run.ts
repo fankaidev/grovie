@@ -416,6 +416,7 @@ function finishRun(input: {
       });
       input.localState.appendEvent(input.run, "result.handled", {
         kind: result.kind,
+        pullRequestUrl: result.kind === "pull-request" ? result.pullRequest.url : undefined,
       });
     } catch (error) {
       resultError = toErrorMessage(error);

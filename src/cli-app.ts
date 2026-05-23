@@ -19,7 +19,7 @@ import { LocalState } from "./local-state.js";
 import { inspectQueue, renderQueueInspection } from "./queue.js";
 import type { RunLocalState } from "./run.js";
 import { CodexRuntime, type AgentRuntime } from "./runtime.js";
-import { findLocalRun, listLocalRuns, renderRunDetail, renderRunsList } from "./status.js";
+import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail, renderRunsList } from "./status.js";
 import { GROVIE_VERSION } from "./version.js";
 
 export type CliResult = {
@@ -124,10 +124,18 @@ const commandDefinitions = [
     run: (_args: string[], context: CliContext) => {
       try {
         const runs = listLocalRuns(context.localState.getPaths().runsDir);
+        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
 
         return {
           exitCode: 0,
-          stdout: renderRunsList(runs, "grovie status"),
+          stdout: renderLocalStatusOverview({
+            runs,
+            daemonStatus: context.daemonLifecycle.status({
+              root: context.localState.getPaths().root,
+            }),
+            watchedRepositories: globalConfig.config.watchedRepositories,
+            paths: context.localState.getPaths(),
+          }),
         };
       } catch (error) {
         return errorResult(error);
