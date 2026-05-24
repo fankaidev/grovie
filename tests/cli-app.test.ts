@@ -1285,6 +1285,7 @@ describe("CLI command registration", () => {
           },
         }),
         runtime: fakeRuntime(),
+        localState: new FakeLocalState(createTmpDir()),
       }),
     ).toEqual({
       exitCode: 0,
