@@ -29,6 +29,7 @@ export type DaemonInput = {
   pollIntervalMs?: number;
   now?: () => Date;
   sleep?: (ms: number) => void | Promise<void>;
+  onCycleResult?: (result: RunIssueResult) => void | Promise<void>;
   issueRunner?: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
 };
 
@@ -70,7 +71,8 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
 
   try {
     while (true) {
-      await runDaemonCycle(input);
+      const result = await runDaemonCycle(input);
+      await reportDaemonCycle(input, result);
       const sleep = input.sleep ?? sleepSync;
       await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
     }
@@ -101,7 +103,8 @@ export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput
   if (!input.once) {
     try {
       while (true) {
-        await runDaemonRepositoryCycle(input);
+        const result = await runDaemonRepositoryCycle(input);
+        await reportDaemonCycle(input, result);
         const sleep = input.sleep ?? sleepSync;
         await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
       }
@@ -460,6 +463,17 @@ function releaseExecutionLock(input: Pick<DaemonInput, "localState">, lock: Exec
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function reportDaemonCycle(input: Pick<DaemonInput, "onCycleResult">, result: RunIssueResult): Promise<void> {
+  if (input.onCycleResult !== undefined) {
+    await input.onCycleResult(result);
+    return;
+  }
+
+  if (result.stderr !== undefined && result.stderr.length > 0) {
+    process.stderr.write(result.stderr.endsWith("\n") ? result.stderr : `${result.stderr}\n`);
+  }
 }
 
 function sleepSync(ms: number): Promise<void> {

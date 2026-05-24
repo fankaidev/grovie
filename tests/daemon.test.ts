@@ -1441,6 +1441,49 @@ describe("runDaemonCycle", () => {
       ].join("\n"),
     });
   });
+
+  it("[UC-WORKER-04-S13] reports invalid repo-local policy during long-running daemon cycles", async () => {
+    const reports: RunIssueResult[] = [];
+    const stop = new Error("stop after first cycle");
+
+    await expect(runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/bad",
+        },
+      ],
+      repositoryConfigLoader: () => {
+        throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- runtime.default: Invalid option");
+      },
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github: new FakeGitHub([]),
+      once: false,
+      now: () => NOW,
+      sleep: () => {
+        throw stop;
+      },
+      onCycleResult: (result) => {
+        reports.push(result);
+      },
+      issueRunner: () => {
+        throw new Error("issue runner was not expected");
+      },
+    })).rejects.toThrow("stop after first cycle");
+
+    expect(reports).toEqual([
+      {
+        exitCode: 1,
+        processed: false,
+        stderr: [
+          "grovie daemon",
+          "",
+          "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
+          "- runtime.default: Invalid option",
+        ].join("\n"),
+      },
+    ]);
+  });
 });
 
 class FakeGitHub implements GitHubGateway {
