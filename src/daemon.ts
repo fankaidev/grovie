@@ -3,6 +3,7 @@ import {
   createAdminConsoleServer,
   resolveAdminConsoleConfig,
   startAdminConsoleServer,
+  startAdminConsoleWorker,
   type AdminConsoleResolvedConfig,
   type StartedAdminConsole,
 } from "./admin-console.js";
@@ -186,6 +187,14 @@ async function startDaemonAdminConsole(input: MultiRepositoryDaemonInput | Daemo
 
   const runtime = input.runtime ?? createRuntime(input.config.runtime.default);
   const daemonLifecycle = input.daemonLifecycle ?? new LocalDaemonLifecycle();
+
+  if (!input.once) {
+    return startAdminConsoleWorker({
+      config,
+      paths: input.localState.getPaths(),
+      runtimeName: input.config.runtime.default,
+    });
+  }
 
   return startAdminConsoleServer({
     config,
