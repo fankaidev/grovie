@@ -484,8 +484,11 @@ const commandDefinitions = [
 
       try {
         const config = defaultConfig();
+        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+        const identity = resolveLocalIdentity();
+        const localAgents = resolveConfiguredAgents(globalConfig.config, identity.machineId);
         const repositories = repoOption.value === undefined
-          ? loadGlobalConfig(context.localState.getPaths().root).config.watchedRepositories.map((watchedRepository) => ({
+          ? globalConfig.config.watchedRepositories.map((watchedRepository) => ({
             repository: watchedRepository.repository,
             label: watchedRepository.label ?? config.queue.label,
           }))
@@ -495,11 +498,11 @@ const commandDefinitions = [
               label: config.queue.label,
             },
           ];
-        const identity = resolveLocalIdentity();
         const result = inspectQueue({
           repositories,
           github: context.github,
           machineId: identity.machineId,
+          configuredAgentIds: localAgents.map((agent) => agent.agentId),
           localState: context.localState,
         });
 
