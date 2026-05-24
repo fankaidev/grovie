@@ -1634,6 +1634,7 @@ describe("runDaemonCycle", () => {
   });
 
   it("[UC-WORKER-04-S11] skips canceled assignments without writing advisory claim comments", async () => {
+    const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
         comments: [
@@ -1672,7 +1673,7 @@ describe("runDaemonCycle", () => {
         "No queued issues found for fankaidev/grovie with label grovie.",
         "",
         "Skipped assigned issues:",
-        "- fankaidev/grovie#8 agent=default@kai-mini reason=canceled",
+        `- fankaidev/grovie#8 agent=default@${machineId} reason=canceled`,
       ].join("\n"),
     });
     expect(runs).toHaveLength(0);
