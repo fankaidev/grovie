@@ -429,16 +429,17 @@ describe("admin console server", () => {
     expect(html).toContain("Run not found.");
   });
 
-  it("[UC-ADMIN-03-S05] serves built admin web assets and SPA fallback routes", async () => {
+  it("[UC-ADMIN-03-S02] [UC-ADMIN-03-S03] [UC-ADMIN-03-S05] serves built admin web assets and React-owned run detail routes", async () => {
     const root = createTmpDir();
     const assetsDir = join(root, "admin-web");
     mkdirSync(join(assetsDir, "assets"), { recursive: true });
-    writeFileSync(join(assetsDir, "index.html"), '<!doctype html><div id="root"></div><script type="module" src="/assets/app-abc123.js"></script>', "utf8");
+    writeFileSync(join(assetsDir, "index.html"), '<!doctype html><div id="root" data-app="grovie-admin-web"></div><script type="module" src="/assets/app-abc123.js"></script>', "utf8");
     writeFileSync(join(assetsDir, "assets", "app-abc123.js"), "console.log('admin web');\n", "utf8");
     const started = await startTestServer(root, {}, assetsDir);
 
     const home = await fetch(`${started.url}/`);
     const route = await fetch(`${started.url}/runs/run-1`);
+    const missingRoute = await fetch(`${started.url}/runs/missing`);
     const asset = await fetch(`${started.url}/assets/app-abc123.js`);
     const api = await fetch(`${started.url}/api/health`);
 
@@ -446,7 +447,9 @@ describe("admin console server", () => {
     expect(home.headers.get("content-type")).toContain("text/html");
     expect(await home.text()).toContain("/assets/app-abc123.js");
     expect(route.status).toBe(200);
-    expect(await route.text()).toContain('<div id="root"></div>');
+    expect(await route.text()).toContain('data-app="grovie-admin-web"');
+    expect(missingRoute.status).toBe(200);
+    expect(await missingRoute.text()).toContain('data-app="grovie-admin-web"');
     expect(asset.status).toBe(200);
     expect(asset.headers.get("content-type")).toContain("text/javascript");
     expect(await asset.text()).toContain("admin web");

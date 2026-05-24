@@ -17,4 +17,4 @@
 | UC-ADMIN-05-S01 | P2 | `POST /api/runs/:runId/cancel` records a local cancellation request for an active run. |
 | UC-ADMIN-05-S02 | P2 | A running runtime observes the local cancellation request and records a canceled run result through the existing path. |
 | UC-ADMIN-05-S03 | P2 | Canceling a terminal or missing run fails clearly without creating destructive side effects. |
-| UC-ADMIN-05-S04 | P2 | The run detail view shows a confirmation-gated cancel action for active runs only. |
+| UC-ADMIN-05-S04 | P2 | The React run detail route shows a confirmation-gated cancel action for active runs only and reports not-cancelable states clearly. |
