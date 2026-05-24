@@ -2001,7 +2001,7 @@ describe("runDaemonCycle", () => {
     const config = {
       ...defaultConfig(),
       runtime: {
-        default: "cc" as const,
+        default: "claude-code" as const,
       },
       queue: {
         label: "ready",
@@ -2043,7 +2043,7 @@ describe("runDaemonCycle", () => {
     });
     expect(runs[0]?.config).toMatchObject({
       runtime: {
-        default: "cc",
+        default: "claude-code",
       },
       queue: {
         label: "ready",
@@ -2403,6 +2403,12 @@ function fakeRuntime(availability: Partial<RuntimeAvailability> = {}): AgentRunt
     }),
     run: () => {
       throw new Error("runtime run was not expected");
+    },
+    start: () => {
+      throw new Error("runtime start was not expected");
+    },
+    resume: () => {
+      throw new Error("runtime resume was not expected");
     },
   };
 }

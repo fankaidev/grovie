@@ -14,7 +14,8 @@
 
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-EXECUTION-06-S01 | P2 | `cc`, `pi`, `opencode`, and `hermes` adapters check CLI availability with `--version`. |
+| UC-EXECUTION-06-S01 | P2 | `codex`, `claude-code`, and `pi` adapters report CLI availability through the runtime boundary. |
 | UC-EXECUTION-06-S02 | P2 | A selected non-Codex runtime writes handoff files, stdout, stderr, and runtime events through the existing runtime boundary. |
 | UC-EXECUTION-06-S03 | P2 | A selected non-Codex runtime can be canceled through the runtime monitor and records a canceled result. |
-| UC-EXECUTION-06-S04 | P2 | Config validation accepts only the supported explicit runtime names. |
+| UC-EXECUTION-06-S04 | P2 | Config validation accepts only `codex`, `claude-code`, and `pi`, and rejects retired runtime names such as `cc`, `opencode`, and `hermes`. |
+| UC-EXECUTION-06-S05 | P1 | Each supported runtime can resume from a persisted runtime session reference. |

@@ -12,11 +12,14 @@ export type RuntimeAvailability = {
   message: string;
 };
 
-export type RuntimeName = "codex" | "cc" | "pi" | "opencode" | "hermes";
+export type RuntimeName = "codex" | "claude-code" | "pi";
 
 export type AgentRuntime = {
   name: RuntimeName;
   checkAvailability(): RuntimeAvailability;
+  start(input: RuntimeStartInput): Promise<RuntimeRunResult> | RuntimeRunResult;
+  resume(input: RuntimeResumeInput): Promise<RuntimeRunResult> | RuntimeRunResult;
+  interrupt?(input: RuntimeInterruptInput): Promise<void> | void;
   run(input: AgentRunInput): RuntimeRunResult;
   runAsync?(input: AgentRunInput): Promise<RuntimeRunResult>;
 };
@@ -25,6 +28,15 @@ export type AgentRunInput = {
   run: PreparedRun;
   issue: GitHubIssue;
   monitor?: RuntimeMonitor;
+};
+
+export type RuntimeStartInput = AgentRunInput;
+export type RuntimeResumeInput = AgentRunInput & {
+  runtimeSessionRef?: RuntimeSessionRef;
+};
+export type RuntimeInterruptInput = {
+  run: PreparedRun;
+  runtimeSessionRef?: RuntimeSessionRef;
 };
 
 export type RuntimeMonitor = {
@@ -105,14 +117,22 @@ export class CodexRuntime implements AgentRuntime {
     };
   }
 
+  start(input: RuntimeStartInput): RuntimeRunResult {
+    return this.run(input);
+  }
+
+  resume(input: RuntimeResumeInput): RuntimeRunResult {
+    return this.run(input);
+  }
+
   run(input: AgentRunInput): RuntimeRunResult {
-    const preparedInput = prepareCodexInput(input);
+    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
     const result = this.runner.run(preparedInput.command[0] ?? "codex", preparedInput.command.slice(1), preparedInput.prompt, {
       cwd: input.run.worktreePath,
       maxBuffer: 1024 * 1024 * 50,
     });
 
-    return finishCodexRun(input, preparedInput, {
+    return finishCliRun(input, preparedInput, {
       exitCode: result.exitCode,
       stdout: result.stdout,
       stderr: result.stderr,
@@ -120,26 +140,32 @@ export class CodexRuntime implements AgentRuntime {
   }
 
   async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
-    const preparedInput = prepareCodexInput(input);
+    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
     const result = await runStreamingCommand(input, preparedInput);
 
-    return finishCodexRun(input, preparedInput, result);
+    return finishCliRun(input, preparedInput, result);
   }
 }
 
-export class LocalCliRuntime implements AgentRuntime {
-  readonly name: Exclude<RuntimeName, "codex">;
+export class ClaudeCodeRuntime implements AgentRuntime {
+  readonly name = "claude-code";
 
-  constructor(name: Exclude<RuntimeName, "codex">, private readonly runner: CommandRunner = new SpawnCommandRunner()) {
-    this.name = name;
-  }
+  constructor(private readonly runner: CommandRunner = new SpawnCommandRunner()) {}
 
   checkAvailability(): RuntimeAvailability {
-    return checkCliAvailability(this.name, this.runner);
+    return checkCliAvailability(getRuntimeAdapter(this.name), this.runner);
+  }
+
+  start(input: RuntimeStartInput): RuntimeRunResult {
+    return this.run(input);
+  }
+
+  resume(input: RuntimeResumeInput): RuntimeRunResult {
+    return this.run(input);
   }
 
   run(input: AgentRunInput): RuntimeRunResult {
-    const preparedInput = prepareGenericCliInput(input, this.name);
+    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
     const result = this.runner.run(preparedInput.command[0] ?? this.name, preparedInput.command.slice(1), preparedInput.prompt, {
       cwd: input.run.worktreePath,
       maxBuffer: 1024 * 1024 * 50,
@@ -153,7 +179,46 @@ export class LocalCliRuntime implements AgentRuntime {
   }
 
   async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
-    const preparedInput = prepareGenericCliInput(input, this.name);
+    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
+    const result = await runStreamingCommand(input, preparedInput);
+
+    return finishCliRun(input, preparedInput, result);
+  }
+}
+
+export class PiRuntime implements AgentRuntime {
+  readonly name = "pi";
+
+  constructor(private readonly runner: CommandRunner = new SpawnCommandRunner()) {}
+
+  checkAvailability(): RuntimeAvailability {
+    return checkCliAvailability(getRuntimeAdapter(this.name), this.runner);
+  }
+
+  start(input: RuntimeStartInput): RuntimeRunResult {
+    return this.run(input);
+  }
+
+  resume(input: RuntimeResumeInput): RuntimeRunResult {
+    return this.run(input);
+  }
+
+  run(input: AgentRunInput): RuntimeRunResult {
+    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
+    const result = this.runner.run(preparedInput.command[0] ?? this.name, preparedInput.command.slice(1), preparedInput.prompt, {
+      cwd: input.run.worktreePath,
+      maxBuffer: 1024 * 1024 * 50,
+    });
+
+    return finishCliRun(input, preparedInput, {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+  }
+
+  async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
+    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
     const result = await runStreamingCommand(input, preparedInput);
 
     return finishCliRun(input, preparedInput, result);
@@ -161,10 +226,18 @@ export class LocalCliRuntime implements AgentRuntime {
 }
 
 export function createRuntime(name: RuntimeName): AgentRuntime {
-  return name === "codex" ? new CodexRuntime() : new LocalCliRuntime(name);
+  if (name === "codex") {
+    return new CodexRuntime();
+  }
+
+  if (name === "claude-code") {
+    return new ClaudeCodeRuntime();
+  }
+
+  return new PiRuntime();
 }
 
-type PreparedCodexInput = {
+type PreparedRuntimeInput = {
   runtime: RuntimeName;
   prompt: string;
   command: string[];
@@ -173,7 +246,7 @@ type PreparedCodexInput = {
   startedAt: string;
 };
 
-type CodexCommandResult = {
+type RuntimeCommandResult = {
   exitCode: number;
   stdout: string;
   stderr: string;
@@ -182,25 +255,21 @@ type CodexCommandResult = {
   streamed?: boolean;
 };
 
-function prepareCodexInput(input: AgentRunInput): PreparedCodexInput {
-    const task = JSON.parse(readFileSync(input.run.taskPath, "utf8")) as unknown;
-    const prompt = buildCodexPrompt({
-      issue: input.issue,
-      run: input.run,
-      task,
-    });
-    const handoffDir = join(input.run.worktreePath, ".grovie");
-    const worktreeTaskPath = join(handoffDir, "task.json");
-    const worktreePromptPath = join(handoffDir, "prompt.md");
+type RuntimeAdapter = {
+  runtime: RuntimeName;
+  command: string;
+  availabilityArgs: string[];
+  startCommand(input: AgentRunInput): string[];
+  resumeCommand(sessionId: string, input: AgentRunInput): string[];
+};
 
-    mkdirSync(handoffDir, { recursive: true });
-    writeFileSync(input.run.promptPath, prompt, "utf8");
-    writeFileSync(worktreePromptPath, prompt, "utf8");
-    writeFileSync(worktreeTaskPath, `${JSON.stringify(task, null, 2)}\n`, "utf8");
-
-    const existingSessionRef = shouldResumeRuntimeSession(task) ? readRuntimeSessionRef(input.run.sessionDir, "codex") : undefined;
-    const command = existingSessionRef === undefined
-      ? [
+function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
+  if (runtime === "codex") {
+    return {
+      runtime,
+      command: "codex",
+      availabilityArgs: ["--version"],
+      startCommand: (input) => [
         "codex",
         "--ask-for-approval",
         "never",
@@ -211,40 +280,40 @@ function prepareCodexInput(input: AgentRunInput): PreparedCodexInput {
         "--sandbox",
         "workspace-write",
         "-",
-      ]
-      : [
+      ],
+      resumeCommand: (sessionId) => [
         "codex",
         "--ask-for-approval",
         "never",
         "exec",
         "resume",
         "--json",
-        existingSessionRef.sessionId,
+        sessionId,
         "-",
-      ];
-    const startedAt = new Date().toISOString();
-    appendRuntimeEvent(input.run, "runtime.started", {
-      runtime: "codex",
-      command,
-      runtimeSessionRef: existingSessionRef,
-      promptPath: input.run.promptPath,
-      taskPath: input.run.taskPath,
-      worktreePromptPath,
-      worktreeTaskPath,
-      startedAt,
-    });
+      ],
+    };
+  }
+
+  if (runtime === "claude-code") {
+    return {
+      runtime,
+      command: "claude",
+      availabilityArgs: ["--version"],
+      startCommand: () => ["claude", "--print"],
+      resumeCommand: (sessionId) => ["claude", "--resume", sessionId, "--print"],
+    };
+  }
 
   return {
-    runtime: "codex",
-    prompt,
-    command,
-    worktreeTaskPath,
-    worktreePromptPath,
-    startedAt,
+    runtime,
+    command: "pi",
+    availabilityArgs: ["--version"],
+    startCommand: () => ["pi", "-"],
+    resumeCommand: (sessionId) => ["pi", "resume", sessionId, "-"],
   };
 }
 
-function prepareGenericCliInput(input: AgentRunInput, runtime: Exclude<RuntimeName, "codex">): PreparedCodexInput {
+function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter): PreparedRuntimeInput {
   const task = JSON.parse(readFileSync(input.run.taskPath, "utf8")) as unknown;
   const prompt = buildCodexPrompt({
     issue: input.issue,
@@ -254,7 +323,10 @@ function prepareGenericCliInput(input: AgentRunInput, runtime: Exclude<RuntimeNa
   const handoffDir = join(input.run.worktreePath, ".grovie");
   const worktreeTaskPath = join(handoffDir, "task.json");
   const worktreePromptPath = join(handoffDir, "prompt.md");
-  const command = [runtime, "-"];
+  const existingSessionRef = shouldResumeRuntimeSession(task) ? readRuntimeSessionRef(input.run.sessionDir, adapter.runtime) : undefined;
+  const command = existingSessionRef === undefined
+    ? adapter.startCommand(input)
+    : adapter.resumeCommand(existingSessionRef.sessionId, input);
   const startedAt = new Date().toISOString();
 
   mkdirSync(handoffDir, { recursive: true });
@@ -262,8 +334,9 @@ function prepareGenericCliInput(input: AgentRunInput, runtime: Exclude<RuntimeNa
   writeFileSync(worktreePromptPath, prompt, "utf8");
   writeFileSync(worktreeTaskPath, `${JSON.stringify(task, null, 2)}\n`, "utf8");
   appendRuntimeEvent(input.run, "runtime.started", {
-    runtime,
+    runtime: adapter.runtime,
     command,
+    runtimeSessionRef: existingSessionRef,
     promptPath: input.run.promptPath,
     taskPath: input.run.taskPath,
     worktreePromptPath,
@@ -272,7 +345,7 @@ function prepareGenericCliInput(input: AgentRunInput, runtime: Exclude<RuntimeNa
   });
 
   return {
-    runtime,
+    runtime: adapter.runtime,
     prompt,
     command,
     worktreeTaskPath,
@@ -281,18 +354,10 @@ function prepareGenericCliInput(input: AgentRunInput, runtime: Exclude<RuntimeNa
   };
 }
 
-function finishCodexRun(
-  input: AgentRunInput,
-  preparedInput: PreparedCodexInput,
-  result: CodexCommandResult,
-): RuntimeRunResult {
-  return finishCliRun(input, preparedInput, result);
-}
-
 function finishCliRun(
   input: AgentRunInput,
-  preparedInput: PreparedCodexInput,
-  result: CodexCommandResult,
+  preparedInput: PreparedRuntimeInput,
+  result: RuntimeCommandResult,
 ): RuntimeRunResult {
   const endedAt = new Date().toISOString();
 
@@ -401,10 +466,6 @@ function parseRuntimeSessionRef(
   stderr: string,
   sessionDir: string,
 ): RuntimeSessionRef | undefined {
-  if (runtime !== "codex") {
-    return undefined;
-  }
-
   const sessionId = [...stdout.split("\n"), ...stderr.split("\n")]
     .flatMap((line) => parseRuntimeSessionId(runtime, line))[0];
 
@@ -465,14 +526,26 @@ function captureStreamingRuntimeSessionRef(
 }
 
 function parseRuntimeSessionId(runtime: RuntimeName, line: string): string[] {
-  if (runtime !== "codex") {
-    return [];
-  }
-
   try {
-    const parsed = JSON.parse(line) as { type?: unknown; thread_id?: unknown };
+    const parsed = JSON.parse(line) as {
+      type?: unknown;
+      thread_id?: unknown;
+      session_id?: unknown;
+      sessionId?: unknown;
+      conversation_id?: unknown;
+    };
 
-    return parsed.type === "thread.started" && typeof parsed.thread_id === "string" ? [parsed.thread_id] : [];
+    if (runtime === "codex") {
+      return parsed.type === "thread.started" && typeof parsed.thread_id === "string" ? [parsed.thread_id] : [];
+    }
+
+    for (const value of [parsed.session_id, parsed.sessionId, parsed.thread_id, parsed.conversation_id]) {
+      if (typeof value === "string" && value.length > 0) {
+        return [value];
+      }
+    }
+
+    return [];
   } catch {
     return [];
   }
@@ -518,14 +591,14 @@ function writeRunRuntimeProcess(runDir: string, runtimePid: number): void {
   }
 }
 
-function checkCliAvailability(runtime: RuntimeName, runner: CommandRunner): RuntimeAvailability {
-  const result = runner.run(runtime, ["--version"]);
+function checkCliAvailability(adapter: RuntimeAdapter, runner: CommandRunner): RuntimeAvailability {
+  const result = runner.run(adapter.command, adapter.availabilityArgs);
   const output = (result.stdout.trim() || result.stderr.trim()).trim();
 
   if (result.exitCode === 0) {
     return {
-      runtime,
-      command: runtime,
+      runtime: adapter.runtime,
+      command: adapter.command,
       available: true,
       version: output.length > 0 ? output : undefined,
       message: output.length > 0 ? `available (${output})` : "available",
@@ -533,14 +606,14 @@ function checkCliAvailability(runtime: RuntimeName, runner: CommandRunner): Runt
   }
 
   return {
-    runtime,
-    command: runtime,
+    runtime: adapter.runtime,
+    command: adapter.command,
     available: false,
-    message: output.length > 0 ? output : `${runtime} --version failed with exit code ${result.exitCode}.`,
+    message: output.length > 0 ? output : `${adapter.command} --version failed with exit code ${result.exitCode}.`,
   };
 }
 
-function runStreamingCommand(input: AgentRunInput, preparedInput: PreparedCodexInput): Promise<CodexCommandResult> {
+function runStreamingCommand(input: AgentRunInput, preparedInput: PreparedRuntimeInput): Promise<RuntimeCommandResult> {
   return new Promise((resolve) => {
     writeFileSync(input.run.stdoutPath, "", "utf8");
     writeFileSync(input.run.stderrPath, "", "utf8");

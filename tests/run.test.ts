@@ -91,10 +91,10 @@ describe("runIssue", () => {
   it("[UC-EXECUTION-06-S02] uses the configured non-Codex default runtime for run handoff and result metadata", () => {
     const root = mkdtempSync(join(tmpdir(), "grovie-run-"));
     const binDir = join(root, "bin");
-    const opencodePath = join(binDir, "opencode");
+    const piPath = join(binDir, "pi");
     mkdirSync(binDir, { recursive: true });
-    writeFileSync(opencodePath, "#!/bin/sh\ncat >/dev/null\necho opencode done\n", "utf8");
-    chmodSync(opencodePath, 0o755);
+    writeFileSync(piPath, "#!/bin/sh\ncat >/dev/null\necho pi done\n", "utf8");
+    chmodSync(piPath, 0o755);
 
     const previousPath = process.env.PATH;
     process.env.PATH = `${binDir}:${previousPath ?? ""}`;
@@ -110,7 +110,7 @@ describe("runIssue", () => {
       const config = {
         ...defaultConfig(),
         runtime: {
-          default: "opencode" as const,
+          default: "pi" as const,
         },
       };
 
@@ -123,7 +123,7 @@ describe("runIssue", () => {
         repository: "fankaidev/grovie",
         config,
         configPath: "/project/.grovie.yml",
-        agent: "opencode",
+        agent: "pi",
         github,
         localState,
         resultHandler,
@@ -131,16 +131,16 @@ describe("runIssue", () => {
 
       expect(result.exitCode).toBe(0);
       expect(localState.prepareInput?.task).toMatchObject({
-        runtime: "opencode",
+        runtime: "pi",
         repository: "fankaidev/grovie",
       });
-      expect(resultHandler.input?.runtime).toBe("opencode");
-      expect(resultHandler.input?.execution.runtime).toBe("opencode");
-      expect(readFileSync(localState.run.taskPath, "utf8")).toContain('"runtime": "opencode"');
-      expect(readFileSync(localState.run.stdoutPath, "utf8")).toContain("opencode done");
-      expect(readFileSync(localState.run.eventsPath, "utf8")).toContain('"runtime":"opencode"');
-      expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"opencode"} -->');
-      expect(github.comments[0]).toContain("- Runtime: opencode");
+      expect(resultHandler.input?.runtime).toBe("pi");
+      expect(resultHandler.input?.execution.runtime).toBe("pi");
+      expect(readFileSync(localState.run.taskPath, "utf8")).toContain('"runtime": "pi"');
+      expect(readFileSync(localState.run.stdoutPath, "utf8")).toContain("pi done");
+      expect(readFileSync(localState.run.eventsPath, "utf8")).toContain('"runtime":"pi"');
+      expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"pi"} -->');
+      expect(github.comments[0]).toContain("- Runtime: pi");
     } finally {
       process.env.PATH = previousPath;
     }
@@ -711,6 +711,14 @@ class FakeRuntime implements AgentRuntime {
   run(input: AgentRunInput): RuntimeRunResult {
     this.runInput = input;
     return this.result;
+  }
+
+  start(input: AgentRunInput): RuntimeRunResult {
+    return this.run(input);
+  }
+
+  resume(input: AgentRunInput): RuntimeRunResult {
+    return this.run(input);
   }
 }
 

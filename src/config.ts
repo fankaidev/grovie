@@ -14,7 +14,7 @@ export const repositoryNameSchema = z.string().regex(
   /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/,
   "must use the owner/repo format",
 );
-export const runtimeNameSchema = z.enum(["codex", "cc", "pi", "opencode", "hermes"] satisfies RuntimeName[]);
+export const runtimeNameSchema = z.enum(["codex", "claude-code", "pi"] satisfies RuntimeName[]);
 export const agentNameSchema = z.string()
   .min(1, "must not be empty")
   .refine((value) => slugifyIdentityPart(value).length > 0, "must contain at least one letter or number")
