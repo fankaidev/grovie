@@ -18,7 +18,7 @@ export type LocalRunSummary = {
   issueNumber?: number;
   agentId?: string;
   runtime?: string;
-  status: "preparing" | "prepared" | "running" | "interrupting" | "interrupted" | "resuming" | "succeeded" | "failed" | "canceled" | "stale" | "unknown";
+  status: "preparing" | "prepared" | "running" | "interrupting" | "interrupted" | "resuming" | "rejected" | "succeeded" | "failed" | "canceled" | "stale" | "unknown";
   branchName?: string;
   localBranchName?: string;
   repositoryCachePath?: string;
@@ -77,6 +77,7 @@ const TERMINAL_STATUS_BY_EVENT: Record<string, LocalRunSummary["status"] | undef
   "run.canceled": "canceled",
   "run.interrupted": "interrupted",
   "run.resuming": "resuming",
+  "run.rejected": "rejected",
 };
 
 const DEFAULT_STALE_AFTER_MS = 30 * 60 * 1000;
@@ -160,7 +161,7 @@ export function renderLocalStatusOverview(input: LocalStatusOverviewInput): stri
     || run.status === "interrupting"
     || run.status === "resuming"
   );
-  const recentFailures = input.runs.filter((run) => run.status === "failed" || run.status === "stale" || run.status === "interrupted").slice(0, 3);
+  const recentFailures = input.runs.filter((run) => run.status === "failed" || run.status === "stale" || run.status === "interrupted" || run.status === "rejected").slice(0, 3);
 
   return [
     "grovie status",
@@ -295,7 +296,7 @@ function deriveRunStatus(
   now: Date,
   staleAfterMs: number,
 ): LocalRunSummary["status"] {
-  if (metadataStatus === "interrupting" || metadataStatus === "interrupted" || metadataStatus === "resuming") {
+  if (metadataStatus === "interrupting" || metadataStatus === "interrupted" || metadataStatus === "resuming" || metadataStatus === "rejected") {
     return metadataStatus;
   }
 

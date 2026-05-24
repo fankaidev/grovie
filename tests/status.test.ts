@@ -105,6 +105,49 @@ describe("local run status", () => {
     expect(run?.status).toBe("interrupted");
   });
 
+  it("[UC-WORKER-06-S16] reports rejected runs as rejected recent failures", () => {
+    const runsDir = createRunsDir();
+    writeRun(runsDir, "rejected-run", {
+      metadata: {
+        status: "rejected",
+        runId: "rejected-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 9,
+        agentId: "default@fankai-mac",
+        branchName: "grovie/issue-9",
+      },
+      events: [
+        event("2026-05-23T09:00:00.000Z", "run.interrupted", { resumeEligible: true }),
+        event("2026-05-23T09:00:01.000Z", "run.rejected", { reason: "Agent default@fankai-mac is not configured locally." }),
+      ],
+    });
+
+    const [run] = listLocalRuns(runsDir, {
+      now: new Date("2026-05-23T10:00:01.000Z"),
+    });
+    const output = renderLocalStatusOverview({
+      runs: run === undefined ? [] : [run],
+      daemonStatus: {
+        status: "stopped",
+        daemonDir: "/tmp/grovie/daemon",
+      },
+      watchedRepositories: [],
+      paths: {
+        root: "/tmp/grovie",
+        runsDir,
+        worktreesDir: "/tmp/grovie/worktrees",
+        reposDir: "/tmp/grovie/repos",
+        locksDir: "/tmp/grovie/locks",
+        requestsDir: "/tmp/grovie/requests",
+        sessionsDir: "/tmp/grovie/sessions",
+      },
+    });
+
+    expect(run?.status).toBe("rejected");
+    expect(renderRunsList(run === undefined ? [] : [run])).toContain("Status: rejected");
+    expect(output).toContain("rejected-run fankaidev/grovie#9 status=rejected");
+  });
+
   it("[UC-EXECUTION-02-S08] renders detailed paths, GitHub result links, and recent events for one run", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "detail-run", {
