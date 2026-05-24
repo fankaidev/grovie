@@ -1,6 +1,6 @@
 # UC-ADMIN-02: Inspect Local State Through Admin APIs
 
-> The local admin console exposes read-only APIs for daemon health, configuration, repositories, runs, and run events.
+> The local admin console exposes read-only APIs for daemon health, configuration, repositories, daemon activity, runs, and run events.
 
 ## Rules
 
@@ -20,3 +20,4 @@
 | UC-ADMIN-02-S04 | P2 | `GET /api/runs` returns recent local runs with issue, status, branch, log paths, and result links. |
 | UC-ADMIN-02-S05 | P2 | `GET /api/runs/:runId` returns a single run detail or a clear 404. |
 | UC-ADMIN-02-S06 | P2 | `GET /api/runs/:runId/events` returns local run events or a clear 404. |
+| UC-ADMIN-02-S07 | P1 | `GET /api/activity` returns recent daemon activity such as repository polls, received run requests, skipped queue candidates, and started or completed local actions. |
