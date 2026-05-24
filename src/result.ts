@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { GrovieConfig } from "./config.js";
 import {
   formatIssueReference,
+  type CreatedComment,
   type CreatedPullRequest,
   type GitHubGateway,
   type GitHubIssue,
@@ -36,6 +37,12 @@ export type HandleRunResultResult =
     validationSummary: string;
     commitSha: string;
     pullRequest: CreatedPullRequest;
+  }
+  | {
+    kind: "issue-comment";
+    status: string;
+    validationSummary: string;
+    comment: CreatedComment;
   };
 
 export class GitResultHandler implements ResultHandler {
@@ -55,6 +62,30 @@ export class GitResultHandler implements ResultHandler {
 
     const status = this.git(input.run.worktreePath, ["status", "--short", "--", ".", ":(exclude).grovie"]);
     const validationSummary = summarizeValidation(input.run);
+    const issueComment = readIssueCommentArtifact(input.run);
+
+    if (issueComment !== undefined) {
+      if (issueComment.length === 0) {
+        throw new Error("Issue comment artifact .grovie/issue-comment.md is empty.");
+      }
+
+      if (status.stdout.trim().length > 0) {
+        throw new Error("Issue comment artifact cannot be combined with worktree changes. Remove the artifact or commit the changes through a pull request.");
+      }
+
+      const commentResult = this.github.createIssueComment(input.issue.reference, issueComment);
+
+      if (!commentResult.ok) {
+        throw new Error(commentResult.error.message);
+      }
+
+      return {
+        kind: "issue-comment",
+        status: "",
+        validationSummary,
+        comment: commentResult.value,
+      };
+    }
 
     if (status.stdout.trim().length === 0) {
       return {
@@ -172,6 +203,18 @@ function summarizeValidation(run: PreparedRun): string {
   }
 
   return "No validation output captured.";
+}
+
+function readIssueCommentArtifact(run: PreparedRun): string | undefined {
+  const path = `${run.worktreePath}/.grovie/issue-comment.md`;
+
+  if (!existsSync(path)) {
+    return undefined;
+  }
+
+  const content = readText(path);
+
+  return content.trim();
 }
 
 function readText(path: string): string {

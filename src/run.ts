@@ -464,6 +464,7 @@ function finishRun(input: {
       input.localState.appendEvent(input.run, "result.handled", {
         kind: result.kind,
         pullRequestUrl: result.kind === "pull-request" ? result.pullRequest.url : undefined,
+        issueCommentUrl: result.kind === "issue-comment" ? result.comment.url : undefined,
       });
     } catch (error) {
       resultError = toErrorMessage(error);
@@ -498,6 +499,11 @@ function finishRun(input: {
       branchName: summary.branchName,
       runtime: summary.runtime,
       resultKind: summary.result?.kind,
+      resultUrl: summary.result?.kind === "pull-request"
+        ? summary.result.pullRequest.url
+        : summary.result?.kind === "issue-comment"
+          ? summary.result.comment.url
+          : undefined,
     },
   });
 
@@ -664,6 +670,10 @@ function renderRunComment(summary: RunSummary): string {
     lines.push(`- Pull request: ${summary.result.pullRequest.url}`);
   }
 
+  if (summary.result?.kind === "issue-comment") {
+    lines.push(`- Issue comment: ${summary.result.comment.url}`);
+  }
+
   return lines.join("\n");
 }
 
@@ -696,6 +706,10 @@ function renderCliRunOutput(summary: RunSummary): string {
 
   if (summary.result?.kind === "pull-request") {
     lines.push(`Pull request: ${summary.result.pullRequest.url}`);
+  }
+
+  if (summary.result?.kind === "issue-comment") {
+    lines.push(`Issue comment: ${summary.result.comment.url}`);
   }
 
   return lines.join("\n");

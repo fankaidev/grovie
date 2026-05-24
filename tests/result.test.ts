@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { GrovieConfig } from "../src/config.js";
 import type {
   CommandResult,
   CommandRunner,
   CreatePullRequestInput,
+  CreatedComment,
   CreatedPullRequest,
   GitHubGateway,
   GitHubIssue,
@@ -111,6 +115,40 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests[0]?.body).toContain("No validation output captured.");
   });
 
+  it("[UC-EXECUTION-05-S06] publishes an issue comment artifact without relying on runtime GitHub auth", () => {
+    const run = fakeRunWithIssueComment("My debugger and I broke up because it kept stopping at every little issue.");
+    const runner = new FakeRunner([
+      {
+        stdout: "",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    expect(
+      handler.handle({
+        run,
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/project/.grovie.yml",
+        repository: "fankaidev/grovie",
+        runtime: "codex",
+        execution: fakeExecution(),
+      }),
+    ).toEqual({
+      kind: "issue-comment",
+      status: "",
+      validationSummary: "No validation output captured.",
+      comment: {
+        id: 1,
+        body: "My debugger and I broke up because it kept stopping at every little issue.",
+        url: "https://github.com/fankaidev/grovie/issues/9#issuecomment-1",
+      },
+    });
+    expect(github.comments).toEqual(["My debugger and I broke up because it kept stopping at every little issue."]);
+    expect(github.pullRequests).toHaveLength(0);
+  });
+
   it("[UC-EXECUTION-05-S03] reports deterministic branch push conflicts without opening a PR", () => {
     const runner = new FakeRunner([
       {
@@ -214,6 +252,7 @@ class FakeRunner implements CommandRunner {
 
 class FakeGitHub implements GitHubGateway {
   readonly pullRequests: CreatePullRequestInput[] = [];
+  readonly comments: string[] = [];
 
   getAuthenticatedUser(): ReturnType<GitHubGateway["getAuthenticatedUser"]> {
     throw new Error("getAuthenticatedUser was not expected");
@@ -235,8 +274,17 @@ class FakeGitHub implements GitHubGateway {
     throw new Error("removeLabel was not expected");
   }
 
-  createIssueComment(): ReturnType<GitHubGateway["createIssueComment"]> {
-    throw new Error("createIssueComment was not expected");
+  createIssueComment(reference: IssueReference, body: string): ReturnType<GitHubGateway["createIssueComment"]> {
+    this.comments.push(body);
+
+    return {
+      ok: true,
+      value: {
+        id: this.comments.length,
+        body,
+        url: `https://github.com/${reference.owner}/${reference.repo}/issues/${reference.number}#issuecomment-${this.comments.length}`,
+      } satisfies CreatedComment,
+    };
   }
 
   updateIssueComment(): ReturnType<GitHubGateway["updateIssueComment"]> {
@@ -300,6 +348,21 @@ function fakeRun(): PreparedRun {
     stdoutPath: "/tmp/grovie/runs/fankaidev-grovie-issue-9/stdout.log",
     stderrPath: "/tmp/grovie/runs/fankaidev-grovie-issue-9/stderr.log",
   };
+}
+
+function fakeRunWithIssueComment(comment: string): PreparedRun {
+  const root = mkdtempSync(join(tmpdir(), "grovie-result-"));
+  const run = {
+    ...fakeRun(),
+    sessionDir: join(root, "sessions", "fankaidev-grovie-issue-9-codex"),
+    repositoryCachePath: join(root, "repos", "fankaidev-grovie.git"),
+    worktreePath: join(root, "worktrees", "fankaidev-grovie-issue-9"),
+    runDir: join(root, "runs", "fankaidev-grovie-issue-9"),
+  };
+
+  mkdirSync(join(run.worktreePath, ".grovie"), { recursive: true });
+  writeFileSync(join(run.worktreePath, ".grovie", "issue-comment.md"), `${comment}\n`, "utf8");
+  return run;
 }
 
 function fakeIssue(): GitHubIssue {
