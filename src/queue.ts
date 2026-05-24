@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { getAssignedAgentIds, isAssignedToLocalMachine } from "./assignment.js";
 import { hasCancelRequest } from "./claim.js";
-import { formatIssueReference, type GitHubGateway, type GitHubIssue, type GitHubRelatedPullRequest, type IssueReference } from "./github.js";
+import {
+  formatIssueReference,
+  parseRepositoryName,
+  type GitHubGateway,
+  type GitHubIssue,
+  type GitHubRelatedPullRequest,
+  type IssueReference,
+} from "./github.js";
 import type { RunLocalState } from "./run.js";
 
 export type QueueRepositoryInput = {
@@ -50,6 +57,7 @@ export type QueueInspectionInput = {
   machineId: string;
   configuredAgentIds?: string[];
   localState?: RunLocalState;
+  issueNumbers?: number[];
 };
 
 const PRIORITY_RANK: Record<IssuePriority, number> = {
@@ -63,31 +71,21 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
   const results: QueueInspectionResult[] = [];
 
   for (const repository of input.repositories) {
-    const listResult = input.github.listOpenIssues(repository.repository, repository.label);
+    const candidates: QueueCandidate[] = [];
+    const issuesResult = readQueueIssues(input, repository);
 
-    if (!listResult.ok) {
+    if (!issuesResult.ok) {
       return {
         ok: false,
-        message: listResult.error.message,
+        message: issuesResult.message,
       };
     }
 
-    const candidates: QueueCandidate[] = [];
-
-    for (const summary of listResult.value) {
-      const issueResult = input.github.readIssue(summary.reference);
-
-      if (!issueResult.ok) {
-        return {
-          ok: false,
-          message: issueResult.error.message,
-        };
-      }
-
+    for (const issue of issuesResult.value) {
       const cheapCheck = evaluateCheapIssueSkips({
         repository: repository.repository,
         label: repository.label,
-        issue: issueResult.value,
+        issue,
         machineId: input.machineId,
         configuredAgentIds: input.configuredAgentIds,
         localState: input.localState,
@@ -98,7 +96,7 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
         continue;
       }
 
-      const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(summary.reference) ?? {
+      const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(issue.reference) ?? {
         ok: true as const,
         value: [],
       };
@@ -112,7 +110,7 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
 
       candidates.push(...evaluateActivityCandidates({
         repository: repository.repository,
-        issue: issueResult.value,
+        issue,
         relatedPullRequests: relatedPullRequestsResult.value,
         agentIds: cheapCheck.agentIds,
         localState: input.localState,
@@ -140,6 +138,76 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
   return {
     ok: true,
     value: results,
+  };
+}
+
+function readQueueIssues(
+  input: QueueInspectionInput,
+  repository: QueueRepositoryInput,
+): { ok: true; value: GitHubIssue[] } | { ok: false; message: string } {
+  if (input.issueNumbers !== undefined) {
+    const parsedRepository = parseRepositoryName(repository.repository);
+
+    if (!parsedRepository.ok) {
+      return {
+        ok: false,
+        message: parsedRepository.error.message,
+      };
+    }
+
+    const issues: GitHubIssue[] = [];
+
+    for (const issueNumber of input.issueNumbers) {
+      const issueResult = input.github.readIssue({
+        ...parsedRepository.value,
+        number: issueNumber,
+      });
+
+      if (!issueResult.ok) {
+        return {
+          ok: false,
+          message: issueResult.error.message,
+        };
+      }
+
+      if (issueResult.value.state === "open" && issueResult.value.labels.includes(repository.label)) {
+        issues.push(issueResult.value);
+      }
+    }
+
+    return {
+      ok: true,
+      value: issues,
+    };
+  }
+
+  const listResult = input.github.listOpenIssues(repository.repository, repository.label);
+
+  if (!listResult.ok) {
+    return {
+      ok: false,
+      message: listResult.error.message,
+    };
+  }
+
+  const issues: GitHubIssue[] = [];
+
+  for (const summary of listResult.value) {
+    const issueResult = input.github.readIssue(summary.reference);
+
+    if (!issueResult.ok) {
+      return {
+        ok: false,
+        message: issueResult.error.message,
+      };
+    }
+
+    issues.push(issueResult.value);
+  }
+
+  return {
+    ok: true,
+    value: issues,
   };
 }
 

@@ -24,6 +24,7 @@ import { runIssueAsync } from "./run.js";
 import type { AgentRuntime } from "./runtime.js";
 import { createRuntime } from "./runtime.js";
 import { LocalDaemonLifecycle, type DaemonLifecycle } from "./daemon-lifecycle.js";
+import { planRepositoryEventPolling } from "./repository-events.js";
 
 export type DaemonInput = {
   repository: string;
@@ -44,6 +45,7 @@ export type DaemonInput = {
   issueRunner?: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
   adminConsole?: AdminConsoleResolvedConfig;
   daemonLifecycle?: DaemonLifecycle;
+  issueNumbers?: number[];
 };
 
 export type DaemonRepositoryInput = {
@@ -100,7 +102,7 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
     }
 
     while (true) {
-      const result = await runDaemonCycle(input);
+      const result = await runDaemonSingleRepositoryCycle(input);
       await reportDaemonCycle(input, result);
       const sleep = input.sleep ?? sleepSync;
       await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
@@ -109,6 +111,46 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
     await stopDaemonAdminConsole(adminConsole);
     releaseDaemonLock(input, daemonLockResult.lock);
   }
+}
+
+async function runDaemonSingleRepositoryCycle(input: DaemonInput): Promise<DaemonCycleResult> {
+  recordActivity(input, {
+    type: "repository.poll_started",
+    message: `Polling ${input.repository}.`,
+    repository: input.repository,
+    data: {
+      label: input.label,
+    },
+  });
+
+  const eventPlan = planRepositoryCycle(input, input.repository);
+
+  recordActivity(input, {
+    type: `repository.events_${eventPlan.mode}`,
+    message: `${input.repository}: ${eventPlan.reason}.`,
+    repository: input.repository,
+    data: {
+      eventCount: eventPlan.eventCount,
+      issueNumbers: eventPlan.issueNumbers,
+    },
+  });
+
+  if (eventPlan.mode === "skip") {
+    return {
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        `Skipped ${input.repository}: ${eventPlan.reason}.`,
+      ].join("\n"),
+    };
+  }
+
+  return runDaemonCycle({
+    ...input,
+    issueNumbers: eventPlan.issueNumbers,
+  });
 }
 
 export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput): Promise<RunIssueResult> {
@@ -253,6 +295,27 @@ async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Prom
     }
 
     const config = loadedConfig?.config ?? repository.config ?? input.config;
+    const eventPlan = planRepositoryCycle(input, repository.repository);
+
+    recordActivity(input, {
+      type: `repository.events_${eventPlan.mode}`,
+      message: `${repository.repository}: ${eventPlan.reason}.`,
+      repository: repository.repository,
+      data: {
+        eventCount: eventPlan.eventCount,
+        issueNumbers: eventPlan.issueNumbers,
+      },
+    });
+
+    if (eventPlan.mode === "skip") {
+      idleMessages.push([
+        "grovie daemon",
+        "",
+        `Skipped ${repository.repository}: ${eventPlan.reason}.`,
+      ].join("\n"));
+      continue;
+    }
+
     const result = await runDaemonCycle({
       ...input,
       repository: repository.repository,
@@ -260,6 +323,7 @@ async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Prom
       config,
       configPath: loadedConfig?.path ?? repository.configPath ?? input.configPath,
       runtime: input.runtime ?? createRuntime(config.runtime.default),
+      issueNumbers: eventPlan.issueNumbers,
     });
 
     if (result.exitCode !== 0 || result.processed) {
@@ -478,6 +542,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     machineId: identity.machineId,
     configuredAgentIds: input.localAgents?.map((agent) => agent.agentId),
     localState: input.localState,
+    issueNumbers: input.issueNumbers,
   });
 
   if (!queueResult.ok) {
@@ -541,6 +606,34 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       ...(skippedSummary === undefined ? [] : ["", skippedSummary]),
     ].join("\n"),
   };
+}
+
+function planRepositoryCycle(input: Pick<DaemonInput, "once" | "github" | "localState" | "now">, repository: string) {
+  if (input.once || input.github.listRepositoryEvents === undefined) {
+    return {
+      mode: "full-scan" as const,
+      reason: input.once ? "one-shot daemon run uses a full scan" : "GitHub repository events are unavailable",
+      eventCount: 0,
+    };
+  }
+
+  const eventsResult = input.github.listRepositoryEvents(repository);
+
+  if (!eventsResult.ok) {
+    return {
+      mode: "full-scan" as const,
+      reason: `repository events failed: ${eventsResult.error.message}`,
+      eventCount: 0,
+    };
+  }
+
+  return planRepositoryEventPolling({
+    paths: input.localState?.getPaths?.(),
+    repository,
+    events: eventsResult.value,
+    github: input.github,
+    now: input.now?.(),
+  });
 }
 
 async function runRequestedIssue(input: DaemonInput & {

@@ -10,6 +10,7 @@
 | R2 | Execution locks are local and keyed by `(issue, agent)`. |
 | R3 | Different agents can work on the same issue independently. |
 | R4 | Before polling a watched repository, the daemon resolves that repository's `.grovie.yml` from the bare cache on the remote default branch; the issue worktree is prepared later with the same resolved policy. |
+| R5 | Long-running daemon cycles use GitHub repository events as change hints, but fresh issue and pull request reads remain the source of truth before starting work. |
 
 ## Scenarios
 
@@ -29,3 +30,4 @@
 | UC-WORKER-04-S12 | P1 | A watched repository's `.grovie.yml` supplies daemon policy defaults such as `runtime.default`, queue label, branch prefix, pull request behavior, comments mode, and safety policy for runs in that repository. |
 | UC-WORKER-04-S13 | P1 | An invalid watched repository `.grovie.yml` prevents runs for that repository with a clear error while the daemon can continue checking unrelated watched repositories. |
 | UC-WORKER-04-S14 | P0 | A daemon cycle skips an issue assigned to an agent id that matches the machine but is not configured locally. |
+| UC-WORKER-04-S15 | P1 | A long-running daemon cycle reads repository events, skips queue inspection when no relevant events changed, resolves pull request events to related issues through GitHub with a local cache, and periodically falls back to a full queue scan. |

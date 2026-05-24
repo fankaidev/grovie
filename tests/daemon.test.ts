@@ -11,11 +11,13 @@ import type {
   GitHubIssue,
   GitHubIssueSummary,
   GitHubRelatedPullRequest,
+  GitHubRepositoryEvent,
   IssueReference,
 } from "../src/github.js";
 import { resolveMachineId } from "../src/identity.js";
 import { LocalState } from "../src/local-state.js";
 import { inspectQueue } from "../src/queue.js";
+import { planRepositoryEventPolling } from "../src/repository-events.js";
 import type { RunIssueAsyncInput, RunIssueResult } from "../src/run.js";
 import type { AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
 
@@ -444,6 +446,48 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]?.agentId).toBe(`coder@${machineId}`);
     expect(github.createdComments).toEqual([]);
+  });
+
+  it("[UC-WORKER-04-S15] inspects only event-affected issues during filtered queue checks", () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: fakeReference(8),
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+      fakeIssue({
+        reference: fakeReference(9),
+        labels: ["other", `agent:coder@${machineId}`],
+      }),
+    ]);
+
+    const queueResult = inspectQueue({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+      ],
+      github,
+      machineId,
+      issueNumbers: [8, 9],
+    });
+
+    expect(queueResult).toMatchObject({
+      ok: true,
+      value: [
+        {
+          candidates: [
+            {
+              issueReference: fakeReference(8),
+              status: "runnable",
+            },
+          ],
+        },
+      ],
+    });
+    expect(github.listOpenIssueCalls).toEqual([]);
+    expect(github.readIssueCalls.map((reference) => reference.number)).toEqual([8, 9]);
   });
 
   it("[UC-WORKER-04-S14] skips a machine-local agent label when that agent is not configured", async () => {
@@ -1082,6 +1126,38 @@ describe("runDaemonCycle", () => {
       exitCode: 1,
       stderr: `Grovie daemon already appears to be running for machine ${resolveMachineId(hostname())} with pid ${process.pid}.`,
     });
+  });
+
+  it("[UC-WORKER-04-S15] uses repository events for single-repository long-running daemon cycles", async () => {
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const events = [fakeRepositoryEvent("event-1")];
+    const github = new FakeGitHub([], { repositoryEvents: events });
+    const stop = new Error("stop after first cycle");
+
+    planRepositoryEventPolling({
+      paths: localState.getPaths(),
+      repository: "fankaidev/grovie",
+      events,
+      github,
+      now: NOW,
+    });
+
+    await expect(runDaemon({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: false,
+      localState,
+      now: () => new Date("2026-05-22T00:01:00Z"),
+      sleep: () => {
+        throw stop;
+      },
+    })).rejects.toThrow("stop after first cycle");
+
+    expect(github.listRepositoryEventCalls).toEqual(["fankaidev/grovie"]);
+    expect(github.listOpenIssueCalls).toEqual([]);
   });
 
   it("[UC-WORKER-04-S05] [UC-WORKER-04-S11] reports an assigned issue skipped by a local execution lock", async () => {
@@ -2210,6 +2286,9 @@ describe("runDaemonCycle", () => {
 class FakeGitHub implements GitHubGateway {
   readonly createdComments: string[] = [];
   readonly updatedComments: Array<{ commentId: number; body: string }> = [];
+  readonly listOpenIssueCalls: Array<{ repository: string; label: string }> = [];
+  readonly readIssueCalls: IssueReference[] = [];
+  readonly listRepositoryEventCalls: string[] = [];
   private nextCommentId = 1;
 
   constructor(
@@ -2218,6 +2297,7 @@ class FakeGitHub implements GitHubGateway {
       commentNow?: () => Date;
       failReadIssueFor?: number;
       relatedPullRequests?: GitHubRelatedPullRequest[];
+      repositoryEvents?: GitHubRepositoryEvent[];
     } = {},
   ) {}
 
@@ -2226,6 +2306,7 @@ class FakeGitHub implements GitHubGateway {
   }
 
   listOpenIssues(repository: string, label: string): ReturnType<GitHubGateway["listOpenIssues"]> {
+    this.listOpenIssueCalls.push({ repository, label });
     const summaries: GitHubIssueSummary[] = this.issues
       .filter((issue) => `${issue.reference.owner}/${issue.reference.repo}` === repository)
       .filter((issue) => issue.state === "open")
@@ -2243,6 +2324,8 @@ class FakeGitHub implements GitHubGateway {
   }
 
   readIssue(reference: IssueReference): ReturnType<GitHubGateway["readIssue"]> {
+    this.readIssueCalls.push(reference);
+
     if (this.options.failReadIssueFor === reference.number) {
       return {
         ok: false,
@@ -2334,6 +2417,22 @@ class FakeGitHub implements GitHubGateway {
     };
   }
 
+  listRepositoryEvents(repository: string): ReturnType<NonNullable<GitHubGateway["listRepositoryEvents"]>> {
+    this.listRepositoryEventCalls.push(repository);
+
+    return {
+      ok: true,
+      value: this.options.repositoryEvents ?? [],
+    };
+  }
+
+  readPullRequestIssueLinks(): ReturnType<NonNullable<GitHubGateway["readPullRequestIssueLinks"]>> {
+    return {
+      ok: true,
+      value: [],
+    };
+  }
+
   private findIssue(reference: IssueReference): GitHubIssue {
     const issue = this.issues.find(
       (candidate) =>
@@ -2415,6 +2514,16 @@ function fakeIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
     labels: ["grovie", `agent:default@${resolveMachineId(hostname())}`],
     comments: [],
     defaultBranch: "main",
+    ...overrides,
+  };
+}
+
+function fakeRepositoryEvent(id: string, overrides: Partial<GitHubRepositoryEvent> = {}): GitHubRepositoryEvent {
+  return {
+    id,
+    type: "PushEvent",
+    createdAt: NOW.toISOString(),
+    actor: "fankaidev",
     ...overrides,
   };
 }

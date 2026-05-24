@@ -86,6 +86,26 @@ export type GitHubRelatedPullRequest = {
   diffSummary?: string;
 };
 
+export type GitHubRepositoryEvent = {
+  id: string;
+  type: string;
+  createdAt: string;
+  actor: string;
+  action?: string;
+  issueNumber?: number;
+  issueUrl?: string;
+  pullRequestNumber?: number;
+  pullRequestUrl?: string;
+  commentUrl?: string;
+  reviewUrl?: string;
+};
+
+export type GitHubPullRequestIssueLink = {
+  pullRequestNumber: number;
+  issueNumber: number;
+  source: "closing-reference" | "body" | "branch";
+};
+
 export type GitHubIssue = {
   reference: IssueReference;
   title: string;
@@ -139,6 +159,8 @@ export type GitHubGateway = {
   updateIssueComment(repository: string, commentId: number, body: string): Result<CreatedComment>;
   createPullRequest(input: CreatePullRequestInput): Result<CreatedPullRequest>;
   readRelatedPullRequests?(reference: IssueReference): Result<GitHubRelatedPullRequest[]>;
+  listRepositoryEvents?(repository: string): Result<GitHubRepositoryEvent[]>;
+  readPullRequestIssueLinks?(repository: string, pullRequestNumber: number): Result<GitHubPullRequestIssueLink[]>;
   listRepositoryOwners?(): Result<string[]>;
   readRepository?(repository: string): Result<CreatedRepository>;
   createRepository?(input: { repository: string; private: boolean }): Result<CreatedRepository>;
@@ -528,6 +550,100 @@ export class GhGitHubGateway implements GitHubGateway {
     };
   }
 
+  listRepositoryEvents(repository: string): Result<GitHubRepositoryEvent[]> {
+    const result = this.apiJson<GitHubRepositoryEventResponse[]>(`repos/${repository}/events?per_page=100`);
+
+    if (!result.ok) {
+      return result;
+    }
+
+    return {
+      ok: true,
+      value: result.value.map(toRepositoryEvent),
+    };
+  }
+
+  readPullRequestIssueLinks(repository: string, pullRequestNumber: number): Result<GitHubPullRequestIssueLink[]> {
+    const parsedRepository = parseRepositoryName(repository);
+
+    if (!parsedRepository.ok) {
+      return parsedRepository;
+    }
+
+    const query = [
+      "query($owner: String!, $name: String!, $number: Int!) {",
+      "  repository(owner: $owner, name: $name) {",
+      "    pullRequest(number: $number) {",
+      "      body",
+      "      headRefName",
+      "      closingIssuesReferences(first: 20) { nodes { number } }",
+      "    }",
+      "  }",
+      "}",
+    ].join("\n");
+    const result = this.runner.run("gh", [
+      "api",
+      "graphql",
+      "-f",
+      `owner=${parsedRepository.value.owner}`,
+      "-f",
+      `name=${parsedRepository.value.repo}`,
+      "-F",
+      `number=${pullRequestNumber}`,
+      "-f",
+      `query=${query}`,
+    ]);
+
+    if (result.exitCode !== 0) {
+      return {
+        ok: false,
+        error: {
+          code: "gh_failed",
+          message: result.stderr.trim() || `gh api graphql failed with exit code ${result.exitCode}.`,
+          command: "gh api graphql",
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+        },
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(result.stdout) as GitHubPullRequestIssueLinksGraphqlResponse;
+      const pullRequest = parsed.data?.repository?.pullRequest;
+
+      if (pullRequest === undefined || pullRequest === null) {
+        return {
+          ok: true,
+          value: [],
+        };
+      }
+
+      return {
+        ok: true,
+        value: parsePullRequestIssueLinks({
+          pullRequestNumber,
+          body: pullRequest.body ?? "",
+          headRefName: pullRequest.headRefName ?? "",
+          closingIssueNumbers: pullRequest.closingIssuesReferences?.nodes
+            ?.map((node) => node?.number)
+            .filter((number): number is number => typeof number === "number") ?? [],
+        }),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      return {
+        ok: false,
+        error: {
+          code: "invalid_json",
+          message: `gh api graphql returned invalid JSON: ${message}`,
+          command: "gh api graphql",
+          stderr: result.stdout,
+        },
+      };
+    }
+  }
+
   private apiJson<T>(
     path: string,
     options: {
@@ -763,6 +879,48 @@ type GitHubCheckRunsResponse = {
   check_runs: GitHubCheckRunResponse[];
 };
 
+type GitHubRepositoryEventResponse = {
+  id: string;
+  type: string;
+  created_at: string;
+  actor?: {
+    login?: string;
+  };
+  payload?: {
+    action?: string;
+    issue?: {
+      number?: number;
+      html_url?: string;
+    };
+    pull_request?: {
+      number?: number;
+      html_url?: string | null;
+    };
+    comment?: {
+      html_url?: string;
+    };
+    review?: {
+      html_url?: string;
+    };
+  };
+};
+
+type GitHubPullRequestIssueLinksGraphqlResponse = {
+  data?: {
+    repository?: {
+      pullRequest?: {
+        body?: string | null;
+        headRefName?: string | null;
+        closingIssuesReferences?: {
+          nodes?: Array<{
+            number?: number;
+          } | null>;
+        };
+      } | null;
+    } | null;
+  };
+};
+
 function toComment(comment: GitHubCommentResponse): GitHubComment {
   return {
     id: comment.id,
@@ -805,6 +963,22 @@ function summarizeCheckRuns(checkRuns: GitHubCheckRunResponse[]): GitHubCheckSum
   };
 }
 
+function toRepositoryEvent(event: GitHubRepositoryEventResponse): GitHubRepositoryEvent {
+  return {
+    id: event.id,
+    type: event.type,
+    createdAt: event.created_at,
+    actor: event.actor?.login ?? "(unknown)",
+    action: event.payload?.action,
+    issueNumber: event.payload?.issue?.number,
+    issueUrl: event.payload?.issue?.html_url,
+    pullRequestNumber: event.payload?.pull_request?.number,
+    pullRequestUrl: event.payload?.pull_request?.html_url ?? undefined,
+    commentUrl: event.payload?.comment?.html_url,
+    reviewUrl: event.payload?.review?.html_url,
+  };
+}
+
 function isPullRequestRelatedToIssue(pullRequest: GitHubPullRequestListItemResponse, issueNumber: number): boolean {
   const issueReferencePattern = new RegExp(`(?:^|[^\\d])#${issueNumber}(?:\\D|$)`);
   const branchIssuePattern = new RegExp(`(?:^|[^A-Za-z0-9])issue-${issueNumber}(?:[^A-Za-z0-9]|$)`);
@@ -818,4 +992,59 @@ function isPullRequestRelatedToIssue(pullRequest: GitHubPullRequestListItemRespo
     issueReferencePattern.test(pullRequest.body ?? "") ||
     closingKeywordPattern.test(pullRequest.body ?? "")
   );
+}
+
+function parsePullRequestIssueLinks(input: {
+  pullRequestNumber: number;
+  body: string;
+  headRefName: string;
+  closingIssueNumbers: number[];
+}): GitHubPullRequestIssueLink[] {
+  const links = new Map<number, GitHubPullRequestIssueLink>();
+
+  for (const issueNumber of input.closingIssueNumbers) {
+    links.set(issueNumber, {
+      pullRequestNumber: input.pullRequestNumber,
+      issueNumber,
+      source: "closing-reference",
+    });
+  }
+
+  for (const issueNumber of parseReferencedIssueNumbers(input.body)) {
+    if (!links.has(issueNumber)) {
+      links.set(issueNumber, {
+        pullRequestNumber: input.pullRequestNumber,
+        issueNumber,
+        source: "body",
+      });
+    }
+  }
+
+  for (const issueNumber of parseBranchIssueNumbers(input.headRefName)) {
+    if (!links.has(issueNumber)) {
+      links.set(issueNumber, {
+        pullRequestNumber: input.pullRequestNumber,
+        issueNumber,
+        source: "branch",
+      });
+    }
+  }
+
+  return [...links.values()].sort((left, right) => left.issueNumber - right.issueNumber);
+}
+
+function parseReferencedIssueNumbers(value: string): number[] {
+  return uniqueNumbers([...value.matchAll(/(?:^|[^\d])#(?<number>[1-9]\d*)(?:\D|$)/g)]);
+}
+
+function parseBranchIssueNumbers(value: string): number[] {
+  return uniqueNumbers([...value.matchAll(/(?:^|[^A-Za-z0-9])issue-(?<number>[1-9]\d*)(?:[^A-Za-z0-9]|$)/g)]);
+}
+
+function uniqueNumbers(matches: RegExpMatchArray[]): number[] {
+  return [...new Set(matches
+    .map((match) => match.groups?.number)
+    .filter((value): value is string => value !== undefined)
+    .map((value) => Number.parseInt(value, 10)))]
+    .sort((left, right) => left - right);
 }
