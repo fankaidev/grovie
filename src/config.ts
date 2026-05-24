@@ -47,6 +47,21 @@ export type LoadedConfig = {
   config: GrovieConfig;
 };
 
+export type RepositoryFileResult =
+  | {
+    exists: true;
+    path: string;
+    content: string;
+  }
+  | {
+    exists: false;
+    path: string;
+  };
+
+export type RepositoryPolicyReader = {
+  readRepositoryFile?(input: { repository: string; path: string }): RepositoryFileResult;
+};
+
 export const globalConfigSchema = z.strictObject({
   version: z.literal(1),
   watchedRepositories: z.array(z.strictObject({
@@ -93,19 +108,38 @@ export function loadConfig(cwd: string): LoadedConfig {
     };
   }
 
+  return parseConfigText(readFileSync(configPath, "utf8"), configPath, CONFIG_FILE_NAME);
+}
+
+export function loadRepositoryConfig(repository: string, reader: RepositoryPolicyReader | undefined): LoadedConfig {
+  const result = reader?.readRepositoryFile?.({
+    repository,
+    path: CONFIG_FILE_NAME,
+  });
+
+  if (result === undefined || !result.exists) {
+    return {
+      config: defaultConfig(),
+    };
+  }
+
+  return parseConfigText(result.content, result.path, result.path);
+}
+
+function parseConfigText(content: string, configPath: string, errorName: string): LoadedConfig {
   let parsed: unknown;
 
   try {
-    parsed = parse(readFileSync(configPath, "utf8"));
+    parsed = parse(content);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Could not parse ${CONFIG_FILE_NAME}: ${message}`);
+    throw new Error(`Could not parse ${errorName}: ${message}`);
   }
 
   const result = configSchema.safeParse(parsed);
 
   if (!result.success) {
-    throw new Error(renderValidationError(result.error));
+    throw new Error(renderValidationError(result.error, errorName));
   }
 
   return {

@@ -317,6 +317,41 @@ describe("LocalState", () => {
     ]);
   });
 
+  it("[UC-WORKER-04-S12] reads repo-local policy config from the bare repository cache default branch", () => {
+    const root = createTmpDir();
+    const runner = new FakeRunner({
+      repositoryFiles: {
+        ".grovie.yml": "version: 1\nruntime:\n  default: cc\n",
+      },
+    });
+    const state = new LocalState({ paths: { root }, runner });
+    const result = state.readRepositoryFile({
+      repository: "fankaidev/grovie",
+      path: ".grovie.yml",
+    });
+
+    expect(result).toEqual({
+      exists: true,
+      path: "fankaidev/grovie:.grovie.yml",
+      content: "version: 1\nruntime:\n  default: cc\n",
+    });
+    expect(runner.calls.map((call) => call.args)).toEqual([
+      ["clone", "--bare", "https://github.com/fankaidev/grovie.git", join(root, "repos", "fankaidev-grovie.git")],
+      ["-C", join(root, "repos", "fankaidev-grovie.git"), "ls-remote", "--symref", "origin", "HEAD"],
+      ["-C", join(root, "repos", "fankaidev-grovie.git"), "fetch", "origin", "+refs/heads/main:refs/heads/main"],
+      ["-C", join(root, "repos", "fankaidev-grovie.git"), "show", "main:.grovie.yml"],
+    ]);
+  });
+
+  it("[UC-WORKER-04-S12] treats a missing repo-local policy file as absent", () => {
+    const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
+
+    expect(state.readRepositoryFile({
+      repository: "fankaidev/grovie",
+      path: ".grovie.yml",
+    }).exists).toBe(false);
+  });
+
   it("[UC-EXECUTION-04-S03] creates separate sessions for different agents on one issue", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
@@ -504,7 +539,7 @@ type FakeCall = {
 class FakeRunner implements CommandRunner {
   readonly calls: FakeCall[] = [];
 
-  constructor(private readonly options: { failWorktreeAdd?: boolean } = {}) {}
+  constructor(private readonly options: { failWorktreeAdd?: boolean; repositoryFiles?: Record<string, string> } = {}) {}
 
   run(command: string, args: string[], input?: string): CommandResult {
     this.calls.push({ command, args, input });
@@ -526,6 +561,34 @@ class FakeRunner implements CommandRunner {
         exitCode: 1,
         stdout: "",
         stderr: "error: branch 'grovie/issue-5' not found",
+      };
+    }
+
+    if (args.includes("ls-remote")) {
+      return {
+        exitCode: 0,
+        stdout: "ref: refs/heads/main\tHEAD\n",
+        stderr: "",
+      };
+    }
+
+    if (args.includes("show")) {
+      const spec = args.at(-1) ?? "";
+      const filePath = spec.split(":").at(1) ?? "";
+      const content = this.options.repositoryFiles?.[filePath];
+
+      if (content === undefined) {
+        return {
+          exitCode: 128,
+          stdout: "",
+          stderr: `fatal: path '${filePath}' does not exist in 'main'`,
+        };
+      }
+
+      return {
+        exitCode: 0,
+        stdout: content,
+        stderr: "",
       };
     }
 

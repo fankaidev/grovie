@@ -9,6 +9,7 @@
 | R1 | A machine should have at most one active daemon. |
 | R2 | Execution locks are local and keyed by `(issue, agent)`. |
 | R3 | Different agents can work on the same issue independently. |
+| R4 | Before polling a watched repository, the daemon resolves that repository's `.grovie.yml` from the bare cache on the remote default branch; the issue worktree is prepared later with the same resolved policy. |
 
 ## Scenarios
 
@@ -25,3 +26,5 @@
 | UC-WORKER-04-S09 | P1 | Runnable assigned issues are picked by `priority:p0`, then `priority:p1`, then `priority:p2`, then no priority label, with older activity first within the same priority. |
 | UC-WORKER-04-S10 | P1 | A skipped high-priority issue does not block a lower-priority runnable assigned issue. |
 | UC-WORKER-04-S11 | P1 | A daemon cycle with skipped assigned issues reports skipped issue references and reasons instead of only saying no queued issues were found. |
+| UC-WORKER-04-S12 | P1 | A watched repository's `.grovie.yml` supplies daemon policy defaults such as `runtime.default`, queue label, branch prefix, pull request behavior, comments mode, and safety policy for runs in that repository. |
+| UC-WORKER-04-S13 | P1 | An invalid watched repository `.grovie.yml` prevents runs for that repository with a clear error while the daemon can continue checking unrelated watched repositories. |

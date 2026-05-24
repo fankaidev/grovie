@@ -8,6 +8,7 @@ import {
   defaultConfig,
   loadConfig,
   loadGlobalConfig,
+  loadRepositoryConfig,
   removeWatchedRepository,
   saveGlobalConfig,
   type LoadedConfig,
@@ -664,8 +665,6 @@ const commandDefinitions = [
       const runArgs = subcommand === "run" ? args.slice(1) : args;
 
       try {
-        const config = defaultConfig();
-
         const normalizedRepoOption = readStringOption(runArgs, "--repo");
 
         if (!normalizedRepoOption.ok) {
@@ -679,15 +678,16 @@ const commandDefinitions = [
         }
 
         if (normalizedRepoOption.value !== undefined) {
+          const loaded = loadRepositoryConfig(normalizedRepoOption.value, context.localState);
           const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
 
           return runDaemon({
             repository: normalizedRepoOption.value,
-            label: normalizedLabelOption.value ?? config.queue.label,
-            config,
-            configPath: "built-in defaults",
+            label: normalizedLabelOption.value ?? loaded.config.queue.label,
+            config: loaded.config,
+            configPath: renderConfigPath(loaded),
             github: context.github,
-            runtime: resolveRuntime(context, config),
+            runtime: context.runtime ?? createRuntime(loaded.config.runtime.default),
             localState: context.localState,
             once: runArgs.includes("--once"),
             adminConsole: resolveAdminConsoleConfig(globalConfig.config),
@@ -700,12 +700,13 @@ const commandDefinitions = [
         return runDaemonForRepositories({
           repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => ({
             repository: watchedRepository.repository,
-            label: normalizedLabelOption.value ?? watchedRepository.label ?? config.queue.label,
+            label: normalizedLabelOption.value ?? watchedRepository.label,
           })),
-          config,
+          repositoryConfigLoader: (repository) => loadRepositoryConfig(repository, context.localState),
+          config: defaultConfig(),
           configPath: "built-in defaults",
           github: context.github,
-          runtime: resolveRuntime(context, config),
+          runtime: context.runtime,
           localState: context.localState,
           once: runArgs.includes("--once"),
           adminConsole: resolveAdminConsoleConfig(globalConfig.config),
@@ -1077,6 +1078,10 @@ function resolveManualRunAgent(input: {
 
 function renderConfigSource(loaded: LoadedConfig): string {
   return loaded.path === undefined ? `defaults (no ${CONFIG_FILE_NAME} found)` : `${loaded.path} is valid.`;
+}
+
+function renderConfigPath(loaded: LoadedConfig): string {
+  return loaded.path ?? "built-in defaults";
 }
 
 function renderGlobalConfigSource(path: string, watchedRepositoryCount: number): string {
