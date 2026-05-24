@@ -1409,6 +1409,12 @@ describe("runDaemonCycle", () => {
     expect(result).toEqual({
       exitCode: 0,
       stdout: "ran unrelated repo",
+      stderr: [
+        "grovie daemon",
+        "",
+        "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
+        "- runtime.default: Invalid option",
+      ].join("\n"),
     });
     expect(runs[0]?.repository).toBe("fankaidev/other");
   });

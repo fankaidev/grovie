@@ -145,7 +145,10 @@ async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Prom
     });
 
     if (result.exitCode !== 0 || result.processed) {
-      return result;
+      return {
+        ...result,
+        stderr: renderPolicyErrorOutput(policyErrors, result.stderr),
+      };
     }
 
     if (result.stdout !== undefined) {
@@ -157,13 +160,7 @@ async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Prom
     exitCode: policyErrors.length > 0 ? 1 : 0,
     processed: false,
     stdout: idleMessages.join("\n\n") || undefined,
-    stderr: policyErrors.length > 0
-      ? [
-        "grovie daemon",
-        "",
-        ...policyErrors,
-      ].join("\n")
-      : undefined,
+    stderr: renderPolicyErrorOutput(policyErrors),
   };
 }
 
@@ -463,6 +460,20 @@ function releaseExecutionLock(input: Pick<DaemonInput, "localState">, lock: Exec
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function renderPolicyErrorOutput(policyErrors: string[], existingStderr?: string): string | undefined {
+  const policyStderr = policyErrors.length > 0
+    ? [
+      "grovie daemon",
+      "",
+      ...policyErrors,
+    ].join("\n")
+    : undefined;
+
+  return [policyStderr, existingStderr]
+    .filter((output): output is string => output !== undefined && output.length > 0)
+    .join("\n\n") || undefined;
 }
 
 async function reportDaemonCycle(input: Pick<DaemonInput, "onCycleResult">, result: RunIssueResult): Promise<void> {
