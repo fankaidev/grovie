@@ -137,6 +137,7 @@ const commandDefinitions = [
             daemonStatus: context.daemonLifecycle.status({
               root: context.localState.getPaths().root,
             }),
+            adminConsole: resolveAdminConsoleConfig(globalConfig.config),
             watchedRepositories: globalConfig.config.watchedRepositories,
             paths: context.localState.getPaths(),
           }),
@@ -687,6 +688,8 @@ const commandDefinitions = [
         }
 
         if (normalizedRepoOption.value !== undefined) {
+          const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+
           return runDaemon({
             repository: normalizedRepoOption.value,
             label: normalizedLabelOption.value ?? config.queue.label,
@@ -696,6 +699,8 @@ const commandDefinitions = [
             runtime: resolveRuntime(context, config),
             localState: context.localState,
             once: runArgs.includes("--once"),
+            adminConsole: resolveAdminConsoleConfig(globalConfig.config),
+            daemonLifecycle: context.daemonLifecycle,
           });
         }
 
@@ -712,6 +717,8 @@ const commandDefinitions = [
           runtime: resolveRuntime(context, config),
           localState: context.localState,
           once: runArgs.includes("--once"),
+          adminConsole: resolveAdminConsoleConfig(globalConfig.config),
+          daemonLifecycle: context.daemonLifecycle,
         });
       } catch (error) {
         return errorResult(error);

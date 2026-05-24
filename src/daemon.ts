@@ -1,5 +1,12 @@
 import type { GrovieConfig } from "./config.js";
 import {
+  createAdminConsoleServer,
+  resolveAdminConsoleConfig,
+  startAdminConsoleServer,
+  type AdminConsoleResolvedConfig,
+  type StartedAdminConsole,
+} from "./admin-console.js";
+import {
   createIssueClaim,
   hasCancelRequest,
   updateIssueClaim,
@@ -15,6 +22,8 @@ import { getIssueActivity, inspectQueue, renderSkippedQueueSummary, selectNextRu
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
 import { runIssueAsync } from "./run.js";
 import type { AgentRuntime } from "./runtime.js";
+import { createRuntime } from "./runtime.js";
+import { LocalDaemonLifecycle, type DaemonLifecycle } from "./daemon-lifecycle.js";
 
 export type DaemonInput = {
   repository: string;
@@ -30,6 +39,8 @@ export type DaemonInput = {
   now?: () => Date;
   sleep?: (ms: number) => void | Promise<void>;
   issueRunner?: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
+  adminConsole?: AdminConsoleResolvedConfig;
+  daemonLifecycle?: DaemonLifecycle;
 };
 
 export type DaemonRepositoryInput = {
@@ -57,21 +68,27 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
     };
   }
 
-  if (input.once) {
-    try {
-      return toRunIssueResult(await runDaemonCycle(input));
-    } finally {
-      releaseDaemonLock(input, daemonLockResult.lock);
-    }
-  }
+  let adminConsole: StartedAdminConsole | undefined;
 
   try {
+    adminConsole = await startDaemonAdminConsole(input);
+
+    if (input.once) {
+      return toRunIssueResult(await runDaemonCycle(input));
+    }
+
     while (true) {
       await runDaemonCycle(input);
       const sleep = input.sleep ?? sleepSync;
       await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
     }
+  } catch (error) {
+    return {
+      exitCode: 1,
+      stderr: error instanceof Error ? error.message : String(error),
+    };
   } finally {
+    await stopDaemonAdminConsole(adminConsole);
     releaseDaemonLock(input, daemonLockResult.lock);
   }
 }
@@ -95,23 +112,78 @@ export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput
     };
   }
 
-  if (!input.once) {
-    try {
+  let adminConsole: StartedAdminConsole | undefined;
+
+  try {
+    adminConsole = await startDaemonAdminConsole(input);
+
+    if (!input.once) {
       while (true) {
         await runDaemonRepositoryCycle(input);
         const sleep = input.sleep ?? sleepSync;
         await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
       }
-    } finally {
-      releaseDaemonLock(input, daemonLockResult.lock);
     }
-  }
 
-  try {
     return toRunIssueResult(await runDaemonRepositoryCycle(input));
+  } catch (error) {
+    return {
+      exitCode: 1,
+      stderr: error instanceof Error ? error.message : String(error),
+    };
   } finally {
+    await stopDaemonAdminConsole(adminConsole);
     releaseDaemonLock(input, daemonLockResult.lock);
   }
+}
+
+async function startDaemonAdminConsole(input: MultiRepositoryDaemonInput | DaemonInput): Promise<StartedAdminConsole | undefined> {
+  const config = input.adminConsole ?? resolveAdminConsoleConfig({
+    version: 1,
+    watchedRepositories: [],
+    adminConsole: {
+      enabled: false,
+    },
+  });
+
+  if (!config.enabled) {
+    return undefined;
+  }
+
+  if (input.localState === undefined) {
+    throw new Error("Admin console requires local daemon state.");
+  }
+
+  const runtime = input.runtime ?? createRuntime(input.config.runtime.default);
+  const daemonLifecycle = input.daemonLifecycle ?? new LocalDaemonLifecycle();
+
+  return startAdminConsoleServer({
+    config,
+    server: createAdminConsoleServer({
+      paths: input.localState.getPaths(),
+      daemonLifecycle,
+      runtime,
+    }),
+  });
+}
+
+async function stopDaemonAdminConsole(started: StartedAdminConsole | undefined): Promise<void> {
+  if (started === undefined) {
+    return;
+  }
+
+  started.server.closeAllConnections();
+
+  await new Promise<void>((resolve, reject) => {
+    started.server.close((error) => {
+      if (error === undefined) {
+        resolve();
+        return;
+      }
+
+      reject(error);
+    });
+  });
 }
 
 async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Promise<DaemonCycleResult> {
