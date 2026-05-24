@@ -1,55 +1,14 @@
 import type { ReactNode } from "react";
 import { StrictMode, useEffect, useMemo, useState } from "react";
+import type {
+  AdminApiCancelRunResponse,
+  AdminApiErrorResponse,
+  AdminApiRunDetailResponse,
+  AdminApiRunEventsResponse,
+  AdminApiRunLogResponse,
+  LocalRunSummary,
+} from "../../src/admin-api.js";
 import "./styles.css";
-
-type RunStatus =
-  | "preparing"
-  | "prepared"
-  | "running"
-  | "interrupting"
-  | "interrupted"
-  | "resuming"
-  | "rejected"
-  | "succeeded"
-  | "failed"
-  | "canceled"
-  | "stale"
-  | "unknown";
-
-type RunEvent = {
-  timestamp?: string;
-  type: string;
-  data?: Record<string, unknown>;
-};
-
-type LocalRunSummary = {
-  runId: string;
-  runDir: string;
-  repository?: string;
-  issueNumber?: number;
-  agentId?: string;
-  runtime?: string;
-  status: RunStatus;
-  branchName?: string;
-  localBranchName?: string;
-  repositoryCachePath?: string;
-  worktreePath?: string;
-  stdoutPath: string;
-  stderrPath: string;
-  promptPath: string;
-  taskPath: string;
-  startedAt?: string;
-  endedAt?: string;
-  lastEventTime?: string;
-  lastEventType?: string;
-  createdAt?: string;
-  runRequest?: {
-    sourceRunId?: string;
-    reason?: string;
-  };
-  resultLinks: string[];
-  events: RunEvent[];
-};
 
 type RunDetailState =
   | { status: "loading" }
@@ -58,16 +17,10 @@ type RunDetailState =
   | {
     status: "ready";
     run: LocalRunSummary;
-    events: RunEvent[];
-    stdout: RunLog;
-    stderr: RunLog;
+    events: AdminApiRunEventsResponse["events"];
+    stdout: AdminApiRunLogResponse;
+    stderr: AdminApiRunLogResponse;
   };
-
-type RunLog = {
-  stream: "stdout" | "stderr";
-  path: string;
-  content: string;
-};
 
 export function App(): ReactNode {
   const route = useMemo(() => readRoute(window.location.pathname), []);
@@ -334,7 +287,7 @@ function DescriptionList(props: { items: Array<[string, string]>; mono?: boolean
   );
 }
 
-function LogPanel(props: { runId: string; log: RunLog }): ReactNode {
+function LogPanel(props: { runId: string; log: AdminApiRunLogResponse }): ReactNode {
   return (
     <section className="panel log-panel">
       <div className="section-heading">
@@ -371,7 +324,7 @@ export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch
     };
   }
 
-  const runPayload = await readJson(runResponse) as { run?: LocalRunSummary };
+  const runPayload = await readJson(runResponse) as Partial<AdminApiRunDetailResponse> & Partial<AdminApiErrorResponse>;
 
   if (!runResponse.ok || runPayload.run === undefined) {
     return {
@@ -381,9 +334,9 @@ export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch
   }
 
   const [eventsPayload, stdoutPayload, stderrPayload] = await Promise.all([
-    fetchJson<{ events: RunEvent[] }>(`/api/runs/${encodedRunId}/events`, fetcher),
-    fetchJson<RunLog>(`/api/runs/${encodedRunId}/logs/stdout`, fetcher),
-    fetchJson<RunLog>(`/api/runs/${encodedRunId}/logs/stderr`, fetcher),
+    fetchJson<AdminApiRunEventsResponse>(`/api/runs/${encodedRunId}/events`, fetcher),
+    fetchJson<AdminApiRunLogResponse>(`/api/runs/${encodedRunId}/logs/stdout`, fetcher),
+    fetchJson<AdminApiRunLogResponse>(`/api/runs/${encodedRunId}/logs/stderr`, fetcher),
   ]);
 
   return {
@@ -399,7 +352,7 @@ export async function cancelRunRequest(runId: string, fetcher: typeof fetch = fe
   const response = await fetcher(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
     method: "POST",
   });
-  const payload = await readJson(response);
+  const payload = await readJson(response) as Partial<AdminApiCancelRunResponse> & Partial<AdminApiErrorResponse>;
 
   if (!response.ok) {
     return {
@@ -481,7 +434,7 @@ function renderLastEvent(run: LocalRunSummary): string {
   return `${run.lastEventType ?? "(unknown)"} at ${run.lastEventTime ?? "(unknown)"}`;
 }
 
-export function isCancelableRun(status: RunStatus): boolean {
+export function isCancelableRun(status: LocalRunSummary["status"]): boolean {
   return status === "preparing" || status === "prepared" || status === "running" || status === "stale";
 }
 
