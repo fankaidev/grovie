@@ -51,6 +51,56 @@ type LocalRunSummary = {
   events: RunEvent[];
 };
 
+type DaemonStatus = {
+  status: string;
+  state?: {
+    pid?: number;
+    command?: string[];
+    startedAt?: string;
+    stdoutPath?: string;
+    stderrPath?: string;
+    statePath?: string;
+  };
+};
+
+type RuntimeAvailability = {
+  runtime: string;
+  available: boolean;
+  message: string;
+};
+
+type WatchedRepository = {
+  repository: string;
+  label?: string;
+};
+
+type DaemonActivityEntry = {
+  timestamp: string;
+  type: string;
+  message: string;
+  repository?: string;
+  issueNumber?: number;
+  agentId?: string;
+};
+
+type AdminHomeData = {
+  health: {
+    daemon: DaemonStatus;
+    runtime: RuntimeAvailability;
+  };
+  config: {
+    path: string;
+  };
+  repositories: WatchedRepository[];
+  activity: DaemonActivityEntry[];
+  runs: LocalRunSummary[];
+};
+
+type AdminHomeState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; data: AdminHomeData };
+
 type RunDetailState =
   | { status: "loading" }
   | { status: "not-found"; message: string }
@@ -80,6 +130,48 @@ export function App(): ReactNode {
 }
 
 function AdminHome(): ReactNode {
+  const [state, setState] = useState<AdminHomeState>({ status: "loading" });
+
+  useEffect(() => {
+    let canceled = false;
+
+    loadAdminHome()
+      .then((data) => {
+        if (!canceled) {
+          setState({ status: "ready", data });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          setState({
+            status: "error",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  if (state.status === "loading") {
+    return <CenteredNotice title="Loading admin console" message="Fetching local daemon state." />;
+  }
+
+  if (state.status === "error") {
+    return <CenteredNotice title="Admin console unavailable" message={state.message} />;
+  }
+
+  return <AdminHomeContent data={state.data} />;
+}
+
+export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
+  const daemon = props.data.health.daemon;
+  const runtime = props.data.health.runtime;
+  const runs = props.data.runs.slice(0, 20);
+  const activity = props.data.activity.slice(0, 20);
+
   return (
     <main className="page-shell">
       <header className="page-header">
@@ -87,28 +179,134 @@ function AdminHome(): ReactNode {
           <p className="eyebrow">Local admin console</p>
           <h1>Grovie</h1>
         </div>
-        <div className="status-pill">Served by the local daemon</div>
+        <span className={`status-badge status-${daemon.status}`}>{daemon.status}</span>
       </header>
 
       <section className="tile-grid" aria-label="Admin console status">
-        <StatusTile icon="D" label="Daemon" value="Local process" />
-        <StatusTile icon="R" label="Runs" value="API backed" />
-        <StatusTile icon="G" label="Control plane" value="GitHub native" />
+        <StatusTile icon="D" label="Daemon" value={renderDaemonSummary(daemon)} tone={daemon.status === "running" ? "success" : "neutral"} />
+        <StatusTile icon="R" label="Runtime" value={`${runtime.runtime}: ${runtime.available ? "available" : "unavailable"}`} tone={runtime.available ? "success" : "danger"} />
+        <StatusTile icon="W" label="Watched repos" value={String(props.data.repositories.length)} />
+      </section>
+
+      <section className="summary-grid">
+        <InfoPanel title="Daemon">
+          <DescriptionList
+            items={[
+              ["Status", daemon.status],
+              ["PID", daemon.state?.pid === undefined ? "(none)" : String(daemon.state.pid)],
+              ["Started", daemon.state?.startedAt ?? "(not running)"],
+              ["State path", daemon.state?.statePath ?? "(none)"],
+            ]}
+          />
+        </InfoPanel>
+        <InfoPanel title="Runtime">
+          <DescriptionList
+            items={[
+              ["Runtime", runtime.runtime],
+              ["Available", runtime.available ? "yes" : "no"],
+              ["Message", runtime.message],
+            ]}
+          />
+        </InfoPanel>
+        <InfoPanel title="Useful Paths">
+          <DescriptionList
+            mono
+            items={[
+              ["Global config", props.data.config.path],
+              ["Daemon stdout", daemon.state?.stdoutPath ?? "(not running)"],
+              ["Daemon stderr", daemon.state?.stderrPath ?? "(not running)"],
+            ]}
+          />
+        </InfoPanel>
       </section>
 
       <section className="split-layout">
-        <div className="panel">
-          <h2>Admin web shell</h2>
-          <p>
-            This React shell is served from the Grovie daemon process. Existing admin APIs remain available under{" "}
-            <code>/api</code>, while the browser app owns local routes such as <code>/runs/:runId</code>.
-          </p>
-        </div>
-        <div className="panel">
-          <h2>Runtime boundary</h2>
-          <p>Built assets come from the root build output, so production serving does not depend on Vite.</p>
-        </div>
+        <InfoPanel title="Watched Repositories">
+          {props.data.repositories.length === 0 ? (
+            <p className="muted-copy">No watched repositories configured.</p>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Repository</th>
+                  <th>Label</th>
+                </tr>
+              </thead>
+              <tbody>
+                {props.data.repositories.map((repository) => (
+                  <tr key={`${repository.repository}-${repository.label ?? ""}`}>
+                    <td>{repository.repository}</td>
+                    <td>{repository.label ?? "(default)"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </InfoPanel>
+        <InfoPanel title="Recent Activity">
+          {activity.length === 0 ? (
+            <p className="muted-copy">No daemon activity recorded.</p>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Type</th>
+                  <th>Repository</th>
+                  <th>Issue</th>
+                  <th>Agent</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activity.map((entry, index) => (
+                  <tr key={`${entry.timestamp}-${entry.type}-${index}`}>
+                    <td>{entry.timestamp}</td>
+                    <td><code>{entry.type}</code></td>
+                    <td>{entry.repository ?? "(none)"}</td>
+                    <td>{entry.issueNumber === undefined ? "(none)" : `#${entry.issueNumber}`}</td>
+                    <td>{entry.agentId ?? "(none)"}</td>
+                    <td>{entry.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </InfoPanel>
       </section>
+
+      <InfoPanel title="Recent Runs">
+        {runs.length === 0 ? (
+          <p className="muted-copy">No local runs found.</p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Issue</th>
+                <th>Status</th>
+                <th>Agent</th>
+                <th>Runtime</th>
+                <th>Branch</th>
+                <th>Started</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.runId}>
+                  <td><a href={`/runs/${encodeURIComponent(run.runId)}`}>{run.runId}</a></td>
+                  <td>{renderIssueReference(run)}</td>
+                  <td><span className={`status-badge compact status-${run.status}`}>{run.status}</span></td>
+                  <td>{run.agentId ?? "(unknown)"}</td>
+                  <td>{run.runtime ?? "(unknown)"}</td>
+                  <td>{run.branchName ?? "(unknown)"}</td>
+                  <td>{run.startedAt ?? "(unknown)"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </InfoPanel>
     </main>
   );
 }
@@ -300,10 +498,10 @@ export function RunDetailContent(props: {
   );
 }
 
-function StatusTile(props: { icon: string; label: string; value: string }): ReactNode {
+function StatusTile(props: { icon: string; label: string; value: string; tone?: "neutral" | "success" | "danger" }): ReactNode {
   return (
     <div className="tile">
-      <span className="tile-icon">{props.icon}</span>
+      <span className={`tile-icon tone-${props.tone ?? "neutral"}`}>{props.icon}</span>
       <div>
         <p>{props.label}</p>
         <strong>{props.value}</strong>
@@ -358,6 +556,26 @@ function CenteredNotice(props: { title: string; message: string }): ReactNode {
       </section>
     </main>
   );
+}
+
+export async function loadAdminHome(fetcher: typeof fetch = fetch): Promise<AdminHomeData> {
+  const [healthPayload, configPayload, reposPayload, activityPayload, runsPayload] = await Promise.all([
+    fetchJson<AdminHomeData["health"]>("/api/health", fetcher),
+    fetchJson<{ path: string }>("/api/config", fetcher),
+    fetchJson<{ repositories: WatchedRepository[] }>("/api/repos", fetcher),
+    fetchJson<{ activity: DaemonActivityEntry[] }>("/api/activity", fetcher),
+    fetchJson<{ runs: LocalRunSummary[] }>("/api/runs", fetcher),
+  ]);
+
+  return {
+    health: healthPayload,
+    config: {
+      path: configPayload.path,
+    },
+    repositories: reposPayload.repositories,
+    activity: activityPayload.activity,
+    runs: runsPayload.runs,
+  };
 }
 
 export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch): Promise<RunDetailState> {
@@ -479,6 +697,14 @@ function renderLastEvent(run: LocalRunSummary): string {
   }
 
   return `${run.lastEventType ?? "(unknown)"} at ${run.lastEventTime ?? "(unknown)"}`;
+}
+
+function renderDaemonSummary(daemon: DaemonStatus): string {
+  if (daemon.status === "running" && daemon.state?.pid !== undefined) {
+    return `running pid ${daemon.state.pid}`;
+  }
+
+  return daemon.status;
 }
 
 export function isCancelableRun(status: RunStatus): boolean {
