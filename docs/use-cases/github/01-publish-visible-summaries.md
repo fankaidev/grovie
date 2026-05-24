@@ -7,7 +7,7 @@
 | ID | Rule |
 |----|------|
 | R1 | GitHub issues own collaboration state: labels, comments, branches, PRs, reviews, and CI state. |
-| R2 | GitHub comments are not the primary execution lock. |
+| R2 | GitHub comments are human-visible summaries or cancellation input, not execution locks. |
 | R3 | Full logs and prompts are not dumped into issue comments by default. |
 
 ## Scenarios
@@ -18,4 +18,4 @@
 | UC-GITHUB-01-S02 | P0 | A run that opens a PR includes the PR link in the issue summary comment. |
 | UC-GITHUB-01-S03 | P1 | A run with state repo sync configured includes a state repo path or link in the issue summary comment. |
 | UC-GITHUB-01-S04 | P1 | A runtime failure with stdout or stderr keeps raw logs out of the issue comment and points to local or synced state instead. |
-| UC-GITHUB-01-S05 | P1 | A daemon restart reads execution locks from local state rather than treating GitHub summary comments as claims. |
+| UC-GITHUB-01-S05 | P1 | A daemon uses local execution locks for coordination and does not create or update advisory claim comments. |

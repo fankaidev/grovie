@@ -573,22 +573,6 @@ export class LocalState {
     appendRunEvent(run, type, data);
   }
 
-  cleanupSuccessfulWorktree(run: PreparedRun): void {
-    if (!existsSync(run.worktreePath)) {
-      return;
-    }
-
-    const result = this.runner.run("git", ["-C", run.repositoryCachePath, "worktree", "remove", "--force", run.worktreePath]);
-
-    if (result.exitCode !== 0) {
-      throw new Error(result.stderr.trim() || `git worktree remove failed with exit code ${result.exitCode}.`);
-    }
-
-    appendRunEvent(run, "worktree.cleaned", {
-      worktreePath: run.worktreePath,
-    });
-  }
-
   readTask(run: PreparedRun): unknown {
     return JSON.parse(readFileSync(run.taskPath, "utf8"));
   }

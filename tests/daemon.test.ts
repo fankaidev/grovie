@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe("runDaemonCycle", () => {
-  it("claims one queued issue, runs it once, and updates the claim", async () => {
+  it("[UC-GITHUB-01-S05] runs one queued issue without creating advisory claim comments", async () => {
     const github = new FakeGitHub([fakeIssue()]);
     const runs: RunIssueAsyncInput[] = [];
 
@@ -62,16 +62,14 @@ describe("runDaemonCycle", () => {
       repo: "grovie",
       number: 8,
     });
-    expect(github.createdComments[0]).toContain("Grovie daemon task claim active.");
-    expect(github.updatedComments.map((comment) => comment.body)).toEqual([
-      expect.stringContaining("Grovie daemon task claim active."),
-      expect.stringContaining("Grovie daemon task claim released."),
-    ]);
+    expect(github.createdComments).toEqual([]);
+    expect(github.updatedComments).toEqual([]);
   });
 
   it("[UC-WORKER-01-S04] uses the assigned local agent id as the daemon worker id", async () => {
     const github = new FakeGitHub([fakeIssue()]);
     const machineId = resolveMachineId(hostname());
+    const runs: RunIssueAsyncInput[] = [];
 
     await runDaemonCycle({
       repository: "fankaidev/grovie",
@@ -81,12 +79,16 @@ describe("runDaemonCycle", () => {
       github,
       once: true,
       now: () => NOW,
-      issueRunner: () => ({
-        exitCode: 0,
-      }),
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
     });
 
-    expect(github.createdComments[0]).toContain(`- Worker: \`default@${machineId}\``);
+    expect(runs[0]?.agentId).toBe(`default@${machineId}`);
+    expect(github.createdComments).toEqual([]);
   });
 
   it("[UC-WORKER-03-S05] [UC-WORKER-04-S11] reports issues assigned only to another machine as skipped", async () => {
@@ -288,7 +290,7 @@ describe("runDaemonCycle", () => {
       sourceRunId: "failed-run",
       reason: "retry",
     });
-    expect(github.createdComments[0]).toContain("- Worker: `coder@fankai-mac`");
+    expect(github.createdComments).toEqual([]);
     expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
   });
 
@@ -440,7 +442,8 @@ describe("runDaemonCycle", () => {
       stdout: "ran coder",
     });
     expect(runs).toHaveLength(1);
-    expect(github.createdComments[0]).toContain(`- Worker: \`coder@${machineId}\``);
+    expect(runs[0]?.agentId).toBe(`coder@${machineId}`);
+    expect(github.createdComments).toEqual([]);
   });
 
   it("[UC-WORKER-04-S14] skips a machine-local agent label when that agent is not configured", async () => {
@@ -1056,7 +1059,8 @@ describe("runDaemonCycle", () => {
       stdout: "reviewer decided no action was needed",
     });
     expect(runs).toHaveLength(1);
-    expect(github.createdComments[0]).toContain(`- Worker: \`reviewer@${machineId}\``);
+    expect(runs[0]?.agentId).toBe(`reviewer@${machineId}`);
+    expect(github.createdComments).toEqual([]);
   });
 
   it("[UC-WORKER-04-S01] refuses to start when a live daemon lock exists", async () => {
@@ -1534,7 +1538,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       issueNumber: 8,
       agentId: `default@${machineId}`,
-    })?.handledThrough).toBe("2026-05-22T00:00:01.000Z");
+    })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
     expect(secondResult).toEqual({
       exitCode: 0,
       processed: true,
@@ -1581,7 +1585,8 @@ describe("runDaemonCycle", () => {
       stdout: "ran despite visible claim",
     });
     expect(runs).toHaveLength(1);
-    expect(github.createdComments[0]).toContain(`- Worker: \`default@${machineId}\``);
+    expect(runs[0]?.agentId).toBe(`default@${machineId}`);
+    expect(github.createdComments).toEqual([]);
   });
 
   it("[UC-WORKER-04-S06] uses independent local agent locks for assigned agents on one issue", async () => {
@@ -1624,13 +1629,22 @@ describe("runDaemonCycle", () => {
       stdout: "ran reviewer",
     });
     expect(runs).toHaveLength(1);
-    expect(github.createdComments[0]).toContain(`- Worker: \`reviewer@${machineId}\``);
+    expect(runs[0]?.agentId).toBe(`reviewer@${machineId}`);
+    expect(github.createdComments).toEqual([]);
   });
 
-  it("marks a claimed issue canceled when a cancel comment is visible before runtime start", async () => {
-    const github = new FakeGitHub([fakeIssue()], {
-      addCancelAfterClaim: true,
-    });
+  it("[UC-WORKER-04-S11] skips canceled assignments without writing advisory claim comments", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        comments: [
+          fakeComment({
+            id: 77,
+            body: "/grovie cancel",
+          }),
+        ],
+      }),
+    ]);
     const runs: RunIssueAsyncInput[] = [];
 
     const result = await runDaemonCycle({
@@ -1652,22 +1666,24 @@ describe("runDaemonCycle", () => {
 
     expect(result).toEqual({
       exitCode: 0,
-      processed: true,
+      processed: false,
       stdout: [
         "grovie daemon",
         "",
-        "Canceled fankaidev/grovie#8 before runtime start.",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+        "",
+        "Skipped assigned issues:",
+        `- fankaidev/grovie#8 agent=default@${machineId} reason=canceled`,
       ].join("\n"),
     });
     expect(runs).toHaveLength(0);
-    expect(github.updatedComments.at(-1)?.body).toContain("Grovie daemon task claim released.");
-    expect(github.updatedComments.at(-1)?.body).toContain("- Note: Session canceled before runtime start.");
+    expect(github.createdComments).toEqual([]);
+    expect(github.updatedComments).toEqual([]);
   });
 
-  it("updates heartbeat and marks canceled when cancellation appears during runtime", async () => {
-    const github = new FakeGitHub([fakeIssue()], {
-      addCancelOnRunningUpdate: true,
-    });
+  it("[UC-GITHUB-01-S05] cancels during runtime without writing advisory heartbeat comments", async () => {
+    const issue = fakeIssue();
+    const github = new FakeGitHub([issue]);
     const runs: RunIssueAsyncInput[] = [];
 
     const result = await runDaemonCycle({
@@ -1682,6 +1698,12 @@ describe("runDaemonCycle", () => {
       issueRunner: async (input) => {
         runs.push(input);
         await input.monitor?.onHeartbeat?.({} as never);
+        issue.comments.push(
+          fakeComment({
+            id: 78,
+            body: "/grovie cancel",
+          }),
+        );
 
         return {
           exitCode: 0,
@@ -1698,14 +1720,11 @@ describe("runDaemonCycle", () => {
       canceled: true,
     });
     expect(runs).toHaveLength(1);
-    expect(github.updatedComments.map((comment) => comment.body)).toEqual([
-      expect.stringContaining("Grovie daemon task claim active."),
-      expect.stringContaining("Grovie daemon task claim active."),
-      expect.stringContaining("Grovie daemon task claim released."),
-    ]);
+    expect(github.createdComments).toEqual([]);
+    expect(github.updatedComments).toEqual([]);
   });
 
-  it("marks a claimed issue failed when the issue runner fails", async () => {
+  it("[UC-GITHUB-01-S05] reports runner failure without writing advisory claim comments", async () => {
     const github = new FakeGitHub([fakeIssue()]);
 
     const result = await runDaemonCycle({
@@ -1728,13 +1747,8 @@ describe("runDaemonCycle", () => {
       processed: true,
       stderr: "runtime failed",
     });
-    expect(github.updatedComments.map((comment) => comment.body)).toEqual([
-      expect.stringContaining("Grovie daemon task claim active."),
-      expect.stringContaining("Grovie daemon task claim released."),
-    ]);
-    expect(github.updatedComments.at(-1)?.body).toContain(
-      "- Note: Session failed. See the Grovie result comment and local run logs.",
-    );
+    expect(github.createdComments).toEqual([]);
+    expect(github.updatedComments).toEqual([]);
   });
 
   it("[UC-GITHUB-01-S05] treats stale visible claims as non-authoritative summaries", async () => {
@@ -1773,7 +1787,7 @@ describe("runDaemonCycle", () => {
 
     expect(result.processed).toBe(true);
     expect(runs).toHaveLength(1);
-    expect(github.createdComments[0]).toContain("Grovie daemon task claim active.");
+    expect(github.createdComments).toEqual([]);
   });
 
   it("[UC-WORKER-06-S14] daemon run owns the enabled admin console in the same daemon process", async () => {
@@ -2199,8 +2213,6 @@ class FakeGitHub implements GitHubGateway {
   constructor(
     private readonly issues: GitHubIssue[],
     private readonly options: {
-      addCancelAfterClaim?: boolean;
-      addCancelOnRunningUpdate?: boolean;
       commentNow?: () => Date;
       failReadIssueFor?: number;
       relatedPullRequests?: GitHubRelatedPullRequest[];
@@ -2274,19 +2286,6 @@ class FakeGitHub implements GitHubGateway {
     );
     issue.updatedAt = now.toISOString();
 
-    if (this.options.addCancelAfterClaim) {
-      const cancelNow = this.options.commentNow?.() ?? NOW;
-      issue.comments.push(
-        fakeComment({
-          id: this.nextCommentId++,
-          body: "/grovie cancel",
-          createdAt: cancelNow.toISOString(),
-          updatedAt: cancelNow.toISOString(),
-        }),
-      );
-      issue.updatedAt = cancelNow.toISOString();
-    }
-
     return {
       ok: true,
       value: {
@@ -2310,19 +2309,6 @@ class FakeGitHub implements GitHubGateway {
         issue.updatedAt = now.toISOString();
       }
 
-      if (this.options.addCancelOnRunningUpdate === true && body.includes("Grovie daemon task claim active.")) {
-        const cancelNow = this.options.commentNow?.() ?? NOW;
-        issue.comments.push(
-          fakeComment({
-            id: this.nextCommentId++,
-            body: "/grovie cancel",
-            createdAt: cancelNow.toISOString(),
-            updatedAt: cancelNow.toISOString(),
-          }),
-        );
-        issue.updatedAt = cancelNow.toISOString();
-        this.options.addCancelOnRunningUpdate = false;
-      }
     }
 
     return {
