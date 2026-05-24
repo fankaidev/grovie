@@ -15,5 +15,5 @@
 | ID | Priority | Scenario |
 |----|----------|----------|
 | UC-ADMIN-03-S01 | P2 | `GET /` shows local machine context, daemon health, runtime availability, watched repositories, and recent runs. |
-| UC-ADMIN-03-S02 | P2 | `GET /runs/:runId` shows issue reference, status, agent/runtime, branch, worktree path, run directory, prompt/task paths, stdout/stderr paths, result summary, events, and GitHub result links. |
+| UC-ADMIN-03-S02 | P2 | `GET /runs/:runId` shows issue reference, status, agent/runtime, run reason, branch, worktree path, run directory, prompt/task paths, stdout/stderr paths, result summary, events, and GitHub result links. |
 | UC-ADMIN-03-S03 | P2 | `GET /runs/:runId` returns a clear not-found page for missing local runs. |

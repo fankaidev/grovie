@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SpawnCommandRunner, type CommandRunner, type GitHubIssue } from "./github.js";
 import type { PreparedRun } from "./local-state.js";
@@ -43,6 +43,7 @@ export type RuntimeMonitorEvent = {
 export type RuntimeExecution = {
   runtime: RuntimeName;
   command: string[];
+  runtimeSessionRef?: RuntimeSessionRef;
   startedAt: string;
   endedAt: string;
   exitCode: number;
@@ -54,6 +55,13 @@ export type RuntimeExecution = {
   stderrPath: string;
   signal?: string;
   canceled?: boolean;
+};
+
+export type RuntimeSessionRef = {
+  runtime: RuntimeName;
+  sessionId: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type RuntimeRunResult =
@@ -190,21 +198,35 @@ function prepareCodexInput(input: AgentRunInput): PreparedCodexInput {
     writeFileSync(worktreePromptPath, prompt, "utf8");
     writeFileSync(worktreeTaskPath, `${JSON.stringify(task, null, 2)}\n`, "utf8");
 
-    const command = [
-      "codex",
-      "--ask-for-approval",
-      "never",
-      "exec",
-      "--cd",
-      input.run.worktreePath,
-      "--sandbox",
-      "workspace-write",
-      "-",
-    ];
+    const existingSessionRef = shouldResumeRuntimeSession(task) ? readRuntimeSessionRef(input.run.sessionDir, "codex") : undefined;
+    const command = existingSessionRef === undefined
+      ? [
+        "codex",
+        "--ask-for-approval",
+        "never",
+        "exec",
+        "--json",
+        "--cd",
+        input.run.worktreePath,
+        "--sandbox",
+        "workspace-write",
+        "-",
+      ]
+      : [
+        "codex",
+        "--ask-for-approval",
+        "never",
+        "exec",
+        "resume",
+        "--json",
+        existingSessionRef.sessionId,
+        "-",
+      ];
     const startedAt = new Date().toISOString();
     appendRuntimeEvent(input.run, "runtime.started", {
       runtime: "codex",
       command,
+      runtimeSessionRef: existingSessionRef,
       promptPath: input.run.promptPath,
       taskPath: input.run.taskPath,
       worktreePromptPath,
@@ -289,6 +311,12 @@ function finishCliRun(
       signal: result.signal,
       canceled: result.canceled,
     };
+    const runtimeSessionRef = parseRuntimeSessionRef(preparedInput.runtime, result.stdout, result.stderr, input.run.sessionDir);
+
+    if (runtimeSessionRef !== undefined) {
+      execution.runtimeSessionRef = runtimeSessionRef;
+      writeRunRuntimeSessionRef(input.run.runDir, runtimeSessionRef);
+    }
 
     if (result.streamed !== true && result.stdout.length > 0) {
       writeFileSync(input.run.stdoutPath, result.stdout, "utf8");
@@ -301,6 +329,7 @@ function finishCliRun(
     appendRuntimeEvent(input.run, "runtime.finished", {
       runtime: preparedInput.runtime,
       exitCode: result.exitCode,
+      runtimeSessionRef,
       signal: result.signal,
       canceled: result.canceled,
       startedAt: preparedInput.startedAt,
@@ -327,6 +356,166 @@ function finishCliRun(
             : result.stderr.trim() || result.stdout.trim() || `${preparedInput.runtime} failed with exit code ${result.exitCode}.`,
       },
     };
+}
+
+function shouldResumeRuntimeSession(task: unknown): boolean {
+  if (task === null || typeof task !== "object") {
+    return false;
+  }
+
+  const runRequest = (task as { runRequest?: unknown }).runRequest;
+
+  return runRequest !== null
+    && typeof runRequest === "object"
+    && (runRequest as { reason?: unknown }).reason === "resume";
+}
+
+function readRuntimeSessionRef(sessionDir: string, runtime: RuntimeName): RuntimeSessionRef | undefined {
+  const path = join(sessionDir, "runtime-session.json");
+
+  if (!existsSync(path)) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<RuntimeSessionRef>;
+
+    if (parsed.runtime !== runtime || typeof parsed.sessionId !== "string") {
+      return undefined;
+    }
+
+    return {
+      runtime,
+      sessionId: parsed.sessionId,
+      createdAt: parsed.createdAt ?? "",
+      updatedAt: parsed.updatedAt ?? "",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function parseRuntimeSessionRef(
+  runtime: RuntimeName,
+  stdout: string,
+  stderr: string,
+  sessionDir: string,
+): RuntimeSessionRef | undefined {
+  if (runtime !== "codex") {
+    return undefined;
+  }
+
+  const sessionId = [...stdout.split("\n"), ...stderr.split("\n")]
+    .flatMap((line) => parseRuntimeSessionId(runtime, line))[0];
+
+  if (sessionId === undefined) {
+    return undefined;
+  }
+
+  const existing = readRuntimeSessionRef(sessionDir, runtime);
+  const now = new Date().toISOString();
+  const ref = {
+    runtime,
+    sessionId,
+    createdAt: existing?.createdAt && existing.createdAt.length > 0 ? existing.createdAt : now,
+    updatedAt: now,
+  };
+
+  writeRuntimeSessionRef(sessionDir, ref);
+  return ref;
+}
+
+function captureStreamingRuntimeSessionRef(
+  runtime: RuntimeName,
+  lineBuffer: string,
+  chunk: string,
+  run: PreparedRun,
+): string {
+  const text = `${lineBuffer}${chunk}`;
+  const lines = text.split("\n");
+  const remainder = lines.pop() ?? "";
+
+  if (readRuntimeSessionRef(run.sessionDir, runtime) !== undefined) {
+    return remainder;
+  }
+
+  const sessionId = lines
+    .flatMap((line) => parseRuntimeSessionId(runtime, line))
+    [0];
+
+  if (sessionId === undefined) {
+    return remainder;
+  }
+
+  const now = new Date().toISOString();
+  const ref = {
+    runtime,
+    sessionId,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  writeRuntimeSessionRef(run.sessionDir, ref);
+  writeRunRuntimeSessionRef(run.runDir, ref);
+  appendRuntimeEvent(run, "runtime.session_started", {
+    runtime,
+    runtimeSessionRef: ref,
+  });
+  return remainder;
+}
+
+function parseRuntimeSessionId(runtime: RuntimeName, line: string): string[] {
+  if (runtime !== "codex") {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(line) as { type?: unknown; thread_id?: unknown };
+
+    return parsed.type === "thread.started" && typeof parsed.thread_id === "string" ? [parsed.thread_id] : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRunRuntimeSessionRef(runDir: string, runtimeSessionRef: RuntimeSessionRef): void {
+  const path = join(runDir, "metadata.json");
+
+  if (!existsSync(path)) {
+    return;
+  }
+
+  try {
+    const metadata = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    writeFileSync(path, `${JSON.stringify({
+      ...metadata,
+      runtimeSessionRef,
+    }, null, 2)}\n`, "utf8");
+  } catch {
+    // Metadata is best-effort runtime context; keep the run result path moving.
+  }
+}
+
+function writeRuntimeSessionRef(sessionDir: string, runtimeSessionRef: RuntimeSessionRef): void {
+  writeFileSync(join(sessionDir, "runtime-session.json"), `${JSON.stringify(runtimeSessionRef, null, 2)}\n`, "utf8");
+}
+
+function writeRunRuntimeProcess(runDir: string, runtimePid: number): void {
+  const path = join(runDir, "metadata.json");
+
+  if (!existsSync(path)) {
+    return;
+  }
+
+  try {
+    const metadata = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    writeFileSync(path, `${JSON.stringify({
+      ...metadata,
+      runtimePid,
+    }, null, 2)}\n`, "utf8");
+  } catch {
+    // Metadata is best-effort runtime context; keep the run result path moving.
+  }
 }
 
 function checkCliAvailability(runtime: RuntimeName, runner: CommandRunner): RuntimeAvailability {
@@ -360,6 +549,9 @@ function runStreamingCommand(input: AgentRunInput, preparedInput: PreparedCodexI
       cwd: input.run.worktreePath,
       stdio: ["pipe", "pipe", "pipe"],
     });
+    if (child.pid !== undefined) {
+      writeRunRuntimeProcess(input.run.runDir, child.pid);
+    }
     const event = {
       run: input.run,
       issue: input.issue,
@@ -371,14 +563,18 @@ function runStreamingCommand(input: AgentRunInput, preparedInput: PreparedCodexI
     let checking = false;
     let stdoutTail = "";
     let stderrTail = "";
+    let stdoutLineBuffer = "";
+    let stderrLineBuffer = "";
 
     child.stdout.on("data", (chunk: Buffer) => {
       appendFileSync(input.run.stdoutPath, chunk);
       stdoutTail = appendBoundedTail(stdoutTail, chunk);
+      stdoutLineBuffer = captureStreamingRuntimeSessionRef(preparedInput.runtime, stdoutLineBuffer, chunk.toString("utf8"), input.run);
     });
     child.stderr.on("data", (chunk: Buffer) => {
       appendFileSync(input.run.stderrPath, chunk);
       stderrTail = appendBoundedTail(stderrTail, chunk);
+      stderrLineBuffer = captureStreamingRuntimeSessionRef(preparedInput.runtime, stderrLineBuffer, chunk.toString("utf8"), input.run);
     });
     child.stdin.end(preparedInput.prompt);
 

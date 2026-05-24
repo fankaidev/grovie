@@ -297,6 +297,10 @@ describe("admin console server", () => {
         agentId: "coder@fankai-mac",
         branchName: "grovie/issue-73",
         worktreePath: "/tmp/grovie/worktrees/run-1",
+        runRequest: {
+          sourceRunId: "old-run",
+          reason: "resume",
+        },
       },
       events: [
         event("2026-05-23T10:00:00.000Z", "runtime.started", { runtime: "codex" }),
@@ -308,6 +312,7 @@ describe("admin console server", () => {
 
     expect(html).toContain("fankaidev/grovie#73");
     expect(html).toContain("coder@fankai-mac");
+    expect(html).toContain("Run reason: resume; source run old-run");
     expect(html).toContain("grovie/issue-73");
     expect(html).toContain("/tmp/grovie/worktrees/run-1");
     expect(html).toContain("prompt.md");
