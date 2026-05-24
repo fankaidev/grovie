@@ -1,5 +1,6 @@
 # Nestjs specific
 /dist
+/admin-web/dist
 /node_modules
 /build
 /tmp
