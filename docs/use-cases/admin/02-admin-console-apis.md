@@ -9,6 +9,7 @@
 | R1 | Admin APIs are available only through the opt-in local admin console server. |
 | R2 | Admin APIs must not expose environment variable values or secret values. |
 | R3 | Run APIs read local run history from `~/.grovie/runs`. |
+| R4 | Admin API JSON request and response shapes are exported from one shared TypeScript contract module used by the server and React admin web client. |
 
 ## Scenarios
 
@@ -21,3 +22,4 @@
 | UC-ADMIN-02-S05 | P2 | `GET /api/runs/:runId` returns a single run detail or a clear 404. |
 | UC-ADMIN-02-S06 | P2 | `GET /api/runs/:runId/events` returns local run events or a clear 404. |
 | UC-ADMIN-02-S07 | P1 | `GET /api/activity` returns recent daemon activity such as repository polls, received run requests, skipped queue candidates, and started or completed local actions. |
+| UC-ADMIN-02-S08 | P1 | The admin console server and React admin web client use the same exported TypeScript contracts for admin API response shapes. |

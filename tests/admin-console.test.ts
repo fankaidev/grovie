@@ -16,6 +16,18 @@ import { appendDaemonActivity } from "../src/daemon-activity.js";
 import type { DaemonLifecycle } from "../src/daemon-lifecycle.js";
 import type { LocalStatePaths } from "../src/local-state.js";
 import type { AgentRuntime } from "../src/runtime.js";
+import type {
+  AdminApiCancelRunResponse,
+  AdminApiConfigResponse,
+  AdminApiErrorResponse,
+  AdminApiHealthResponse,
+  AdminApiRepositoriesResponse,
+  AdminApiRunDetailResponse,
+  AdminApiRunEventsResponse,
+  AdminApiRunLogResponse,
+  AdminApiRunsResponse,
+  AdminConsoleRootHealthResponse,
+} from "../src/admin-api.js";
 
 const servers: StartedAdminConsole[] = [];
 const tmpDirs: string[] = [];
@@ -60,7 +72,9 @@ describe("admin console server", () => {
     const response = await fetch(`http://127.0.0.1:${port}/health`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
+    const payload = await response.json() as AdminConsoleRootHealthResponse;
+
+    expect(payload).toEqual({
       ok: true,
       service: "grovie-admin-console",
     });
@@ -121,7 +135,9 @@ describe("admin console server", () => {
     const response = await fetch(`${started.url}/api/health`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
+    const payload = await response.json() as AdminApiHealthResponse;
+
+    expect(payload).toMatchObject({
       ok: true,
       daemon: {
         status: "stopped",
@@ -176,7 +192,9 @@ describe("admin console server", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(JSON.parse(body)).toMatchObject({
+    const payload = JSON.parse(body) as AdminApiConfigResponse;
+
+    expect(payload).toMatchObject({
       config: {
         watchedRepositories: [
           {
@@ -200,7 +218,9 @@ describe("admin console server", () => {
     });
     const started = await startTestServer(root);
 
-    expect(await (await fetch(`${started.url}/api/repos`)).json()).toEqual({
+    const payload = await (await fetch(`${started.url}/api/repos`)).json() as AdminApiRepositoriesResponse;
+
+    expect(payload).toEqual({
       repositories: [{ repository: "fankaidev/grovie", label: "ready" }],
     });
   });
@@ -225,7 +245,9 @@ describe("admin console server", () => {
     const response = await fetch(`${started.url}/api/runs`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
+    const payload = await response.json() as AdminApiRunsResponse;
+
+    expect(payload).toMatchObject({
       runs: [
         {
           runId: "run-1",
@@ -252,7 +274,9 @@ describe("admin console server", () => {
     });
     const started = await startTestServer(root);
 
-    expect(await (await fetch(`${started.url}/api/runs/run-1`)).json()).toMatchObject({
+    const payload = await (await fetch(`${started.url}/api/runs/run-1`)).json() as AdminApiRunDetailResponse;
+
+    expect(payload).toMatchObject({
       run: {
         runId: "run-1",
         issueNumber: 74,
@@ -276,7 +300,9 @@ describe("admin console server", () => {
     });
     const started = await startTestServer(root);
 
-    expect(await (await fetch(`${started.url}/api/runs/run-1/events`)).json()).toEqual({
+    const payload = await (await fetch(`${started.url}/api/runs/run-1/events`)).json() as AdminApiRunEventsResponse;
+
+    expect(payload).toEqual({
       runId: "run-1",
       events: [
         {
@@ -475,7 +501,9 @@ describe("admin console server", () => {
     });
     const started = await startTestServer(root);
 
-    expect(await (await fetch(`${started.url}/api/runs/run-1/logs/stdout`)).json()).toMatchObject({
+    const payload = await (await fetch(`${started.url}/api/runs/run-1/logs/stdout`)).json() as AdminApiRunLogResponse;
+
+    expect(payload).toMatchObject({
       runId: "run-1",
       stream: "stdout",
       content: "stdout line\n",
@@ -558,7 +586,7 @@ describe("admin console server", () => {
       stderr: "stderr line\n",
     });
     const started = await startTestServer(root);
-    const payload = await (await fetch(`${started.url}/api/runs/run-1/logs/stderr`)).json() as { content: string };
+    const payload = await (await fetch(`${started.url}/api/runs/run-1/logs/stderr`)).json() as AdminApiRunLogResponse;
 
     expect(payload.content).toBe("stderr line\n");
     expect(payload.content).not.toContain("stdout line");
@@ -635,7 +663,9 @@ describe("admin console server", () => {
     const invalid = await fetch(`${started.url}/api/runs/missing/logs/stream?stream=combined`);
 
     expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toMatchObject({
+    const payload = await invalid.json() as AdminApiErrorResponse;
+
+    expect(payload).toMatchObject({
       error: "invalid_stream",
     });
   });
@@ -657,7 +687,9 @@ describe("admin console server", () => {
     });
 
     expect(response.status).toBe(202);
-    expect(await response.json()).toMatchObject({
+    const payload = await response.json() as AdminApiCancelRunResponse;
+
+    expect(payload).toMatchObject({
       ok: true,
       cancellation: {
         runId: "run-1",

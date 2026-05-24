@@ -11,6 +11,7 @@
 | R3 | Log responses must not expose environment variable values added by Grovie itself. |
 | R4 | Runtime stdout transcript parsing is exposed through an admin API behind a runtime-aware parser interface. |
 | R5 | Raw stdout remains available when a readable transcript is shown or when transcript parsing is unavailable. |
+| R6 | Log response, transcript, and Server-Sent Events payload metadata use the shared admin API contract types. |
 
 ## Scenarios
 

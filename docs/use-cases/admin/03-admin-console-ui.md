@@ -1,6 +1,6 @@
 # UC-ADMIN-03: Inspect Local State Through Admin Views
 
-> The local admin console serves simple local-only HTML views for daemon status, configuration, repositories, and runs.
+> The local admin console serves local-only React views for daemon status, configuration, repositories, and runs.
 
 ## Rules
 
@@ -16,8 +16,8 @@
 
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-ADMIN-03-S01 | P2 | `GET /` shows local machine context, daemon health, runtime availability, watched repositories, and recent runs. |
+| UC-ADMIN-03-S01 | P2 | The React `GET /` route fetches admin APIs and shows daemon health, runtime availability, useful paths, watched repositories, and recent runs. |
 | UC-ADMIN-03-S02 | P2 | The React `/runs/:runId` route fetches run detail and shows issue reference, status, agent/runtime, run reason, source run, branch, worktree path, run directory, prompt/task paths, stdout/stderr paths, events, and GitHub result links. |
 | UC-ADMIN-03-S03 | P2 | The React `/runs/:runId` route shows a clear not-found state for missing local runs. |
-| UC-ADMIN-03-S04 | P1 | `GET /` shows recent daemon activity entries with timestamp, type, repository, issue, agent, and message. |
+| UC-ADMIN-03-S04 | P1 | The React `GET /` route shows recent daemon activity entries with timestamp, type, repository, issue, agent, and message. |
 | UC-ADMIN-03-S05 | P1 | When the admin web production build exists, `GET /`, hashed static asset paths, and SPA routes such as `/runs/:runId` are served from `dist/admin-web` while `/api/*` routes keep returning API responses. |

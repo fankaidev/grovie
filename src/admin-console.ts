@@ -11,6 +11,23 @@ import { writeRunCancellation, type LocalStatePaths } from "./local-state.js";
 import type { AgentRuntime } from "./runtime.js";
 import { parseRuntimeStdoutTranscript } from "./runtime-transcript.js";
 import { findLocalRun, listLocalRuns, type LocalRunSummary } from "./status.js";
+import type {
+  AdminApiActivityResponse,
+  AdminApiCancelRunResponse,
+  AdminApiConfigResponse,
+  AdminApiDaemonStatus,
+  AdminApiErrorResponse,
+  AdminApiHealthResponse,
+  AdminApiRepositoriesResponse,
+  AdminApiRunDetailResponse,
+  AdminApiRunEventsResponse,
+  AdminApiRunLogResponse,
+  AdminApiRunLogStreamEvent,
+  AdminApiRunLogTranscriptResponse,
+  AdminApiRunsResponse,
+  AdminConsoleRootHealthResponse,
+  AdminLogStream,
+} from "./admin-api.js";
 
 export type AdminConsoleResolvedConfig = {
   enabled: boolean;
@@ -47,10 +64,11 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
     const url = parseRequestUrl(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      writeJson(response, 200, {
+      const body: AdminConsoleRootHealthResponse = {
         ok: true,
         service: "grovie-admin-console",
-      });
+      };
+      writeJson(response, 200, body);
       return;
     }
 
@@ -62,18 +80,20 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
         const run = findLocalRun(context.paths.runsDir, runId);
 
         if (run === undefined) {
-          writeJson(response, 404, {
+          const body: AdminApiErrorResponse = {
             error: "not_found",
             message: "Run not found.",
-          });
+          };
+          writeJson(response, 404, body);
           return;
         }
 
         if (!isCancelableRun(run)) {
-          writeJson(response, 409, {
+          const body: AdminApiErrorResponse = {
             error: "not_cancelable",
             message: `Run ${run.runId} is ${run.status}; only active local runs can be canceled.`,
-          });
+          };
+          writeJson(response, 409, body);
           return;
         }
 
@@ -82,10 +102,11 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
           reason: "Canceled from local admin console.",
         });
 
-        writeJson(response, 202, {
+        const body: AdminApiCancelRunResponse = {
           ok: true,
           cancellation,
-        });
+        };
+        writeJson(response, 202, body);
         return;
       }
     }
@@ -120,51 +141,57 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
 
     }
 
-    writeJson(response, 404, {
+    const body: AdminApiErrorResponse = {
       error: "not_found",
       message: "Admin console endpoint not found.",
-    });
+    };
+    writeJson(response, 404, body);
   });
 }
 
 function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessage, url: URL, response: ServerResponse): void {
   if (url.pathname === "/api/health") {
-    writeJson(response, 200, {
+    const body: AdminApiHealthResponse = {
       ok: true,
       daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
       runtime: context.runtime.checkAvailability(),
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
   if (url.pathname === "/api/config") {
     const globalConfig = loadGlobalConfig(context.paths.root);
 
-    writeJson(response, 200, {
+    const body: AdminApiConfigResponse = {
       path: globalConfig.path,
       config: globalConfig.config,
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
   if (url.pathname === "/api/repos") {
-    writeJson(response, 200, {
+    const body: AdminApiRepositoriesResponse = {
       repositories: loadGlobalConfig(context.paths.root).config.watchedRepositories,
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
   if (url.pathname === "/api/runs") {
-    writeJson(response, 200, {
+    const body: AdminApiRunsResponse = {
       runs: listLocalRuns(context.paths.runsDir),
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
   if (url.pathname === "/api/activity") {
-    writeJson(response, 200, {
+    const body: AdminApiActivityResponse = {
       activity: readDaemonActivity(context.paths, 50),
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
@@ -174,17 +201,19 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
     const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runEventsMatch.groups.runId));
 
     if (run === undefined) {
-      writeJson(response, 404, {
+      const body: AdminApiErrorResponse = {
         error: "not_found",
         message: "Run not found.",
-      });
+      };
+      writeJson(response, 404, body);
       return;
     }
 
-    writeJson(response, 200, {
+    const body: AdminApiRunEventsResponse = {
       runId: run.runId,
       events: run.events,
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
@@ -194,21 +223,23 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
     const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runLogMatch.groups.runId));
 
     if (run === undefined) {
-      writeJson(response, 404, {
+      const body: AdminApiErrorResponse = {
         error: "not_found",
         message: "Run not found.",
-      });
+      };
+      writeJson(response, 404, body);
       return;
     }
 
     const log = readRunLog(run, runLogMatch.groups.stream);
 
-    writeJson(response, 200, {
+    const body: AdminApiRunLogResponse = {
       runId: run.runId,
       stream: runLogMatch.groups.stream,
       path: log.path,
       content: log.content,
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
@@ -227,12 +258,13 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
 
     const log = readRunLog(run, "stdout");
 
-    writeJson(response, 200, {
+    const body: AdminApiRunLogTranscriptResponse = {
       runId: run.runId,
       stream: "stdout",
       path: log.path,
       transcript: parseRuntimeStdoutTranscript(run.runtime, log.content),
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
@@ -242,20 +274,22 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
     const stream = url.searchParams.get("stream");
 
     if (stream !== "stdout" && stream !== "stderr") {
-      writeJson(response, 400, {
+      const body: AdminApiErrorResponse = {
         error: "invalid_stream",
         message: "Expected stream=stdout or stream=stderr.",
-      });
+      };
+      writeJson(response, 400, body);
       return;
     }
 
     const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runLogStreamMatch.groups.runId));
 
     if (run === undefined) {
-      writeJson(response, 404, {
+      const body: AdminApiErrorResponse = {
         error: "not_found",
         message: "Run not found.",
-      });
+      };
+      writeJson(response, 404, body);
       return;
     }
 
@@ -269,23 +303,26 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
     const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runMatch.groups.runId));
 
     if (run === undefined) {
-      writeJson(response, 404, {
+      const body: AdminApiErrorResponse = {
         error: "not_found",
         message: "Run not found.",
-      });
+      };
+      writeJson(response, 404, body);
       return;
     }
 
-    writeJson(response, 200, {
+    const body: AdminApiRunDetailResponse = {
       run,
-    });
+    };
+    writeJson(response, 200, body);
     return;
   }
 
-  writeJson(response, 404, {
+  const body: AdminApiErrorResponse = {
     error: "not_found",
     message: "Admin console endpoint not found.",
-  });
+  };
+  writeJson(response, 404, body);
 }
 
 export function startAdminConsoleServer(input: {
@@ -428,7 +465,7 @@ function isWorkerMessage(value: unknown): value is { type: "started"; url: strin
   );
 }
 
-function writeJson(response: ServerResponse, statusCode: number, value: unknown): void {
+function writeJson<T>(response: ServerResponse, statusCode: number, value: T): void {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
   });
@@ -474,7 +511,7 @@ function serveAdminWebAsset(context: AdminConsoleContext, url: URL, response: Se
     writeJson(response, 404, {
       error: "not_found",
       message: "Admin console asset not found.",
-    });
+    } satisfies AdminApiErrorResponse);
     return true;
   }
 
@@ -551,7 +588,7 @@ function contentTypeForPath(path: string): string {
   return "application/octet-stream";
 }
 
-function renderApiDaemonStatus(status: DaemonLifecycleStatus): unknown {
+function renderApiDaemonStatus(status: DaemonLifecycleStatus): AdminApiDaemonStatus {
   if (status.status === "stopped") {
     return status;
   }
@@ -781,7 +818,7 @@ function renderLogPreview(run: LocalRunSummary, stream: "stdout" | "stderr"): st
   ].join("\n");
 }
 
-function readRunLog(run: LocalRunSummary, stream: "stdout" | "stderr"): { path: string; content: string } {
+function readRunLog(run: LocalRunSummary, stream: AdminLogStream): { path: string; content: string } {
   const path = stream === "stdout" ? run.stdoutPath : run.stderrPath;
 
   if (!existsSync(path)) {
@@ -815,12 +852,13 @@ function startRunLogStream(
     "cache-control": "no-cache",
     connection: "keep-alive",
   });
-  writeServerSentEvent(response, "snapshot", {
+  const snapshot: AdminApiRunLogResponse = {
     runId: run.runId,
     stream,
     path: initialLog.path,
     content: initialLog.content,
-  });
+  };
+  writeServerSentEvent(response, "snapshot", snapshot);
 
   const interval = setInterval(() => {
     const nextLog = readRunLog(run, stream);
@@ -832,12 +870,13 @@ function startRunLogStream(
 
     const content = nextBuffer.subarray(offset).toString("utf8");
     offset = nextBuffer.length;
-    writeServerSentEvent(response, "append", {
+    const append: AdminApiRunLogResponse = {
       runId: run.runId,
       stream,
       path: nextLog.path,
       content,
-    });
+    };
+    writeServerSentEvent(response, "append", append);
   }, 100);
 
   request.on("close", () => {
@@ -845,7 +884,11 @@ function startRunLogStream(
   });
 }
 
-function writeServerSentEvent(response: ServerResponse, event: string, value: unknown): void {
+function writeServerSentEvent(
+  response: ServerResponse,
+  event: AdminApiRunLogStreamEvent["event"],
+  value: AdminApiRunLogStreamEvent["data"],
+): void {
   response.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`);
 }
 
