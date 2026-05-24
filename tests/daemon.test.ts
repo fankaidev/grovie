@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1562,6 +1563,168 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments[0]).toContain("Grovie daemon task claim active.");
   });
 
+  it("[UC-WORKER-06-S14] daemon run owns the enabled admin console in the same daemon process", async () => {
+    const port = await getAvailablePort();
+    const github = new FakeGitHub([fakeIssue()]);
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+
+    const result = await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+      ],
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github,
+      runtime: fakeRuntime(),
+      localState,
+      once: true,
+      workerId: "worker-1",
+      now: () => NOW,
+      adminConsole: {
+        enabled: true,
+        host: "127.0.0.1",
+        port,
+      },
+      issueRunner: async () => {
+        const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          ok: true,
+          runtime: {
+            runtime: "codex",
+            available: true,
+          },
+        });
+
+        return {
+          exitCode: 0,
+          stdout: "ran issue",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "ran issue",
+    });
+  });
+
+  it("[UC-WORKER-06-S15] daemon run stops the admin console when the daemon stops", async () => {
+    const port = await getAvailablePort();
+    const github = new FakeGitHub([fakeIssue()]);
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+
+    await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+      ],
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github,
+      runtime: fakeRuntime(),
+      localState,
+      once: true,
+      workerId: "worker-1",
+      now: () => NOW,
+      adminConsole: {
+        enabled: true,
+        host: "127.0.0.1",
+        port,
+      },
+      issueRunner: () => ({
+        exitCode: 0,
+      }),
+    });
+
+    await expectPortCanBind(port);
+  });
+
+  it("[UC-ADMIN-01-S06] disabled admin console does not bind a web port during daemon startup", async () => {
+    const port = await getAvailablePort();
+    const github = new FakeGitHub([fakeIssue()]);
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+
+    const result = await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+      ],
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github,
+      runtime: fakeRuntime(),
+      localState,
+      once: true,
+      workerId: "worker-1",
+      now: () => NOW,
+      adminConsole: {
+        enabled: false,
+        host: "127.0.0.1",
+        port,
+      },
+      issueRunner: async () => {
+        await expectPortCanBind(port);
+
+        return {
+          exitCode: 0,
+          stdout: "ran issue",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "ran issue",
+    });
+  });
+
+  it("[UC-ADMIN-01-S04] daemon startup fails clearly when the enabled admin console port is unavailable", async () => {
+    const port = await getAvailablePort();
+    const occupied = createServer();
+
+    await new Promise<void>((resolve) => occupied.listen(port, "127.0.0.1", resolve));
+
+    try {
+      const result = await runDaemonForRepositories({
+        repositories: [
+          {
+            repository: "fankaidev/grovie",
+            label: "grovie",
+          },
+        ],
+        config: defaultConfig(),
+        configPath: "built-in defaults",
+        github: new FakeGitHub([fakeIssue()]),
+        runtime: fakeRuntime(),
+        localState: new LocalState({ paths: { root: createTmpDir() } }),
+        once: true,
+        workerId: "worker-1",
+        now: () => NOW,
+        adminConsole: {
+          enabled: true,
+          host: "127.0.0.1",
+          port,
+        },
+      });
+
+      expect(result).toEqual({
+        exitCode: 1,
+        stderr: `Admin console port ${port} is unavailable on 127.0.0.1.`,
+      });
+    } finally {
+      await new Promise<void>((resolve) => occupied.close(() => resolve()));
+    }
+  });
+
   it("[UC-WORKER-04-S08] checks multiple watched repositories sequentially until it finds queued work", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
@@ -2088,6 +2251,42 @@ function fakeRelatedPullRequest(overrides: Partial<GitHubRelatedPullRequest> = {
     },
     ...overrides,
   };
+}
+
+async function getAvailablePort(): Promise<number> {
+  const server = createServer();
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+
+  if (address === null || typeof address === "string") {
+    throw new Error("Could not resolve test server port.");
+  }
+
+  return address.port;
+}
+
+async function expectPortCanBind(port: number): Promise<void> {
+  const server = createServer();
+  let listening = false;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, "127.0.0.1", () => {
+        listening = true;
+        resolve();
+      });
+    });
+  } finally {
+    if (listening) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
 }
 
 function createTmpDir(): string {

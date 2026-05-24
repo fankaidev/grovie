@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { WatchedRepository } from "./config.js";
 import type { DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import type { LocalStatePaths } from "./local-state.js";
+import type { AdminConsoleResolvedConfig } from "./admin-console.js";
 
 export type RunEvent = {
   timestamp?: string;
@@ -59,6 +60,7 @@ type RunMetadata = {
 export type LocalStatusOverviewInput = {
   runs: LocalRunSummary[];
   daemonStatus: DaemonLifecycleStatus;
+  adminConsole?: AdminConsoleResolvedConfig;
   watchedRepositories: WatchedRepository[];
   paths: LocalStatePaths;
 };
@@ -166,6 +168,8 @@ export function renderLocalStatusOverview(input: LocalStatusOverviewInput): stri
     "Daemon:",
     `  Status: ${input.daemonStatus.status}`,
     ...renderDaemonStatusDetails(input.daemonStatus),
+    "Admin console:",
+    ...renderAdminConsoleStatus(input.adminConsole, input.daemonStatus),
     "Watched repositories:",
     renderWatchedRepositories(input.watchedRepositories),
     "Paths:",
@@ -178,6 +182,25 @@ export function renderLocalStatusOverview(input: LocalStatusOverviewInput): stri
     "Recent failures:",
     renderRunSection(recentFailures, "  No recent failures."),
   ].join("\n");
+}
+
+function renderAdminConsoleStatus(
+  config: AdminConsoleResolvedConfig | undefined,
+  daemonStatus: DaemonLifecycleStatus,
+): string[] {
+  if (config === undefined || !config.enabled) {
+    return ["  Enabled: false"];
+  }
+
+  const availability = daemonStatus.status === "running"
+    ? "expected available while the daemon is running"
+    : `not expected to be available while the daemon is ${daemonStatus.status}`;
+
+  return [
+    "  Enabled: true",
+    `  URL: http://${config.host}:${config.port}`,
+    `  Availability: ${availability}`,
+  ];
 }
 
 function readLocalRun(runDir: string, directoryRunId: string, now: Date, staleAfterMs: number): LocalRunSummary {

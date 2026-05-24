@@ -3,6 +3,7 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
+import { saveGlobalConfig } from "../src/config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "../src/daemon-lifecycle.js";
 import { type AgentMetadata, resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
@@ -198,11 +199,18 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S08] shows daemon state, watched repositories, useful paths, active runs, and failures through status", () => {
+  it("[UC-WORKER-06-S08] shows daemon state, admin console lifecycle, watched repositories, useful paths, active runs, and failures through status", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
-    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+    saveGlobalConfig(globalRoot, {
+      version: 1,
+      watchedRepositories: [{ repository: "fankaidev/grovie" }],
+      adminConsole: {
+        enabled: true,
+        port: 9876,
+      },
+    });
     writeLocalRun(localState.paths.runsDir, "active-run", {
       metadata: {
         runId: "active-run",
@@ -228,6 +236,10 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("grovie status");
     expect(result.stdout).toContain("Daemon:");
     expect(result.stdout).toContain("Status: stopped");
+    expect(result.stdout).toContain("Admin console:");
+    expect(result.stdout).toContain("Enabled: true");
+    expect(result.stdout).toContain("URL: http://127.0.0.1:9876");
+    expect(result.stdout).toContain("Availability: not expected to be available while the daemon is stopped");
     expect(result.stdout).toContain("- fankaidev/grovie");
     expect(result.stdout).toContain(`Runs: ${localState.paths.runsDir}`);
     expect(result.stdout).toContain("active-run fankaidev/grovie#36 status=running");
@@ -1155,6 +1167,36 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-ADMIN-01-S04] fails detached daemon start clearly when the enabled admin console port is unavailable", async () => {
+    const localState = new FakeLocalState(createTmpDir());
+    saveGlobalConfig(localState.paths.root, {
+      version: 1,
+      watchedRepositories: [],
+      adminConsole: {
+        enabled: true,
+        port: 9876,
+      },
+    });
+
+    await expect(
+      runCliAsync(["daemon", "start"], {
+        localState,
+        adminConsolePortCheck: async (config) => {
+          expect(config).toEqual({
+            enabled: true,
+            host: "127.0.0.1",
+            port: 9876,
+          });
+
+          throw new Error("Admin console port 9876 is unavailable on 127.0.0.1.");
+        },
+      }),
+    ).resolves.toEqual({
+      exitCode: 1,
+      stderr: "Admin console port 9876 is unavailable on 127.0.0.1.",
+    });
+  });
+
   it("[UC-WORKER-06-S02] refuses to start another live background daemon", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({
@@ -1283,13 +1325,15 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("runs an explicit daemon repository without reading the current checkout repository", async () => {
+  it("[UC-WORKER-06-S01] runs an explicit daemon repository without reading the current checkout repository", async () => {
     const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
 
     expect(
       await runCliAsync(["daemon", "--repo", "fankaidev/other", "--label", "ready", "--once"], {
         cwd,
+        localState,
         github: fakeGitHubGateway({
           listOpenIssues: (repository, label) => {
             expect(repository).toBe("fankaidev/other");
@@ -1302,7 +1346,6 @@ describe("CLI command registration", () => {
           },
         }),
         runtime: fakeRuntime(),
-        localState: new FakeLocalState(createTmpDir()),
       }),
     ).toEqual({
       exitCode: 0,

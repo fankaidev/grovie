@@ -1,5 +1,6 @@
+import { createServer } from "node:http";
 import { buildAgentLabel, getAssignedAgentIds, parseAgentId } from "./assignment.js";
-import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "./admin-console.js";
+import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer, type AdminConsoleResolvedConfig } from "./admin-console.js";
 import {
   addWatchedRepository,
   CONFIG_FILE_NAME,
@@ -38,7 +39,10 @@ export type CliContext = {
   runtime?: AgentRuntime;
   localState: RunLocalState;
   daemonLifecycle: DaemonLifecycle;
+  adminConsolePortCheck: AdminConsolePortCheck;
 };
+
+export type AdminConsolePortCheck = (config: AdminConsoleResolvedConfig) => Promise<void>;
 
 type CliCommand = {
   name: string;
@@ -138,6 +142,7 @@ const commandDefinitions = [
             daemonStatus: context.daemonLifecycle.status({
               root: context.localState.getPaths().root,
             }),
+            adminConsole: resolveAdminConsoleConfig(globalConfig.config),
             watchedRepositories: globalConfig.config.watchedRepositories,
             paths: context.localState.getPaths(),
           }),
@@ -521,29 +526,16 @@ const commandDefinitions = [
       const [subcommand] = args;
 
       if (subcommand === "start") {
-        const result = context.daemonLifecycle.start({
-          root: context.localState.getPaths().root,
-          args,
-        });
+        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+        const adminConsole = resolveAdminConsoleConfig(globalConfig.config);
 
-        if (!result.ok) {
-          return {
-            exitCode: 1,
-            stderr: result.message,
-          };
+        if (adminConsole.enabled) {
+          return context.adminConsolePortCheck(adminConsole)
+            .then(() => startDaemonProcess(args, context))
+            .catch(errorResult);
         }
 
-        return {
-          exitCode: 0,
-          stdout: [
-            "grovie daemon start",
-            "",
-            `Started Grovie daemon pid ${result.state.pid}.`,
-            `State: ${result.state.statePath}`,
-            `Stdout log: ${result.state.stdoutPath}`,
-            `Stderr log: ${result.state.stderrPath}`,
-          ].join("\n"),
-        };
+        return startDaemonProcess(args, context);
       }
 
       if (subcommand === "stop") {
@@ -688,6 +680,7 @@ const commandDefinitions = [
 
         if (normalizedRepoOption.value !== undefined) {
           const loaded = loadRepositoryConfig(normalizedRepoOption.value, context.localState);
+          const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
 
           return runDaemon({
             repository: normalizedRepoOption.value,
@@ -698,6 +691,8 @@ const commandDefinitions = [
             runtime: context.runtime ?? createRuntime(loaded.config.runtime.default),
             localState: context.localState,
             once: runArgs.includes("--once"),
+            adminConsole: resolveAdminConsoleConfig(globalConfig.config),
+            daemonLifecycle: context.daemonLifecycle,
           });
         }
 
@@ -715,6 +710,8 @@ const commandDefinitions = [
           runtime: context.runtime,
           localState: context.localState,
           once: runArgs.includes("--once"),
+          adminConsole: resolveAdminConsoleConfig(globalConfig.config),
+          daemonLifecycle: context.daemonLifecycle,
         });
       } catch (error) {
         return errorResult(error);
@@ -880,6 +877,7 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
     runtime: context.runtime,
     localState: context.localState ?? new LocalState(),
     daemonLifecycle: context.daemonLifecycle ?? new LocalDaemonLifecycle(),
+    adminConsolePortCheck: context.adminConsolePortCheck ?? checkAdminConsolePortAvailable,
   };
   const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const [commandName, ...commandArgs] = normalizedArgs;
@@ -919,6 +917,62 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
 
 function resolveRuntime(context: CliContext, config: { runtime: { default: Parameters<typeof createRuntime>[0] } }): AgentRuntime {
   return context.runtime ?? createRuntime(config.runtime.default);
+}
+
+function startDaemonProcess(args: string[], context: CliContext): CliResult {
+  const result = context.daemonLifecycle.start({
+    root: context.localState.getPaths().root,
+    args,
+  });
+
+  if (!result.ok) {
+    return {
+      exitCode: 1,
+      stderr: result.message,
+    };
+  }
+
+  return {
+    exitCode: 0,
+    stdout: [
+      "grovie daemon start",
+      "",
+      `Started Grovie daemon pid ${result.state.pid}.`,
+      `State: ${result.state.statePath}`,
+      `Stdout log: ${result.state.stdoutPath}`,
+      `Stderr log: ${result.state.stderrPath}`,
+    ].join("\n"),
+  };
+}
+
+function checkAdminConsolePortAvailable(config: AdminConsoleResolvedConfig): Promise<void> {
+  if (!config.enabled) {
+    return Promise.resolve();
+  }
+
+  const server = createServer();
+
+  return new Promise((resolve, reject) => {
+    const onError = () => {
+      server.off("listening", onListening);
+      reject(new Error(`Admin console port ${config.port} is unavailable on ${config.host}.`));
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      server.close((error) => {
+        if (error !== undefined) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    };
+
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(config.port, config.host);
+  });
 }
 
 function renderRuntimeLabel(runtime: Parameters<typeof createRuntime>[0]): string {
