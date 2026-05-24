@@ -104,7 +104,10 @@ describe("repository event polling", () => {
 
   it("[UC-WORKER-04-S15] resolves pull request events through GitHub and caches PR issue links", () => {
     const paths = resolvePaths({ root: createTmpDir() });
-    const github = fakeGithub([{ pullRequestNumber: 127, issueNumber: 124, source: "closing-reference" }]);
+    const links: Array<{ pullRequestNumber: number; issueNumber: number; source: "closing-reference" | "body" | "branch" }> = [
+      { pullRequestNumber: 127, issueNumber: 124, source: "closing-reference" },
+    ];
+    const github = fakeGithub(links);
     planRepositoryEventPolling({
       paths,
       repository: "fankaidev/grovie",
@@ -134,6 +137,7 @@ describe("repository event polling", () => {
       issueNumbers: [124],
     });
     expect(github.calls).toEqual([127]);
+    links.splice(0, links.length, { pullRequestNumber: 127, issueNumber: 125, source: "closing-reference" });
 
     const second = planRepositoryEventPolling({
       paths,
@@ -152,9 +156,9 @@ describe("repository event polling", () => {
 
     expect(second).toMatchObject({
       mode: "filtered",
-      issueNumbers: [124],
+      issueNumbers: [125],
     });
-    expect(github.calls).toEqual([127]);
+    expect(github.calls).toEqual([127, 127]);
   });
 
   it("[UC-WORKER-04-S15] falls back to a full scan when the events cursor is outside the returned window", () => {

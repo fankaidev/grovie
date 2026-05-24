@@ -102,7 +102,7 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
     }
 
     while (true) {
-      const result = await runDaemonCycle(input);
+      const result = await runDaemonSingleRepositoryCycle(input);
       await reportDaemonCycle(input, result);
       const sleep = input.sleep ?? sleepSync;
       await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
@@ -111,6 +111,46 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
     await stopDaemonAdminConsole(adminConsole);
     releaseDaemonLock(input, daemonLockResult.lock);
   }
+}
+
+async function runDaemonSingleRepositoryCycle(input: DaemonInput): Promise<DaemonCycleResult> {
+  recordActivity(input, {
+    type: "repository.poll_started",
+    message: `Polling ${input.repository}.`,
+    repository: input.repository,
+    data: {
+      label: input.label,
+    },
+  });
+
+  const eventPlan = planRepositoryCycle(input, input.repository);
+
+  recordActivity(input, {
+    type: `repository.events_${eventPlan.mode}`,
+    message: `${input.repository}: ${eventPlan.reason}.`,
+    repository: input.repository,
+    data: {
+      eventCount: eventPlan.eventCount,
+      issueNumbers: eventPlan.issueNumbers,
+    },
+  });
+
+  if (eventPlan.mode === "skip") {
+    return {
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        `Skipped ${input.repository}: ${eventPlan.reason}.`,
+      ].join("\n"),
+    };
+  }
+
+  return runDaemonCycle({
+    ...input,
+    issueNumbers: eventPlan.issueNumbers,
+  });
 }
 
 export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput): Promise<RunIssueResult> {
@@ -568,7 +608,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   };
 }
 
-function planRepositoryCycle(input: MultiRepositoryDaemonInput, repository: string) {
+function planRepositoryCycle(input: Pick<DaemonInput, "once" | "github" | "localState" | "now">, repository: string) {
   if (input.once || input.github.listRepositoryEvents === undefined) {
     return {
       mode: "full-scan" as const,

@@ -169,12 +169,6 @@ function issueNumbersFromEvent(
     return [];
   }
 
-  const cached = readPullRequestIssueAssociations(paths)[pullRequestAssociationKey(repository, pullRequestNumber)];
-
-  if (cached !== undefined) {
-    return cached.issueNumbers;
-  }
-
   const linksResult = github.readPullRequestIssueLinks?.(repository, pullRequestNumber);
 
   if (linksResult === undefined || !linksResult.ok) {
