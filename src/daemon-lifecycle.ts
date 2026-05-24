@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { LocalState } from "./local-state.js";
 
 export type DaemonLifecycleState = {
   pid: number;
@@ -25,7 +26,7 @@ export type DaemonLifecycleStatus =
 
 export type DaemonLifecycle = {
   start(input: { root: string; args: string[] }): { ok: true; state: DaemonLifecycleState } | { ok: false; message: string };
-  stop(input: { root: string }): { ok: true; message: string } | { ok: false; message: string };
+  stop(input: { root: string; force?: boolean }): { ok: true; message: string } | { ok: false; message: string };
   status(input: { root: string }): DaemonLifecycleStatus;
 };
 
@@ -99,7 +100,7 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
     };
   }
 
-  stop(input: { root: string }): { ok: true; message: string } | { ok: false; message: string } {
+  stop(input: { root: string; force?: boolean }): { ok: true; message: string } | { ok: false; message: string } {
     const currentStatus = this.status(input);
 
     if (currentStatus.status === "stopped") {
@@ -124,8 +125,16 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
       };
     }
 
+    const interrupted = new LocalState({ paths: { root: input.root } }).interruptActiveRuns({
+      reason: "Daemon stopped.",
+    });
+
     try {
-      process.kill(currentStatus.state.pid, "SIGTERM");
+      if (input.force === true) {
+        killDaemonProcessGroup(currentStatus.state.pid, "SIGKILL");
+      } else {
+        process.kill(currentStatus.state.pid, "SIGTERM");
+      }
     } catch (error) {
       return {
         ok: false,
@@ -137,7 +146,10 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
 
     return {
       ok: true,
-      message: `Stopped Grovie daemon pid ${currentStatus.state.pid}.`,
+      message: [
+        `Stopped Grovie daemon pid ${currentStatus.state.pid}.`,
+        interrupted.length === 0 ? undefined : `Interrupted resumable runs: ${interrupted.map((run) => run.runId).join(", ")}.`,
+      ].filter((line): line is string => line !== undefined).join("\n"),
     };
   }
 
@@ -236,6 +248,14 @@ function removeState(path: string): void {
     unlinkSync(path);
   } catch {
     // Ignore already-removed lifecycle state.
+  }
+}
+
+function killDaemonProcessGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    process.kill(pid, signal);
   }
 }
 

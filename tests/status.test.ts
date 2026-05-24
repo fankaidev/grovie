@@ -81,6 +81,30 @@ describe("local run status", () => {
     expect(renderRunsList(run === undefined ? [] : [run])).toContain("Status: stale");
   });
 
+  it("[UC-DAEMON-03-S01] reports interrupted runs as interrupted even when stop-time failure events follow", () => {
+    const runsDir = createRunsDir();
+    writeRun(runsDir, "interrupted-run", {
+      metadata: {
+        status: "interrupted",
+        runId: "interrupted-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 9,
+        branchName: "grovie/issue-9",
+      },
+      events: [
+        event("2026-05-23T09:00:00.000Z", "run.interrupted", { resumeEligible: true }),
+        event("2026-05-23T09:00:01.000Z", "runtime.finished", { exitCode: 143 }),
+        event("2026-05-23T09:00:02.000Z", "run.failed", { exitCode: 143 }),
+      ],
+    });
+
+    const [run] = listLocalRuns(runsDir, {
+      now: new Date("2026-05-23T10:00:01.000Z"),
+    });
+
+    expect(run?.status).toBe("interrupted");
+  });
+
   it("[UC-EXECUTION-02-S08] renders detailed paths, GitHub result links, and recent events for one run", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "detail-run", {

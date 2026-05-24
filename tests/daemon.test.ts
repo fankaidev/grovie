@@ -1243,7 +1243,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments[0]).toContain("Grovie daemon task claim active.");
   });
 
-  it("[UC-WORKER-06-S13] daemon run owns the enabled admin console in the same daemon process", async () => {
+  it("[UC-WORKER-06-S14] daemon run owns the enabled admin console in the same daemon process", async () => {
     const port = await getAvailablePort();
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });
@@ -1293,7 +1293,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-06-S14] daemon run stops the admin console when the daemon stops", async () => {
+  it("[UC-WORKER-06-S15] daemon run stops the admin console when the daemon stops", async () => {
     const port = await getAvailablePort();
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });

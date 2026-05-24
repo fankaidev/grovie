@@ -18,7 +18,7 @@ export type LocalRunSummary = {
   issueNumber?: number;
   agentId?: string;
   runtime?: string;
-  status: "preparing" | "prepared" | "running" | "succeeded" | "failed" | "canceled" | "stale" | "unknown";
+  status: "preparing" | "prepared" | "running" | "interrupting" | "interrupted" | "resuming" | "succeeded" | "failed" | "canceled" | "stale" | "unknown";
   branchName?: string;
   localBranchName?: string;
   repositoryCachePath?: string;
@@ -32,6 +32,10 @@ export type LocalRunSummary = {
   lastEventTime?: string;
   lastEventType?: string;
   createdAt?: string;
+  runRequest?: {
+    sourceRunId?: string;
+    reason?: string;
+  };
   resultLinks: string[];
   events: RunEvent[];
 };
@@ -47,6 +51,10 @@ type RunMetadata = {
   repositoryCachePath?: string;
   worktreePath?: string;
   createdAt?: string;
+  runRequest?: {
+    sourceRunId?: string;
+    reason?: string;
+  };
 };
 
 export type LocalStatusOverviewInput = {
@@ -67,6 +75,8 @@ const TERMINAL_STATUS_BY_EVENT: Record<string, LocalRunSummary["status"] | undef
   "run.succeeded": "succeeded",
   "run.failed": "failed",
   "run.canceled": "canceled",
+  "run.interrupted": "interrupted",
+  "run.resuming": "resuming",
 };
 
 const DEFAULT_STALE_AFTER_MS = 30 * 60 * 1000;
@@ -143,8 +153,14 @@ export function renderRunDetail(run: LocalRunSummary): string {
 }
 
 export function renderLocalStatusOverview(input: LocalStatusOverviewInput): string {
-  const activeRuns = input.runs.filter((run) => run.status === "running" || run.status === "preparing" || run.status === "prepared");
-  const recentFailures = input.runs.filter((run) => run.status === "failed" || run.status === "stale").slice(0, 3);
+  const activeRuns = input.runs.filter((run) =>
+    run.status === "running"
+    || run.status === "preparing"
+    || run.status === "prepared"
+    || run.status === "interrupting"
+    || run.status === "resuming"
+  );
+  const recentFailures = input.runs.filter((run) => run.status === "failed" || run.status === "stale" || run.status === "interrupted").slice(0, 3);
 
   return [
     "grovie status",
@@ -214,6 +230,7 @@ function readLocalRun(runDir: string, directoryRunId: string, now: Date, staleAf
     lastEventTime: lastEvent?.timestamp ?? metadata.createdAt ?? fallbackMtime(runDir),
     lastEventType: lastEvent?.type,
     createdAt: metadata.createdAt,
+    runRequest: metadata.runRequest,
     resultLinks: findResultLinks(events),
     events,
   };
@@ -278,6 +295,10 @@ function deriveRunStatus(
   now: Date,
   staleAfterMs: number,
 ): LocalRunSummary["status"] {
+  if (metadataStatus === "interrupting" || metadataStatus === "interrupted" || metadataStatus === "resuming") {
+    return metadataStatus;
+  }
+
   for (const event of [...events].reverse()) {
     const terminalStatus = TERMINAL_STATUS_BY_EVENT[event.type];
 
@@ -297,6 +318,10 @@ function deriveRunStatus(
   }
 
   if (metadataStatus === "preparing" || metadataStatus === "prepared") {
+    return metadataStatus;
+  }
+
+  if (metadataStatus === "running") {
     return metadataStatus;
   }
 

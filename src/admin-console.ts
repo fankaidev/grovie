@@ -349,6 +349,7 @@ function renderRunDetailPage(run: LocalRunSummary): string {
     `<p>Issue: ${escapeHtml(renderIssueReference(run))}</p>`,
     `<p>Agent: ${escapeHtml(run.agentId ?? "(unknown)")}</p>`,
     `<p>Runtime: ${escapeHtml(run.runtime ?? "(unknown)")}</p>`,
+    `<p>Run reason: ${escapeHtml(renderRunReason(run))}</p>`,
     `<p>Branch: ${escapeHtml(run.branchName ?? "(unknown)")}</p>`,
     `<p>Started: ${escapeHtml(run.startedAt ?? "(unknown)")}</p>`,
     `<p>Ended: ${escapeHtml(run.endedAt ?? "(not ended)")}</p>`,
@@ -640,6 +641,15 @@ function readStatePath(value: unknown): string {
   return typeof state === "object" && state !== null && "statePath" in state && typeof state.statePath === "string"
     ? state.statePath
     : "(none)";
+}
+
+function renderRunReason(run: LocalRunSummary): string {
+  if (run.runRequest === undefined) {
+    return "(scheduled)";
+  }
+
+  const reason = run.runRequest.reason ?? "manual";
+  return run.runRequest.sourceRunId === undefined ? reason : `${reason}; source run ${run.runRequest.sourceRunId}`;
 }
 
 function escapeHtml(value: string): string {

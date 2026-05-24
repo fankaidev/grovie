@@ -20,3 +20,4 @@
 | UC-EXECUTION-03-S04 | P0 | A running Codex process streams stdout and stderr to local log files before the process exits. |
 | UC-EXECUTION-03-S05 | P0 | A canceled run terminates the active Codex process and records a canceled run result. |
 | UC-EXECUTION-03-S06 | P1 | A Codex process failure records exit status, stdout path, stderr path, and failure summary in run metadata. |
+| UC-EXECUTION-03-S07 | P0 | Codex runs persist the concrete Codex runtime session id and resume runs use that id instead of an ambiguous latest session. |

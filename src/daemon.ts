@@ -271,6 +271,35 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     };
   }
 
+  const resumableRun = input.localState?.takeResumableRun?.({
+    repository: input.repository,
+    now: now(),
+  });
+
+  if (resumableRun !== undefined) {
+    const result = await runRequestedIssue({
+      ...input,
+      issueNumber: resumableRun.issueNumber,
+      workerId: resumableRun.agentId,
+      runRequest: {
+        sourceRunId: resumableRun.runId,
+        reason: "resume",
+      },
+      now,
+      issueRunner,
+    });
+
+    if (result.processed) {
+      input.localState?.markRunResuming?.({
+        runId: resumableRun.runId,
+        now: now(),
+        reason: "daemon restart recovery",
+      });
+    }
+
+    return result;
+  }
+
   const request = input.localState?.takeRunRequest?.(input.repository);
 
   if (request !== undefined) {

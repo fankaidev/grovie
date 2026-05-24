@@ -1235,6 +1235,23 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-DAEMON-03-S03] passes force stop requests to the daemon lifecycle", () => {
+    const localState = new FakeLocalState(createTmpDir());
+    const daemonLifecycle = fakeDaemonLifecycle({
+      stop: ({ root, force }) => {
+        expect(root).toBe(localState.paths.root);
+        expect(force).toBe(true);
+
+        return {
+          ok: true,
+          message: "Stopped Grovie daemon pid 1234.",
+        };
+      },
+    });
+
+    expect(runCli(["daemon", "stop", "--force"], { localState, daemonLifecycle }).exitCode).toBe(0);
+  });
+
   it("[UC-WORKER-06-S04] reports background daemon status", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({

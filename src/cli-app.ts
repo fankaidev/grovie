@@ -541,6 +541,7 @@ const commandDefinitions = [
       if (subcommand === "stop") {
         const result = context.daemonLifecycle.stop({
           root: context.localState.getPaths().root,
+          force: args.includes("--force"),
         });
 
         return result.ok

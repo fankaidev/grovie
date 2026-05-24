@@ -84,7 +84,7 @@ export type RunRequest = {
   createdAt: string;
   path: string;
   sourceRunId?: string;
-  reason?: "manual" | "retry" | "rerun";
+  reason?: "manual" | "retry" | "rerun" | "resume";
 };
 
 export type RunCancellation = {
@@ -92,6 +92,16 @@ export type RunCancellation = {
   requestedAt: string;
   reason: string;
   path: string;
+};
+
+export type ResumableRun = {
+  runId: string;
+  repository: string;
+  issueNumber: number;
+  agentId: string;
+  status: "interrupted" | "active-looking";
+  runDir: string;
+  worktreePath?: string;
 };
 
 export type LockResult<T> =
@@ -211,6 +221,132 @@ export class LocalState {
 
   releaseExecutionLock(lock: ExecutionLock): void {
     removeFileIfExists(lock.path);
+  }
+
+  interruptActiveRuns(input: { now?: Date; reason: string }): ResumableRun[] {
+    this.ensureBaseDirectories();
+    const interrupted: ResumableRun[] = [];
+
+    for (const runDirName of readdirDirectoryNames(this.paths.runsDir)) {
+      const runDir = join(this.paths.runsDir, runDirName);
+      const metadataPath = join(runDir, "metadata.json");
+      const metadata = readJsonFile<RunMetadata>(metadataPath);
+
+      if (
+        metadata === undefined
+        || (metadata.status !== "interrupted" && metadata.status !== "resuming" && hasTerminalRunEvent(join(runDir, "events.jsonl")))
+        || !isRecoverableRunMetadata(metadata, "active-looking")
+      ) {
+        continue;
+      }
+
+      interruptRuntimeProcess(metadata.runtimePid);
+      const runId = metadata.runId ?? runDirName;
+      const interruptedAt = (input.now ?? new Date()).toISOString();
+      writeJsonFile(metadataPath, {
+        ...metadata,
+        status: "interrupted",
+        resumeEligible: true,
+        interruptedAt,
+        interruptReason: input.reason,
+      });
+      appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "run.interrupted", {
+        reason: input.reason,
+        resumeEligible: true,
+      });
+      interrupted.push({
+        runId,
+        repository: metadata.repository,
+        issueNumber: metadata.issueNumber,
+        agentId: metadata.agentId,
+        status: "interrupted",
+        runDir,
+        worktreePath: metadata.worktreePath,
+      });
+    }
+
+    return interrupted;
+  }
+
+  takeResumableRun(input: { repository: string; now?: Date }): ResumableRun | undefined {
+    this.ensureBaseDirectories();
+
+    for (const runDirName of readdirDirectoryNames(this.paths.runsDir)) {
+      const runDir = join(this.paths.runsDir, runDirName);
+      const metadataPath = join(runDir, "metadata.json");
+      const eventsPath = join(runDir, "events.jsonl");
+      const metadata = readJsonFile<RunMetadata>(metadataPath);
+
+      if (
+        metadata === undefined
+        || metadata.repository !== input.repository
+        || (metadata.status !== "interrupted" && metadata.status !== "resuming" && hasTerminalRunEvent(eventsPath))
+      ) {
+        continue;
+      }
+
+      if (!hasRunIdentity(metadata)) {
+        continue;
+      }
+
+      const status = isRecoverableRunMetadata(metadata, "interrupted")
+        ? "interrupted"
+        : isRecoverableRunMetadata(metadata, "active-looking")
+          ? "active-looking"
+          : undefined;
+
+      if (status === undefined || isRunCancellationRequested(this.paths, metadata.runId ?? runDirName)) {
+        continue;
+      }
+
+      if (isLivePid(metadata.runtimePid)) {
+        continue;
+      }
+
+      const repository = metadata.repository;
+      const issueNumber = metadata.issueNumber;
+      const agentId = metadata.agentId;
+      const runId = metadata.runId ?? runDirName;
+      this.releaseExecutionLock({
+        repository,
+        issueNumber,
+        agentId,
+        acquiredAt: "",
+        path: this.getExecutionLockPath(repository, issueNumber, agentId),
+      });
+
+      return {
+        runId,
+        repository,
+        issueNumber,
+        agentId,
+        status,
+        runDir,
+        worktreePath: metadata.worktreePath,
+      };
+    }
+
+    return undefined;
+  }
+
+  markRunResuming(input: { runId: string; now?: Date; reason: string }): void {
+    const runDir = join(this.paths.runsDir, sanitizePathPart(input.runId));
+    const metadataPath = join(runDir, "metadata.json");
+    const metadata = readJsonFile<RunMetadata>(metadataPath);
+
+    if (metadata === undefined) {
+      return;
+    }
+
+    writeJsonFile(metadataPath, {
+      ...metadata,
+      status: "resuming",
+      resumeEligible: true,
+      resumingAt: (input.now ?? new Date()).toISOString(),
+    });
+    appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "run.resuming", {
+      reason: input.reason,
+    });
   }
 
   enqueueRunRequest(input: {
@@ -622,6 +758,17 @@ export class LocalState {
   }
 }
 
+type RunMetadata = {
+  status?: string;
+  runId?: string;
+  repository?: string;
+  issueNumber?: number;
+  agentId?: string;
+  worktreePath?: string;
+  resumeEligible?: boolean;
+  runtimePid?: number;
+};
+
 export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalStatePaths {
   const root = overrides.root ?? join(homedir(), ".grovie");
 
@@ -704,6 +851,78 @@ function readdirRequestFiles(path: string): string[] {
     return readdirSync(path).filter((entry) => entry.endsWith(".json")).sort();
   } catch {
     return [];
+  }
+}
+
+function readdirDirectoryNames(path: string): string[] {
+  try {
+    return readdirSync(path, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function isRecoverableRunMetadata(metadata: RunMetadata, mode: "interrupted" | "active-looking"): metadata is RunMetadata & {
+  repository: string;
+  issueNumber: number;
+  agentId: string;
+} {
+  if (!hasRunIdentity(metadata)) {
+    return false;
+  }
+
+  if (mode === "interrupted") {
+    return metadata.status === "interrupted" && metadata.resumeEligible === true;
+  }
+
+  return metadata.status === "preparing" || metadata.status === "prepared" || metadata.status === "running";
+}
+
+function hasRunIdentity(metadata: RunMetadata): metadata is RunMetadata & {
+  repository: string;
+  issueNumber: number;
+  agentId: string;
+} {
+  return (
+    typeof metadata.repository === "string"
+    && typeof metadata.issueNumber === "number"
+    && typeof metadata.agentId === "string"
+  );
+}
+
+function hasTerminalRunEvent(path: string): boolean {
+  if (!existsSync(path)) {
+    return false;
+  }
+
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .some((line) => {
+      try {
+        const parsed = JSON.parse(line) as { type?: unknown };
+        return parsed.type === "prepare.failed"
+          || parsed.type === "runtime.finished"
+          || parsed.type === "run.succeeded"
+          || parsed.type === "run.failed"
+          || parsed.type === "run.canceled";
+      } catch {
+        return false;
+      }
+    });
+}
+
+function interruptRuntimeProcess(pid: unknown): void {
+  if (typeof pid !== "number" || !isLivePid(pid)) {
+    return;
+  }
+
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    // Best-effort runtime interruption; recovery will avoid live pids.
   }
 }
 
