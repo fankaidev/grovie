@@ -379,6 +379,77 @@ describe("runDaemonCycle", () => {
     expect(readRunMetadata(localState, "old-run").status).toBe("resuming");
   });
 
+  it("[UC-DAEMON-03-S02] leaves an interrupted run resumable when recovery cannot start", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "old-run", {
+      status: "interrupted",
+      resumeEligible: true,
+      runId: "old-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    });
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([fakeIssue()], { failReadIssueFor: 8 }),
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("recovery run was not expected");
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      processed: false,
+      stderr: "temporary GitHub read failure",
+    });
+    expect(readRunMetadata(localState, "old-run")).toMatchObject({
+      status: "interrupted",
+      resumeEligible: true,
+    });
+  });
+
+  it("[UC-DAEMON-03-S05] does not auto-resume terminal runs even when metadata still looks active", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "succeeded-run", {
+      status: "prepared",
+      runId: "succeeded-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    }, [
+      {
+        timestamp: "2026-05-22T00:00:00.000Z",
+        type: "runtime.finished",
+        data: { exitCode: 0 },
+      },
+    ]);
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([]),
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("terminal run was not expected to resume");
+      },
+    });
+
+    expect(result.processed).toBe(false);
+  });
+
   it("[UC-DAEMON-03-S03] recovers active-looking runs left by a force stop", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
@@ -1671,6 +1742,7 @@ class FakeGitHub implements GitHubGateway {
       addCancelAfterClaim?: boolean;
       addCancelOnRunningUpdate?: boolean;
       commentNow?: () => Date;
+      failReadIssueFor?: number;
       relatedPullRequests?: GitHubRelatedPullRequest[];
     } = {},
   ) {}
@@ -1697,6 +1769,16 @@ class FakeGitHub implements GitHubGateway {
   }
 
   readIssue(reference: IssueReference): ReturnType<GitHubGateway["readIssue"]> {
+    if (this.options.failReadIssueFor === reference.number) {
+      return {
+        ok: false,
+        error: {
+          code: "gh_failed",
+          message: "temporary GitHub read failure",
+        },
+      };
+    }
+
     const issue = this.findIssue(reference);
 
     return {
@@ -1930,11 +2012,16 @@ function createTmpDir(): string {
   return dir;
 }
 
-function writeRunMetadata(localState: LocalState, runId: string, metadata: Record<string, unknown>): void {
+function writeRunMetadata(
+  localState: LocalState,
+  runId: string,
+  metadata: Record<string, unknown>,
+  events: Array<Record<string, unknown>> = [],
+): void {
   const runDir = join(localState.getPaths().runsDir, runId);
   mkdirSync(runDir, { recursive: true });
   writeFileSync(join(runDir, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
-  writeFileSync(join(runDir, "events.jsonl"), "", "utf8");
+  writeFileSync(join(runDir, "events.jsonl"), events.map((item) => JSON.stringify(item)).join("\n"), "utf8");
   writeFileSync(join(runDir, "stdout.log"), "", "utf8");
   writeFileSync(join(runDir, "stderr.log"), "", "utf8");
   writeFileSync(join(runDir, "prompt.md"), "", "utf8");

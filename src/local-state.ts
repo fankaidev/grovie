@@ -253,13 +253,6 @@ export class LocalState {
         reason: input.reason,
         resumeEligible: true,
       });
-      this.releaseExecutionLock({
-        repository: metadata.repository,
-        issueNumber: metadata.issueNumber,
-        agentId: metadata.agentId,
-        acquiredAt: "",
-        path: this.getExecutionLockPath(metadata.repository, metadata.issueNumber, metadata.agentId),
-      });
       interrupted.push({
         runId,
         repository: metadata.repository,
@@ -305,16 +298,6 @@ export class LocalState {
       const issueNumber = metadata.issueNumber;
       const agentId = metadata.agentId;
       const runId = metadata.runId ?? runDirName;
-      const resumingAt = (input.now ?? new Date()).toISOString();
-      writeJsonFile(metadataPath, {
-        ...metadata,
-        status: "resuming",
-        resumeEligible: true,
-        resumingAt,
-      });
-      appendRunEvent({ eventsPath }, "run.resuming", {
-        reason: "daemon restart recovery",
-      });
       this.releaseExecutionLock({
         repository,
         issueNumber,
@@ -335,6 +318,26 @@ export class LocalState {
     }
 
     return undefined;
+  }
+
+  markRunResuming(input: { runId: string; now?: Date; reason: string }): void {
+    const runDir = join(this.paths.runsDir, sanitizePathPart(input.runId));
+    const metadataPath = join(runDir, "metadata.json");
+    const metadata = readJsonFile<RunMetadata>(metadataPath);
+
+    if (metadata === undefined) {
+      return;
+    }
+
+    writeJsonFile(metadataPath, {
+      ...metadata,
+      status: "resuming",
+      resumeEligible: true,
+      resumingAt: (input.now ?? new Date()).toISOString(),
+    });
+    appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "run.resuming", {
+      reason: input.reason,
+    });
   }
 
   enqueueRunRequest(input: {

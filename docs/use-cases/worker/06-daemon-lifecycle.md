@@ -26,3 +26,4 @@
 | UC-WORKER-06-S10 | P2 | `grovie daemon service install --platform systemd` writes a Grovie-managed user systemd service file that runs `grovie daemon run` and logs under `~/.grovie/daemon`. |
 | UC-WORKER-06-S11 | P2 | `grovie daemon service uninstall` removes only generated Grovie-managed user service files without stopping or deleting local daemon state. |
 | UC-WORKER-06-S12 | P2 | `grovie daemon service path` reports the platform-specific user service file path without creating, starting, or deleting service files. |
+| UC-WORKER-06-S13 | P2 | `grovie daemon stop --force` passes a force stop request to the daemon lifecycle for crash recovery workflows. |

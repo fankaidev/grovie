@@ -100,6 +100,7 @@ describe("CodexRuntime", () => {
         "--ask-for-approval",
         "never",
         "exec",
+        "--json",
         "--cd",
         run.worktreePath,
         "--sandbox",
@@ -111,6 +112,68 @@ describe("CodexRuntime", () => {
       },
     });
     expect(runner.calls[0]?.input).toContain(".grovie/task.json");
+  });
+
+  it("[UC-EXECUTION-03-S07] stores and uses Codex runtime session refs for resume runs", () => {
+    const root = createTmpDir();
+    const firstRun = fakeRun(root);
+    const runner = new FakeRunner([
+      {
+        stdout: '{"type":"thread.started","thread_id":"codex-thread-1"}\n{"type":"turn.completed"}\n',
+      },
+      {
+        stdout: '{"type":"thread.started","thread_id":"codex-thread-1"}\n{"type":"turn.completed"}\n',
+      },
+    ]);
+    const runtime = new CodexRuntime(runner);
+
+    const firstResult = runtime.run({
+      run: firstRun,
+      issue: fakeIssue(),
+    });
+
+    expect(firstResult).toMatchObject({
+      ok: true,
+      execution: {
+        runtimeSessionRef: {
+          runtime: "codex",
+          sessionId: "codex-thread-1",
+        },
+      },
+    });
+    expect(readFileSync(join(firstRun.sessionDir, "runtime-session.json"), "utf8")).toContain("codex-thread-1");
+
+    const resumeRun = fakeRun(root, "fankaidev-grovie-issue-6-resume");
+    writeFileSync(
+      resumeRun.taskPath,
+      `${JSON.stringify({
+        issue: 6,
+        repository: "fankaidev/grovie",
+        runRequest: {
+          reason: "resume",
+          sourceRunId: firstRun.runId,
+        },
+      }, null, 2)}\n`,
+    );
+
+    runtime.run({
+      run: resumeRun,
+      issue: fakeIssue(),
+    });
+
+    expect(runner.calls[1]).toMatchObject({
+      command: "codex",
+      args: [
+        "--ask-for-approval",
+        "never",
+        "exec",
+        "resume",
+        "--json",
+        "codex-thread-1",
+        "-",
+      ],
+    });
+    expect(readFileSync(join(resumeRun.runDir, "metadata.json"), "utf8")).toContain("codex-thread-1");
   });
 
   it("[UC-EXECUTION-03-S06] returns a clear failure while preserving stdout and stderr logs", () => {
@@ -371,12 +434,15 @@ class FakeRunner implements CommandRunner {
   }
 }
 
-function fakeRun(root: string): PreparedRun {
-  const runDir = join(root, "runs", "fankaidev-grovie-issue-6");
+function fakeRun(root: string, runId = "fankaidev-grovie-issue-6"): PreparedRun {
+  const runDir = join(root, "runs", runId);
   const worktreePath = join(root, "worktrees", "fankaidev-grovie-issue-6");
+  const sessionDir = join(root, "sessions", "fankaidev-grovie-issue-6-codex");
 
   mkdirSync(runDir, { recursive: true });
+  mkdirSync(sessionDir, { recursive: true });
   mkdirSync(worktreePath, { recursive: true });
+  writeFileSync(join(runDir, "metadata.json"), `${JSON.stringify({ runId }, null, 2)}\n`);
   writeFileSync(join(runDir, "task.json"), `${JSON.stringify({ issue: 6, repository: "fankaidev/grovie" }, null, 2)}\n`);
   writeFileSync(join(runDir, "prompt.md"), "");
   writeFileSync(join(runDir, "stdout.log"), "");
@@ -385,10 +451,10 @@ function fakeRun(root: string): PreparedRun {
 
   return {
     sessionId: "fankaidev-grovie-issue-6-codex",
-    runId: "fankaidev-grovie-issue-6",
+    runId,
     agentId: "codex",
     branchName: "grovie/issue-6",
-    sessionDir: join(root, "sessions", "fankaidev-grovie-issue-6-codex"),
+    sessionDir,
     repositoryCachePath: join(root, "repos", "fankaidev-grovie.git"),
     worktreePath,
     runDir,

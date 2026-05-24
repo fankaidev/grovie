@@ -197,7 +197,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   });
 
   if (resumableRun !== undefined) {
-    return runRequestedIssue({
+    const result = await runRequestedIssue({
       ...input,
       issueNumber: resumableRun.issueNumber,
       workerId: resumableRun.agentId,
@@ -208,6 +208,16 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       now,
       issueRunner,
     });
+
+    if (result.processed) {
+      input.localState?.markRunResuming?.({
+        runId: resumableRun.runId,
+        now: now(),
+        reason: "daemon restart recovery",
+      });
+    }
+
+    return result;
   }
 
   const request = input.localState?.takeRunRequest?.(input.repository);

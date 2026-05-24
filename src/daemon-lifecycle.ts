@@ -26,7 +26,7 @@ export type DaemonLifecycleStatus =
 
 export type DaemonLifecycle = {
   start(input: { root: string; args: string[] }): { ok: true; state: DaemonLifecycleState } | { ok: false; message: string };
-  stop(input: { root: string }): { ok: true; message: string } | { ok: false; message: string };
+  stop(input: { root: string; force?: boolean }): { ok: true; message: string } | { ok: false; message: string };
   status(input: { root: string }): DaemonLifecycleStatus;
 };
 
@@ -100,7 +100,7 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
     };
   }
 
-  stop(input: { root: string }): { ok: true; message: string } | { ok: false; message: string } {
+  stop(input: { root: string; force?: boolean }): { ok: true; message: string } | { ok: false; message: string } {
     const currentStatus = this.status(input);
 
     if (currentStatus.status === "stopped") {
@@ -130,7 +130,11 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
     });
 
     try {
-      process.kill(currentStatus.state.pid, "SIGTERM");
+      if (input.force === true) {
+        killDaemonProcessGroup(currentStatus.state.pid, "SIGKILL");
+      } else {
+        process.kill(currentStatus.state.pid, "SIGTERM");
+      }
     } catch (error) {
       return {
         ok: false,
@@ -244,6 +248,14 @@ function removeState(path: string): void {
     unlinkSync(path);
   } catch {
     // Ignore already-removed lifecycle state.
+  }
+}
+
+function killDaemonProcessGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    process.kill(pid, signal);
   }
 }
 
