@@ -89,9 +89,61 @@ describe("state repo sync", () => {
     expect(projectedPrompt).toContain("[omitted from state repo]");
     expect(projectedPrompt).not.toContain("secret issue body");
     expect(projectedPrompt).not.toContain("secret issue comment");
+    expect(projectedPrompt).not.toContain("escaped issue body");
+    expect(projectedPrompt).not.toContain("escaped issue comment");
     expect(readFileSync(join(repoPath, "runs", run.runId, "stdout.log"), "utf8")).toContain("password=[REDACTED]");
     expect(readFileSync(join(repoPath, "runs", run.runId, "summary.json"), "utf8")).toContain("[REDACTED_GITHUB_TOKEN]");
     expect(existsSync(join(repoPath, "runs", run.runId, "task.json"))).toBe(false);
+  });
+
+  it("[UC-STATE-REPO-01-S04] commits one daemon batch per sync tick", () => {
+    const root = createTmpDir();
+    const paths = createPaths(root);
+    const repoPath = join(root, "state-repo");
+    mkdirSync(join(repoPath, ".git"), { recursive: true });
+    const runner = new FakeRunner();
+
+    const result = syncStateRepository({
+      config: stateRepoConfig(repoPath),
+      paths,
+      machineId: "fankai-mac",
+      runner,
+      now: new Date("2026-05-24T00:00:00Z"),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      committed: true,
+    });
+    expect(runner.commands.filter((command) => command.includes(" commit "))).toHaveLength(1);
+    expect(runner.commands.filter((command) => command.includes(" push "))).toHaveLength(1);
+  });
+
+  it("[UC-STATE-REPO-01-S05] includes final run summary in a run completion sync", () => {
+    const root = createTmpDir();
+    const paths = createPaths(root);
+    const repoPath = join(root, "state-repo");
+    const run = writeRun(paths);
+
+    projectStateRepoFiles({
+      config: stateRepoConfig(repoPath),
+      paths,
+      machineId: "fankai-mac",
+      agentId: "default@fankai-mac",
+      run,
+      summary: {
+        status: "succeeded",
+        runId: run.runId,
+        resultKind: "no-changes",
+      },
+      now: new Date("2026-05-24T00:00:00Z"),
+    });
+
+    expect(JSON.parse(readFileSync(join(repoPath, "runs", run.runId, "summary.json"), "utf8"))).toEqual({
+      status: "succeeded",
+      runId: "run-1",
+      resultKind: "no-changes",
+    });
   });
 
   it("[UC-STATE-REPO-01-S06] pulls, rebases, and retries after a push conflict", () => {
@@ -155,6 +207,25 @@ describe("state repo sync", () => {
     expect(redacted).not.toContain("user:pass");
     expect(redacted).toContain("[REDACTED");
   });
+
+  it("[UC-STATE-REPO-01-S10] records heartbeat as observability data, not a scheduling lock", () => {
+    const root = createTmpDir();
+    const paths = createPaths(root);
+    const repoPath = join(root, "state-repo");
+
+    projectStateRepoFiles({
+      config: stateRepoConfig(repoPath),
+      paths,
+      machineId: "fankai-mac",
+      now: new Date("2026-05-24T00:00:00Z"),
+    });
+
+    expect(JSON.parse(readFileSync(join(repoPath, "daemons", "fankai-mac.json"), "utf8"))).toMatchObject({
+      machineId: "fankai-mac",
+      heartbeatIsSchedulingLock: false,
+    });
+    expect(readFileSync(join(repoPath, "heartbeats", "fankai-mac.json"), "utf8")).toContain("observability data only");
+  });
 });
 
 function createTmpDir(): string {
@@ -214,7 +285,25 @@ function writeRun(paths: LocalStatePaths): PreparedRun {
     sessionId: run.sessionId,
     worktreePath: run.worktreePath,
   }), "utf8");
-  writeFileSync(run.promptPath, "Body:\nsecret issue body\n\nComments:\nsecret issue comment\n\nTask JSON:\n{}", "utf8");
+  writeFileSync(run.promptPath, [
+    "Body:",
+    "secret issue body",
+    "",
+    "Comments:",
+    "secret issue comment",
+    "",
+    "Task JSON:",
+    JSON.stringify({
+      issue: {
+        body: "escaped issue body with \"quote\" that regex redaction must not leak",
+        comments: [
+          {
+            body: "escaped issue comment with \"quote\" that regex redaction must not leak",
+          },
+        ],
+      },
+    }, null, 2),
+  ].join("\n"), "utf8");
   writeFileSync(run.stdoutPath, "password=hunter2\n", "utf8");
   writeFileSync(run.stderrPath, "Bearer abc.def\n", "utf8");
   writeFileSync(run.eventsPath, "{\"type\":\"run.started\"}\n", "utf8");

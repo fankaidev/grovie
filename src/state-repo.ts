@@ -331,6 +331,7 @@ function stripIssuePromptSections(value: string): string {
   return value
     .replace(/(^|\n)Body:\n[\s\S]*?\n\nComments:\n/g, "$1Body:\n[omitted from state repo]\n\nComments:\n")
     .replace(/(^|\n)Comments:\n[\s\S]*?\n\nTask JSON:\n/g, "$1Comments:\n[omitted from state repo]\n\nTask JSON:\n")
+    .replace(/(^|\n)Task JSON:\n[\s\S]*$/g, "$1Task JSON:\n[omitted from state repo]\n")
     .replace(/"body":\s*"[^"]*"/g, '"body": "[omitted from state repo]"')
     .replace(/"comments":\s*\[[\s\S]*?\n\s*\]/g, '"comments": "[omitted from state repo]"');
 }

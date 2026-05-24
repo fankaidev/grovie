@@ -252,7 +252,7 @@ describe("config helpers", () => {
     expect(config).toContain("Redaction is best-effort");
   });
 
-  it("[UC-STATE-REPO-01-S01] validates optional state repository config", () => {
+  it("[UC-WORKER-02-S05] validates optional global state repository config", () => {
     const root = createTmpDir();
     writeFileSync(
       join(root, "config.yml"),
