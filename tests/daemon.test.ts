@@ -1724,7 +1724,10 @@ function fakeRelatedPullRequest(overrides: Partial<GitHubRelatedPullRequest> = {
 async function getAvailablePort(): Promise<number> {
   const server = createServer();
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const address = server.address();
   await new Promise<void>((resolve) => server.close(() => resolve()));
 

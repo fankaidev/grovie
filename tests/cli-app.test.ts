@@ -1280,11 +1280,13 @@ describe("CLI command registration", () => {
 
   it("runs an explicit daemon repository without reading the current checkout repository", async () => {
     const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
 
     expect(
       await runCliAsync(["daemon", "--repo", "fankaidev/other", "--label", "ready", "--once"], {
         cwd,
+        localState,
         github: fakeGitHubGateway({
           listOpenIssues: (repository, label) => {
             expect(repository).toBe("fankaidev/other");
