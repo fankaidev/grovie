@@ -383,22 +383,19 @@ describe("additional local runtimes", () => {
         updatedAt: "2026-05-24T00:00:00.000Z",
       }, null, 2)}\n`,
     );
-    writeFileSync(
-      run.taskPath,
-      `${JSON.stringify({
-        issue: 6,
-        repository: "fankaidev/grovie",
-        runRequest: {
-          reason: "resume",
-        },
-      }, null, 2)}\n`,
-    );
-    const runner = new FakeRunner([{ stdout: "{\"session_id\":\"claude-session-1\"}\n" }]);
+    const runtimeSessionRef = {
+      runtime: "claude-code" as const,
+      sessionId: "claude-session-1",
+      createdAt: "2026-05-24T00:00:00.000Z",
+      updatedAt: "2026-05-24T00:00:00.000Z",
+    };
+    const runner = new FakeRunner([{ stdout: "done\n" }]);
     const runtime = new ClaudeCodeRuntime(runner);
 
-    const result = runtime.run({
+    const result = runtime.resume({
       run,
       issue: fakeIssue(),
+      runtimeSessionRef,
     });
 
     expect(result).toMatchObject({
@@ -457,10 +454,10 @@ describe("additional local runtimes", () => {
         },
       }, null, 2)}\n`,
     );
-    const runner = new FakeRunner([{ stdout: "{\"sessionId\":\"pi-session-1\"}\n" }]);
+    const runner = new FakeRunner([{ stdout: "done\n" }]);
     const runtime = new PiRuntime(runner);
 
-    const result = runtime.run({
+    const result = runtime.resume({
       run,
       issue: fakeIssue(),
     });

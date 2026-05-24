@@ -118,32 +118,22 @@ export class CodexRuntime implements AgentRuntime {
   }
 
   start(input: RuntimeStartInput): RuntimeRunResult {
-    return this.run(input);
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner, { mode: "start" });
   }
 
   resume(input: RuntimeResumeInput): RuntimeRunResult {
-    return this.run(input);
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner, {
+      mode: "resume",
+      runtimeSessionRef: input.runtimeSessionRef,
+    });
   }
 
   run(input: AgentRunInput): RuntimeRunResult {
-    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
-    const result = this.runner.run(preparedInput.command[0] ?? "codex", preparedInput.command.slice(1), preparedInput.prompt, {
-      cwd: input.run.worktreePath,
-      maxBuffer: 1024 * 1024 * 50,
-    });
-
-    return finishCliRun(input, preparedInput, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner);
   }
 
   async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
-    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
-    const result = await runStreamingCommand(input, preparedInput);
-
-    return finishCliRun(input, preparedInput, result);
+    return runRuntimeAsync(input, getRuntimeAdapter(this.name));
   }
 }
 
@@ -157,32 +147,22 @@ export class ClaudeCodeRuntime implements AgentRuntime {
   }
 
   start(input: RuntimeStartInput): RuntimeRunResult {
-    return this.run(input);
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner, { mode: "start" });
   }
 
   resume(input: RuntimeResumeInput): RuntimeRunResult {
-    return this.run(input);
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner, {
+      mode: "resume",
+      runtimeSessionRef: input.runtimeSessionRef,
+    });
   }
 
   run(input: AgentRunInput): RuntimeRunResult {
-    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
-    const result = this.runner.run(preparedInput.command[0] ?? this.name, preparedInput.command.slice(1), preparedInput.prompt, {
-      cwd: input.run.worktreePath,
-      maxBuffer: 1024 * 1024 * 50,
-    });
-
-    return finishCliRun(input, preparedInput, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner);
   }
 
   async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
-    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
-    const result = await runStreamingCommand(input, preparedInput);
-
-    return finishCliRun(input, preparedInput, result);
+    return runRuntimeAsync(input, getRuntimeAdapter(this.name));
   }
 }
 
@@ -196,32 +176,22 @@ export class PiRuntime implements AgentRuntime {
   }
 
   start(input: RuntimeStartInput): RuntimeRunResult {
-    return this.run(input);
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner, { mode: "start" });
   }
 
   resume(input: RuntimeResumeInput): RuntimeRunResult {
-    return this.run(input);
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner, {
+      mode: "resume",
+      runtimeSessionRef: input.runtimeSessionRef,
+    });
   }
 
   run(input: AgentRunInput): RuntimeRunResult {
-    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
-    const result = this.runner.run(preparedInput.command[0] ?? this.name, preparedInput.command.slice(1), preparedInput.prompt, {
-      cwd: input.run.worktreePath,
-      maxBuffer: 1024 * 1024 * 50,
-    });
-
-    return finishCliRun(input, preparedInput, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
+    return runRuntimeSync(input, getRuntimeAdapter(this.name), this.runner);
   }
 
   async runAsync(input: AgentRunInput): Promise<RuntimeRunResult> {
-    const preparedInput = prepareRuntimeInput(input, getRuntimeAdapter(this.name));
-    const result = await runStreamingCommand(input, preparedInput);
-
-    return finishCliRun(input, preparedInput, result);
+    return runRuntimeAsync(input, getRuntimeAdapter(this.name));
   }
 }
 
@@ -243,6 +213,7 @@ type PreparedRuntimeInput = {
   command: string[];
   worktreeTaskPath: string;
   worktreePromptPath: string;
+  runtimeSessionRef?: RuntimeSessionRef;
   startedAt: string;
 };
 
@@ -261,6 +232,11 @@ type RuntimeAdapter = {
   availabilityArgs: string[];
   startCommand(input: AgentRunInput): string[];
   resumeCommand(sessionId: string, input: AgentRunInput): string[];
+};
+
+type RuntimeRunOptions = {
+  mode?: "auto" | "start" | "resume";
+  runtimeSessionRef?: RuntimeSessionRef;
 };
 
 function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
@@ -313,7 +289,37 @@ function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
   };
 }
 
-function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter): PreparedRuntimeInput {
+function runRuntimeSync(
+  input: AgentRunInput,
+  adapter: RuntimeAdapter,
+  runner: CommandRunner,
+  options: RuntimeRunOptions = {},
+): RuntimeRunResult {
+  const preparedInput = prepareRuntimeInput(input, adapter, options);
+  const result = runner.run(preparedInput.command[0] ?? adapter.command, preparedInput.command.slice(1), preparedInput.prompt, {
+    cwd: input.run.worktreePath,
+    maxBuffer: 1024 * 1024 * 50,
+  });
+
+  return finishCliRun(input, preparedInput, {
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
+}
+
+async function runRuntimeAsync(
+  input: AgentRunInput,
+  adapter: RuntimeAdapter,
+  options: RuntimeRunOptions = {},
+): Promise<RuntimeRunResult> {
+  const preparedInput = prepareRuntimeInput(input, adapter, options);
+  const result = await runStreamingCommand(input, preparedInput);
+
+  return finishCliRun(input, preparedInput, result);
+}
+
+function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter, options: RuntimeRunOptions = {}): PreparedRuntimeInput {
   const task = JSON.parse(readFileSync(input.run.taskPath, "utf8")) as unknown;
   const prompt = buildCodexPrompt({
     issue: input.issue,
@@ -323,7 +329,10 @@ function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter): Pre
   const handoffDir = join(input.run.worktreePath, ".grovie");
   const worktreeTaskPath = join(handoffDir, "task.json");
   const worktreePromptPath = join(handoffDir, "prompt.md");
-  const existingSessionRef = shouldResumeRuntimeSession(task) ? readRuntimeSessionRef(input.run.sessionDir, adapter.runtime) : undefined;
+  const shouldResume = options.mode === "resume" || (options.mode !== "start" && shouldResumeRuntimeSession(task));
+  const existingSessionRef = shouldResume
+    ? options.runtimeSessionRef ?? readRuntimeSessionRef(input.run.sessionDir, adapter.runtime)
+    : undefined;
   const command = existingSessionRef === undefined
     ? adapter.startCommand(input)
     : adapter.resumeCommand(existingSessionRef.sessionId, input);
@@ -350,6 +359,7 @@ function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter): Pre
     command,
     worktreeTaskPath,
     worktreePromptPath,
+    runtimeSessionRef: existingSessionRef,
     startedAt,
   };
 }
@@ -376,7 +386,8 @@ function finishCliRun(
       signal: result.signal,
       canceled: result.canceled,
     };
-    const runtimeSessionRef = parseRuntimeSessionRef(preparedInput.runtime, result.stdout, result.stderr, input.run.sessionDir);
+    const runtimeSessionRef = parseRuntimeSessionRef(preparedInput.runtime, result.stdout, result.stderr, input.run.sessionDir)
+      ?? preparedInput.runtimeSessionRef;
 
     if (runtimeSessionRef !== undefined) {
       execution.runtimeSessionRef = runtimeSessionRef;
