@@ -27,6 +27,7 @@ describe("admin web home route", () => {
             status: "running",
             state: {
               pid: 321,
+              command: ["grovie", "daemon", "run"],
               startedAt: "2026-05-24T13:00:00.000Z",
               stdoutPath: "/state/daemon/stdout.log",
               stderrPath: "/state/daemon/stderr.log",
@@ -35,6 +36,7 @@ describe("admin web home route", () => {
           },
           runtime: {
             runtime: "codex",
+            command: "codex",
             available: true,
             message: "codex is available.",
           },
@@ -119,10 +121,12 @@ describe("admin web home route", () => {
       <AdminHomeContent
         data={{
           health: {
+            ok: true,
             daemon: {
               status: "running",
               state: {
                 pid: 321,
+                command: ["grovie", "daemon", "run"],
                 startedAt: "2026-05-24T13:00:00.000Z",
                 stdoutPath: "/state/daemon/stdout.log",
                 stderrPath: "/state/daemon/stderr.log",
@@ -131,6 +135,7 @@ describe("admin web home route", () => {
             },
             runtime: {
               runtime: "codex",
+              command: "codex",
               available: true,
               message: "codex is available.",
             },
@@ -217,11 +222,13 @@ describe("admin web run detail route", () => {
             },
           ],
           stdout: {
+            runId: "run-1",
             stream: "stdout",
             path: "/state/runs/run-1/stdout.log",
             content: "\u001b[31mred stdout\u001b[0m\n",
           },
           stderr: {
+            runId: "run-1",
             stream: "stderr",
             path: "/state/runs/run-1/stderr.log",
             content: "plain stderr\n",
@@ -265,7 +272,7 @@ describe("admin web run detail route", () => {
     });
   });
 
-  it("[UC-ADMIN-03-S02] fetches run detail, events, stdout, and stderr from existing admin APIs", async () => {
+  it("[UC-ADMIN-02-S08] [UC-ADMIN-03-S02] fetches run detail, events, stdout, and stderr from existing admin APIs", async () => {
     const requests: Array<{ url: string; method: string }> = [];
     const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);

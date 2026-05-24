@@ -1,98 +1,27 @@
 import type { ReactNode } from "react";
 import { StrictMode, useEffect, useMemo, useState } from "react";
+import type {
+  AdminApiCancelRunResponse,
+  AdminApiActivityResponse,
+  AdminApiConfigResponse,
+  AdminApiHealthResponse,
+  AdminApiRepositoriesResponse,
+  AdminApiErrorResponse,
+  AdminApiRunDetailResponse,
+  AdminApiRunEventsResponse,
+  AdminApiRunsResponse,
+  AdminApiRunLogResponse,
+  LocalRunSummary,
+} from "../../src/admin-api.js";
 import "./styles.css";
 
-type RunStatus =
-  | "preparing"
-  | "prepared"
-  | "running"
-  | "interrupting"
-  | "interrupted"
-  | "resuming"
-  | "rejected"
-  | "succeeded"
-  | "failed"
-  | "canceled"
-  | "stale"
-  | "unknown";
-
-type RunEvent = {
-  timestamp?: string;
-  type: string;
-  data?: Record<string, unknown>;
-};
-
-type LocalRunSummary = {
-  runId: string;
-  runDir: string;
-  repository?: string;
-  issueNumber?: number;
-  agentId?: string;
-  runtime?: string;
-  status: RunStatus;
-  branchName?: string;
-  localBranchName?: string;
-  repositoryCachePath?: string;
-  worktreePath?: string;
-  stdoutPath: string;
-  stderrPath: string;
-  promptPath: string;
-  taskPath: string;
-  startedAt?: string;
-  endedAt?: string;
-  lastEventTime?: string;
-  lastEventType?: string;
-  createdAt?: string;
-  runRequest?: {
-    sourceRunId?: string;
-    reason?: string;
-  };
-  resultLinks: string[];
-  events: RunEvent[];
-};
-
-type DaemonStatus = {
-  status: string;
-  state?: {
-    pid?: number;
-    command?: string[];
-    startedAt?: string;
-    stdoutPath?: string;
-    stderrPath?: string;
-    statePath?: string;
-  };
-};
-
-type RuntimeAvailability = {
-  runtime: string;
-  available: boolean;
-  message: string;
-};
-
-type WatchedRepository = {
-  repository: string;
-  label?: string;
-};
-
-type DaemonActivityEntry = {
-  timestamp: string;
-  type: string;
-  message: string;
-  repository?: string;
-  issueNumber?: number;
-  agentId?: string;
-};
-
 type AdminHomeData = {
-  health: {
-    daemon: DaemonStatus;
-    runtime: RuntimeAvailability;
-  };
+  health: AdminApiHealthResponse;
   config: {
-    path: string;
+    path: AdminApiConfigResponse["path"];
   };
-  repositories: WatchedRepository[];
-  activity: DaemonActivityEntry[];
+  repositories: AdminApiRepositoriesResponse["repositories"];
+  activity: AdminApiActivityResponse["activity"];
   runs: LocalRunSummary[];
 };
 
@@ -108,16 +37,10 @@ type RunDetailState =
   | {
     status: "ready";
     run: LocalRunSummary;
-    events: RunEvent[];
-    stdout: RunLog;
-    stderr: RunLog;
+    events: AdminApiRunEventsResponse["events"];
+    stdout: AdminApiRunLogResponse;
+    stderr: AdminApiRunLogResponse;
   };
-
-type RunLog = {
-  stream: "stdout" | "stderr";
-  path: string;
-  content: string;
-};
 
 export function App(): ReactNode {
   const route = useMemo(() => readRoute(window.location.pathname), []);
@@ -168,6 +91,7 @@ function AdminHome(): ReactNode {
 
 export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
   const daemon = props.data.health.daemon;
+  const daemonState = "state" in daemon ? daemon.state : undefined;
   const runtime = props.data.health.runtime;
   const runs = props.data.runs.slice(0, 20);
   const activity = props.data.activity.slice(0, 20);
@@ -193,9 +117,9 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
           <DescriptionList
             items={[
               ["Status", daemon.status],
-              ["PID", daemon.state?.pid === undefined ? "(none)" : String(daemon.state.pid)],
-              ["Started", daemon.state?.startedAt ?? "(not running)"],
-              ["State path", daemon.state?.statePath ?? "(none)"],
+              ["PID", daemonState?.pid === undefined ? "(none)" : String(daemonState.pid)],
+              ["Started", daemonState?.startedAt ?? "(not running)"],
+              ["State path", daemonState?.statePath ?? "(none)"],
             ]}
           />
         </InfoPanel>
@@ -213,8 +137,8 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
             mono
             items={[
               ["Global config", props.data.config.path],
-              ["Daemon stdout", daemon.state?.stdoutPath ?? "(not running)"],
-              ["Daemon stderr", daemon.state?.stderrPath ?? "(not running)"],
+              ["Daemon stdout", daemonState?.stdoutPath ?? "(not running)"],
+              ["Daemon stderr", daemonState?.stderrPath ?? "(not running)"],
             ]}
           />
         </InfoPanel>
@@ -532,7 +456,7 @@ function DescriptionList(props: { items: Array<[string, string]>; mono?: boolean
   );
 }
 
-function LogPanel(props: { runId: string; log: RunLog }): ReactNode {
+function LogPanel(props: { runId: string; log: AdminApiRunLogResponse }): ReactNode {
   return (
     <section className="panel log-panel">
       <div className="section-heading">
@@ -561,10 +485,10 @@ function CenteredNotice(props: { title: string; message: string }): ReactNode {
 export async function loadAdminHome(fetcher: typeof fetch = fetch): Promise<AdminHomeData> {
   const [healthPayload, configPayload, reposPayload, activityPayload, runsPayload] = await Promise.all([
     fetchJson<AdminHomeData["health"]>("/api/health", fetcher),
-    fetchJson<{ path: string }>("/api/config", fetcher),
-    fetchJson<{ repositories: WatchedRepository[] }>("/api/repos", fetcher),
-    fetchJson<{ activity: DaemonActivityEntry[] }>("/api/activity", fetcher),
-    fetchJson<{ runs: LocalRunSummary[] }>("/api/runs", fetcher),
+    fetchJson<AdminApiConfigResponse>("/api/config", fetcher),
+    fetchJson<AdminApiRepositoriesResponse>("/api/repos", fetcher),
+    fetchJson<AdminApiActivityResponse>("/api/activity", fetcher),
+    fetchJson<AdminApiRunsResponse>("/api/runs", fetcher),
   ]);
 
   return {
@@ -589,7 +513,7 @@ export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch
     };
   }
 
-  const runPayload = await readJson(runResponse) as { run?: LocalRunSummary };
+  const runPayload = await readJson(runResponse) as Partial<AdminApiRunDetailResponse> & Partial<AdminApiErrorResponse>;
 
   if (!runResponse.ok || runPayload.run === undefined) {
     return {
@@ -599,9 +523,9 @@ export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch
   }
 
   const [eventsPayload, stdoutPayload, stderrPayload] = await Promise.all([
-    fetchJson<{ events: RunEvent[] }>(`/api/runs/${encodedRunId}/events`, fetcher),
-    fetchJson<RunLog>(`/api/runs/${encodedRunId}/logs/stdout`, fetcher),
-    fetchJson<RunLog>(`/api/runs/${encodedRunId}/logs/stderr`, fetcher),
+    fetchJson<AdminApiRunEventsResponse>(`/api/runs/${encodedRunId}/events`, fetcher),
+    fetchJson<AdminApiRunLogResponse>(`/api/runs/${encodedRunId}/logs/stdout`, fetcher),
+    fetchJson<AdminApiRunLogResponse>(`/api/runs/${encodedRunId}/logs/stderr`, fetcher),
   ]);
 
   return {
@@ -617,7 +541,7 @@ export async function cancelRunRequest(runId: string, fetcher: typeof fetch = fe
   const response = await fetcher(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
     method: "POST",
   });
-  const payload = await readJson(response);
+  const payload = await readJson(response) as Partial<AdminApiCancelRunResponse> & Partial<AdminApiErrorResponse>;
 
   if (!response.ok) {
     return {
@@ -699,7 +623,7 @@ function renderLastEvent(run: LocalRunSummary): string {
   return `${run.lastEventType ?? "(unknown)"} at ${run.lastEventTime ?? "(unknown)"}`;
 }
 
-function renderDaemonSummary(daemon: DaemonStatus): string {
+function renderDaemonSummary(daemon: AdminApiHealthResponse["daemon"]): string {
   if (daemon.status === "running" && daemon.state?.pid !== undefined) {
     return `running pid ${daemon.state.pid}`;
   }
@@ -707,7 +631,7 @@ function renderDaemonSummary(daemon: DaemonStatus): string {
   return daemon.status;
 }
 
-export function isCancelableRun(status: RunStatus): boolean {
+export function isCancelableRun(status: LocalRunSummary["status"]): boolean {
   return status === "preparing" || status === "prepared" || status === "running" || status === "stale";
 }
 
