@@ -724,6 +724,7 @@ describe("CLI command registration", () => {
     const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
     writeInvalidPolicyConfig(cwd);
+    configureLocalAgent(localState);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
     const result = runCli(["queue", "list"], {
@@ -779,6 +780,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
+    configureLocalAgent(localState);
 
     const result = runCli(["queue", "list", "--repo", "fankaidev/other"], {
       cwd,
@@ -827,6 +829,7 @@ describe("CLI command registration", () => {
     const machineId = resolveMachineId(hostname());
     const lockedAgent = `locked@${machineId}`;
     const localState = new FakeLocalState(createTmpDir(), { lockedAgents: [lockedAgent] });
+    configureLocalAgent(localState, ["coder", "locked", "cancel"]);
 
     const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
       cwd,
@@ -901,6 +904,7 @@ describe("CLI command registration", () => {
     const machineId = resolveMachineId(hostname());
     const lockedAgent = `locked@${machineId}`;
     const localState = new FakeLocalState(createTmpDir(), { lockedAgents: [lockedAgent] });
+    configureLocalAgent(localState, ["coder", "locked"]);
     const relatedReads: number[] = [];
 
     const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
@@ -987,9 +991,12 @@ describe("CLI command registration", () => {
 
   it("[UC-WORKER-05-S06] prints queue inspection as JSON", () => {
     const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
+    configureLocalAgent(localState);
     const result = runCli(["queue", "list", "--repo", "fankaidev/grovie", "--json"], {
       cwd,
+      localState,
       github: fakeGitHubGateway({
         listOpenIssues: () => ({
           ok: true,
@@ -1029,6 +1036,42 @@ describe("CLI command registration", () => {
         ],
       }),
     ]);
+  });
+
+  it("[UC-WORKER-05-S07] skips machine-local agent labels that are not configured locally", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    const machineId = resolveMachineId(hostname());
+    configureLocalAgent(localState);
+
+    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: () => ({
+          ok: true,
+          value: [
+            {
+              reference: fakeReference(99),
+              title: "Old default assignment",
+              labels: ["grovie", `agent:default@${machineId}`],
+            },
+          ],
+        }),
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            title: "Old default assignment",
+            labels: ["grovie", `agent:default@${machineId}`],
+          },
+        }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(`skip fankaidev/grovie#99 agent=default@${machineId}`);
+    expect(result.stdout).toContain("reason=agent not configured locally");
   });
 
   it("[UC-WORKER-03-S01] assigns an issue to an agent label", () => {
@@ -1574,17 +1617,15 @@ function writeDaemonLogs(root: string, input: { stdout: string; stderr: string }
   writeFileSync(join(daemonDir, "stderr.log"), input.stderr, "utf8");
 }
 
-function configureLocalAgent(localState: FakeLocalState): void {
+function configureLocalAgent(localState: FakeLocalState, agentNames = ["coder"]): void {
   saveGlobalConfig(localState.paths.root, {
     version: 1,
-    agents: [
-      {
-        name: "coder",
-        runtime: "codex",
-        args: [],
-        envKeys: ["OPENAI_API_KEY"],
-      },
-    ],
+    agents: agentNames.map((name) => ({
+      name,
+      runtime: "codex" as const,
+      args: [],
+      envKeys: ["OPENAI_API_KEY"],
+    })),
     watchedRepositories: [],
     adminConsole: {
       enabled: false,
