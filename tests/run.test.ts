@@ -630,7 +630,6 @@ class FakeLocalState implements RunLocalState {
       reposDir: join(root, "repos"),
       worktreesDir: join(root, "worktrees"),
       runsDir: join(root, "runs"),
-      agentsDir: join(root, "agents"),
       locksDir: join(root, "locks"),
       requestsDir: join(root, "requests"),
       sessionsDir: join(root, "sessions"),

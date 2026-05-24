@@ -167,6 +167,7 @@ describe("config helpers", () => {
       path: join(root, "config.yml"),
       config: {
         version: 1,
+        agents: [],
         watchedRepositories: [],
         adminConsole: {
           enabled: false,
@@ -212,6 +213,7 @@ describe("config helpers", () => {
 
     expect(loadGlobalConfig(root).config).toEqual({
       version: 1,
+      agents: [],
       watchedRepositories: [
         {
           repository: "fankaidev/grovie",
@@ -230,6 +232,7 @@ describe("config helpers", () => {
   it("renders global config as a scheduling list, not an allowlist", () => {
     const config = renderGlobalConfig({
       version: 1,
+      agents: [],
       watchedRepositories: [
         {
           repository: "fankaidev/grovie",
@@ -250,6 +253,38 @@ describe("config helpers", () => {
     expect(config).toContain("stateRepo:");
     expect(config).toContain("repository: fankaidev/grovie-state");
     expect(config).toContain("Redaction is best-effort");
+  });
+
+  it("[UC-WORKER-01-S05] validates explicit global agent config without environment values", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "agents:",
+        "  - name: coder",
+        "    runtime: codex",
+        "    args:",
+        "      - --model",
+        "      - gpt-5.3-codex",
+        "    envKeys:",
+        "      - OPENAI_API_KEY",
+        "watchedRepositories: []",
+        "adminConsole:",
+        "  enabled: false",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(loadGlobalConfig(root).config.agents).toEqual([
+      {
+        name: "coder",
+        runtime: "codex",
+        args: ["--model", "gpt-5.3-codex"],
+        envKeys: ["OPENAI_API_KEY"],
+      },
+    ]);
   });
 
   it("[UC-WORKER-02-S05] validates optional global state repository config", () => {

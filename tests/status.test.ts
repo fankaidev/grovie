@@ -188,7 +188,6 @@ describe("local run status", () => {
         reposDir: join(root, "repos"),
         worktreesDir: join(root, "worktrees"),
         runsDir,
-        agentsDir: join(root, "agents"),
         locksDir: join(root, "locks"),
         requestsDir: join(root, "requests"),
         sessionsDir: join(root, "sessions"),

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAgentId,
-  buildDefaultCodexAgent,
   resolveMachineId,
   slugifyIdentityPart,
 } from "../src/identity.js";
@@ -19,14 +18,4 @@ describe("identity resolution", () => {
     expect(slugifyIdentityPart("  Code___Reviewer...2026  ")).toBe("code-reviewer-2026");
   });
 
-  it("[UC-WORKER-01-S04] [UC-WORKER-01-S05] exposes default Codex agent metadata without environment values", () => {
-    expect(buildDefaultCodexAgent("fankai-mac")).toEqual({
-      agentId: "default@fankai-mac",
-      name: "default",
-      machineId: "fankai-mac",
-      runtime: "codex",
-      args: [],
-      envKeys: ["OPENAI_API_KEY"],
-    });
-  });
 });

@@ -10,11 +10,12 @@ import {
   loadGlobalConfig,
   loadRepositoryConfig,
   removeWatchedRepository,
+  resolveConfiguredAgents,
   saveGlobalConfig,
   type LoadedConfig,
 } from "./config.js";
 import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "./cleanup.js";
-import { runDaemon, runDaemonForRepositories } from "./daemon.js";
+import { NO_LOCAL_AGENTS_MESSAGE, runDaemon, runDaemonForRepositories } from "./daemon.js";
 import { followDaemonLogs, parseDaemonLogStream, readDaemonLogs } from "./daemon-logs.js";
 import { LocalDaemonLifecycle, renderDaemonLifecycleStatus, type DaemonLifecycle } from "./daemon-lifecycle.js";
 import { getDaemonServicePath, installDaemonService, parseDaemonServicePlatform, renderDaemonServiceResult, uninstallDaemonService } from "./daemon-service.js";
@@ -95,14 +96,14 @@ const commandDefinitions = [
 
         const runtime = resolveRuntime(context, loaded.config);
         const runtimeAvailability = runtime.checkAvailability();
-        context.localState.registerAgent?.(identity.defaultAgent);
+        const agents = resolveConfiguredAgents(globalConfig.config, identity.machineId);
         const doctorOutput = [
           "grovie doctor",
           "",
           `Global config: ${renderGlobalConfigSource(globalConfig.path, globalConfig.config.watchedRepositories.length)}`,
           `Local policy config: ${renderConfigSource(loaded)}`,
           `Machine id: ${identity.machineId}`,
-          `Default agent: ${identity.defaultAgent.agentId} (${identity.defaultAgent.runtime})`,
+          `Configured agents: ${renderConfiguredAgents(agents)}`,
           `Default runtime: ${loaded.config.runtime.default}`,
           `Queue label: ${loaded.config.queue.label}`,
           `GitHub: authenticated as ${authenticatedUser.value.login}.`,
@@ -528,6 +529,15 @@ const commandDefinitions = [
 
       if (subcommand === "start") {
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+        const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
+
+        if (localAgents.length === 0) {
+          return {
+            exitCode: 1,
+            stderr: NO_LOCAL_AGENTS_MESSAGE,
+          };
+        }
+
         const adminConsole = resolveAdminConsoleConfig(globalConfig.config);
 
         if (adminConsole.enabled) {
@@ -682,6 +692,7 @@ const commandDefinitions = [
         if (normalizedRepoOption.value !== undefined) {
           const loaded = loadRepositoryConfig(normalizedRepoOption.value, context.localState);
           const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+          const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
 
           return runDaemon({
             repository: normalizedRepoOption.value,
@@ -692,6 +703,7 @@ const commandDefinitions = [
             runtime: context.runtime ?? createRuntime(loaded.config.runtime.default),
             localState: context.localState,
             stateRepo: globalConfig.config.stateRepo,
+            localAgents,
             once: runArgs.includes("--once"),
             adminConsole: resolveAdminConsoleConfig(globalConfig.config),
             daemonLifecycle: context.daemonLifecycle,
@@ -699,6 +711,7 @@ const commandDefinitions = [
         }
 
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+        const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
 
         return runDaemonForRepositories({
           repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => ({
@@ -712,6 +725,7 @@ const commandDefinitions = [
           runtime: context.runtime,
           localState: context.localState,
           stateRepo: globalConfig.config.stateRepo,
+          localAgents,
           once: runArgs.includes("--once"),
           adminConsole: resolveAdminConsoleConfig(globalConfig.config),
           daemonLifecycle: context.daemonLifecycle,
@@ -1063,6 +1077,14 @@ function checkAdminConsolePortAvailable(config: AdminConsoleResolvedConfig): Pro
 
 function renderRuntimeLabel(runtime: Parameters<typeof createRuntime>[0]): string {
   return runtime === "codex" ? "Codex" : runtime;
+}
+
+function renderConfiguredAgents(agents: Array<{ agentId: string; runtime: string }>): string {
+  if (agents.length === 0) {
+    return "none";
+  }
+
+  return agents.map((agent) => `${agent.agentId} (${agent.runtime})`).join(", ");
 }
 
 function renderRuntimeUnavailableError(runtime: Parameters<typeof createRuntime>[0]): string {
