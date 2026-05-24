@@ -8,9 +8,7 @@ import {
   type StartedAdminConsole,
 } from "./admin-console.js";
 import {
-  createIssueClaim,
   hasCancelRequest,
-  updateIssueClaim,
 } from "./claim.js";
 import {
   formatIssueReference,
@@ -415,7 +413,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const candidate = selectNextRunnableCandidate(queueResult.value);
 
   if (candidate !== undefined) {
-    return claimAndRun({
+    return runWithLocalExecutionLock({
       ...input,
       issueReference: candidate.issueReference,
       workerId: candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId,
@@ -475,14 +473,14 @@ async function runRequestedIssue(input: DaemonInput & {
     };
   }
 
-  return claimAndRun({
+  return runWithLocalExecutionLock({
     ...input,
     issueReference,
     issueActivity: getIssueActivity(issueResult.value, relatedPullRequestsResult.value),
   });
 }
 
-async function claimAndRun(input: DaemonInput & {
+async function runWithLocalExecutionLock(input: DaemonInput & {
   issueReference: IssueReference;
   workerId: string;
   issueActivity: IssueActivity;
@@ -509,24 +507,6 @@ async function claimAndRun(input: DaemonInput & {
     };
   }
 
-  const claimResult = createIssueClaim({
-    github: input.github,
-    issueReference: input.issueReference,
-    actor: "daemon",
-    workerId: input.workerId,
-    now: input.now(),
-  });
-
-  if (!claimResult.ok) {
-    releaseExecutionLock(input, executionLockResult?.lock);
-
-    return Promise.resolve({
-      exitCode: 1,
-      processed: false,
-      stderr: claimResult.message,
-    });
-  }
-
   const rereadResult = input.github.readIssue(input.issueReference);
 
   if (!rereadResult.ok) {
@@ -542,13 +522,6 @@ async function claimAndRun(input: DaemonInput & {
   const rereadIssue = rereadResult.value;
 
   if (hasCancelRequest(rereadIssue, input.label)) {
-    updateIssueClaim(
-      input.github,
-      claimResult.claim,
-      "released",
-      input.now(),
-      "Session canceled before runtime start.",
-    );
     releaseExecutionLock(input, executionLockResult?.lock);
 
     return Promise.resolve({
@@ -561,8 +534,6 @@ async function claimAndRun(input: DaemonInput & {
       ].join("\n"),
     });
   }
-
-  updateIssueClaim(input.github, claimResult.claim, "active", input.now());
 
   try {
     const result = await input.issueRunner({
@@ -581,9 +552,7 @@ async function claimAndRun(input: DaemonInput & {
         heartbeatIntervalMs: input.stateRepo?.syncIntervalSeconds === undefined
           ? input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
           : input.stateRepo.syncIntervalSeconds * 1000,
-        onHeartbeat: () => {
-          updateIssueClaim(input.github, claimResult.claim, "active", input.now());
-        },
+        onHeartbeat: () => undefined,
         shouldCancel: () => {
           const latestIssue = input.github.readIssue(input.issueReference);
 
@@ -595,18 +564,6 @@ async function claimAndRun(input: DaemonInput & {
         },
       },
     });
-
-    updateIssueClaim(
-      input.github,
-      claimResult.claim,
-      "released",
-      input.now(),
-      result.canceled === true
-        ? "Session canceled."
-        : result.exitCode === 0
-          ? "Session succeeded."
-          : "Session failed. See the Grovie result comment and local run logs.",
-    );
 
     const postRunPullRequestActivityTimestamp = readPostRunPullRequestActivityTimestamp(input);
     const handledThrough = maxTimestamp(input.issueActivity.timestamp, postRunPullRequestActivityTimestamp);

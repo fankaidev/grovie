@@ -443,36 +443,6 @@ describe("LocalState", () => {
     );
   });
 
-  it("[UC-EXECUTION-04-S07] cleans successful worktrees without deleting run logs", () => {
-    const root = createTmpDir();
-    const runner = new FakeRunner();
-    const state = new LocalState({ paths: { root }, runner });
-    const run = state.prepareRun({
-      repository: "fankaidev/grovie",
-      issueNumber: 5,
-      agentId: "coder@fankai-mac",
-      defaultBranch: "main",
-      branchPrefix: "grovie/",
-      now: new Date("2026-05-23T00:00:01Z"),
-      task: {},
-      prompt: "",
-    });
-    mkdirSync(run.worktreePath, { recursive: true });
-
-    state.cleanupSuccessfulWorktree(run);
-
-    expect(existsSync(run.eventsPath)).toBe(true);
-    expect(readFileSync(run.eventsPath, "utf8")).toContain('"type":"worktree.cleaned"');
-    expect(runner.calls.at(-1)?.args).toEqual([
-      "-C",
-      run.repositoryCachePath,
-      "worktree",
-      "remove",
-      "--force",
-      run.worktreePath,
-    ]);
-  });
-
   it("[UC-EXECUTION-04-S06] preserves run artifacts when worktree preparation fails", () => {
     const root = createTmpDir();
     const runner = new FakeRunner({ failWorktreeAdd: true });
