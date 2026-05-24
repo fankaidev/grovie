@@ -2,11 +2,13 @@ import { createServer } from "node:http";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Worker } from "node:worker_threads";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createAdminConsoleServer,
   resolveAdminConsoleConfig,
   startAdminConsoleServer,
+  startAdminConsoleWorker,
   type StartedAdminConsole,
 } from "../src/admin-console.js";
 import { saveGlobalConfig } from "../src/config.js";
@@ -83,6 +85,34 @@ describe("admin console server", () => {
       },
       server: createServer(),
     })).rejects.toThrow(`Admin console port ${port} is unavailable on 127.0.0.1.`);
+  });
+
+  it("[UC-ADMIN-01-S07] serves health from a worker while the daemon thread is blocked", async () => {
+    const root = createTmpDir();
+    const port = await getAvailablePort();
+    const started = await startAdminConsoleWorker({
+      config: {
+        enabled: true,
+        host: "127.0.0.1",
+        port,
+      },
+      paths: pathsForRoot(root),
+      runtimeName: "codex",
+    });
+    servers.push(started);
+
+    const request = fetchFromWorker(`${started.url}/api/health`);
+    blockCurrentThread(500);
+
+    expect(await request).toMatchObject({
+      status: 200,
+      body: expect.objectContaining({
+        ok: true,
+        runtime: expect.objectContaining({
+          runtime: "codex",
+        }),
+      }),
+    });
   });
 
   it("[UC-ADMIN-02-S01] exposes daemon status and runtime availability through the health API", async () => {
@@ -550,6 +580,56 @@ function getAvailablePort(): Promise<number> {
       });
     });
   });
+}
+
+function blockCurrentThread(ms: number): void {
+  const lock = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(lock, 0, 0, ms);
+}
+
+function fetchFromWorker(url: string): Promise<{ status: number; body: unknown }> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(`
+      const { parentPort, workerData } = require("node:worker_threads");
+
+      fetch(workerData.url)
+        .then(async (response) => {
+          parentPort.postMessage({
+            status: response.status,
+            body: await response.json(),
+          });
+        })
+        .catch((error) => {
+          parentPort.postMessage({
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    `, {
+      eval: true,
+      workerData: { url },
+    });
+
+    worker.once("message", (message: unknown) => {
+      worker.terminate().catch(() => {});
+
+      if (isFetchWorkerError(message)) {
+        reject(new Error(message.error));
+        return;
+      }
+
+      resolve(message as { status: number; body: unknown });
+    });
+    worker.once("error", reject);
+  });
+}
+
+function isFetchWorkerError(value: unknown): value is { error: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "error" in value &&
+    typeof value.error === "string"
+  );
 }
 
 async function startTestServer(root = createTmpDir(), daemonLifecycleOverrides: Partial<DaemonLifecycle> = {}): Promise<StartedAdminConsole> {
