@@ -104,7 +104,7 @@ describe("CodexRuntime", () => {
         "--cd",
         run.worktreePath,
         "--sandbox",
-        "workspace-write",
+        "danger-full-access",
         "-",
       ],
       options: {
