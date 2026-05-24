@@ -60,7 +60,7 @@ describe("config helpers", () => {
   });
 
   it("[UC-EXECUTION-06-S04] accepts supported explicit runtime names", () => {
-    for (const runtime of ["cc", "pi", "opencode", "hermes"]) {
+    for (const runtime of ["codex", "claude-code", "pi"]) {
       const cwd = createTmpDir();
       writeFileSync(
         join(cwd, ".grovie.yml"),
@@ -72,17 +72,30 @@ describe("config helpers", () => {
     }
   });
 
+  it("[UC-EXECUTION-06-S04] rejects retired runtime names", () => {
+    for (const runtime of ["cc", "opencode", "hermes"]) {
+      const cwd = createTmpDir();
+      writeFileSync(
+        join(cwd, ".grovie.yml"),
+        renderDefaultConfig().replace("default: codex", `default: ${runtime}`),
+        "utf8",
+      );
+
+      expect(() => loadConfig(cwd)).toThrow("Invalid .grovie.yml:");
+    }
+  });
+
   it("[UC-WORKER-04-S12] loads repo-local policy config through a repository file reader", () => {
     const loaded = loadRepositoryConfig("fankaidev/grovie", {
       readRepositoryFile: ({ repository, path }) => ({
         exists: true,
         path: `${repository}:${path}`,
-        content: renderDefaultConfig().replace("default: codex", "default: cc"),
+        content: renderDefaultConfig().replace("default: codex", "default: claude-code"),
       }),
     });
 
     expect(loaded.path).toBe("fankaidev/grovie:.grovie.yml");
-    expect(loaded.config.runtime.default).toBe("cc");
+    expect(loaded.config.runtime.default).toBe("claude-code");
   });
 
   it("[UC-WORKER-04-S13] rejects invalid repo-local policy config from a watched repository", () => {

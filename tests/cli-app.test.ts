@@ -562,6 +562,12 @@ describe("CLI command registration", () => {
         run: () => {
           throw new Error("sync runtime path was not expected");
         },
+        start: () => {
+          throw new Error("runtime start was not expected");
+        },
+        resume: () => {
+          throw new Error("runtime resume was not expected");
+        },
         runAsync: () => {
           throw new Error("foreground runtime path was not expected");
         },
@@ -1543,6 +1549,12 @@ function fakeRuntime(availability: Partial<RuntimeAvailability> = {}): AgentRunt
     }),
     run: () => {
       throw new Error("runtime run was not expected");
+    },
+    start: () => {
+      throw new Error("runtime start was not expected");
+    },
+    resume: () => {
+      throw new Error("runtime resume was not expected");
     },
   };
 }

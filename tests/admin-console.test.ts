@@ -693,6 +693,12 @@ function fakeRuntime(): AgentRuntime {
     run: () => {
       throw new Error("runtime run was not expected");
     },
+    start: () => {
+      throw new Error("runtime start was not expected");
+    },
+    resume: () => {
+      throw new Error("runtime resume was not expected");
+    },
   };
 }
 

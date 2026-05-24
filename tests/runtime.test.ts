@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CommandResult, CommandRunner, CommandRunOptions, GitHubIssue } from "../src/github.js";
 import type { PreparedRun } from "../src/local-state.js";
-import { buildCodexPrompt, CodexRuntime, LocalCliRuntime } from "../src/runtime.js";
+import { buildCodexPrompt, ClaudeCodeRuntime, CodexRuntime, PiRuntime } from "../src/runtime.js";
 
 const tmpDirs: string[] = [];
 
@@ -317,27 +317,26 @@ describe("CodexRuntime", () => {
   });
 });
 
-describe("LocalCliRuntime", () => {
-  it("[UC-EXECUTION-06-S01] checks additional local CLI runtime availability", () => {
-    const runtime = new LocalCliRuntime(
-      "opencode",
+describe("additional local runtimes", () => {
+  it("[UC-EXECUTION-06-S01] checks Claude Code CLI availability", () => {
+    const runtime = new ClaudeCodeRuntime(
       new FakeRunner([
         {
-          stdout: "opencode 1.2.3\n",
+          stdout: "claude 1.2.3\n",
         },
       ]),
     );
 
     expect(runtime.checkAvailability()).toEqual({
-      runtime: "opencode",
-      command: "opencode",
+      runtime: "claude-code",
+      command: "claude",
       available: true,
-      version: "opencode 1.2.3",
-      message: "available (opencode 1.2.3)",
+      version: "claude 1.2.3",
+      message: "available (claude 1.2.3)",
     });
   });
 
-  it("[UC-EXECUTION-06-S02] runs an additional local CLI runtime through the runtime boundary", () => {
+  it("[UC-EXECUTION-06-S02] starts Claude Code through the runtime boundary", () => {
     const root = createTmpDir();
     const run = fakeRun(root);
     const runner = new FakeRunner([
@@ -346,7 +345,7 @@ describe("LocalCliRuntime", () => {
         stderr: "warning\n",
       },
     ]);
-    const runtime = new LocalCliRuntime("cc", runner);
+    const runtime = new ClaudeCodeRuntime(runner);
 
     const result = runtime.run({
       run,
@@ -356,23 +355,129 @@ describe("LocalCliRuntime", () => {
     expect(result).toMatchObject({
       ok: true,
       execution: {
-        runtime: "cc",
-        command: ["cc", "-"],
+        runtime: "claude-code",
+        command: ["claude", "--print"],
       },
     });
     expect(readFileSync(run.stdoutPath, "utf8")).toBe("done\n");
     expect(readFileSync(run.stderrPath, "utf8")).toBe("warning\n");
-    expect(readFileSync(run.eventsPath, "utf8")).toContain('"runtime":"cc"');
+    expect(readFileSync(run.eventsPath, "utf8")).toContain('"runtime":"claude-code"');
     expect(runner.calls[0]).toMatchObject({
-      command: "cc",
-      args: ["-"],
+      command: "claude",
+      args: ["--print"],
       options: {
         cwd: run.worktreePath,
       },
     });
   });
 
-  it("[UC-EXECUTION-06-S03] cancels an additional local CLI runtime through the runtime monitor", async () => {
+  it("[UC-EXECUTION-06-S05] resumes Claude Code from a persisted runtime session ref", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root, "fankaidev-grovie-issue-6-resume");
+    writeFileSync(
+      join(run.sessionDir, "runtime-session.json"),
+      `${JSON.stringify({
+        runtime: "claude-code",
+        sessionId: "claude-session-1",
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+      }, null, 2)}\n`,
+    );
+    const runtimeSessionRef = {
+      runtime: "claude-code" as const,
+      sessionId: "claude-session-1",
+      createdAt: "2026-05-24T00:00:00.000Z",
+      updatedAt: "2026-05-24T00:00:00.000Z",
+    };
+    const runner = new FakeRunner([{ stdout: "done\n" }]);
+    const runtime = new ClaudeCodeRuntime(runner);
+
+    const result = runtime.resume({
+      run,
+      issue: fakeIssue(),
+      runtimeSessionRef,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      execution: {
+        runtimeSessionRef: {
+          runtime: "claude-code",
+          sessionId: "claude-session-1",
+        },
+      },
+    });
+    expect(runner.calls[0]).toMatchObject({
+      command: "claude",
+      args: ["--resume", "claude-session-1", "--print"],
+    });
+    expect(readFileSync(join(run.runDir, "metadata.json"), "utf8")).toContain("claude-session-1");
+  });
+
+  it("[UC-EXECUTION-06-S01] checks Pi CLI availability", () => {
+    const runtime = new PiRuntime(
+      new FakeRunner([
+        {
+          stdout: "pi 0.4.0\n",
+        },
+      ]),
+    );
+
+    expect(runtime.checkAvailability()).toEqual({
+      runtime: "pi",
+      command: "pi",
+      available: true,
+      version: "pi 0.4.0",
+      message: "available (pi 0.4.0)",
+    });
+  });
+
+  it("[UC-EXECUTION-06-S05] resumes Pi from a persisted runtime session ref", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root, "fankaidev-grovie-issue-6-pi-resume");
+    writeFileSync(
+      join(run.sessionDir, "runtime-session.json"),
+      `${JSON.stringify({
+        runtime: "pi",
+        sessionId: "pi-session-1",
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+      }, null, 2)}\n`,
+    );
+    writeFileSync(
+      run.taskPath,
+      `${JSON.stringify({
+        issue: 6,
+        repository: "fankaidev/grovie",
+        runRequest: {
+          reason: "resume",
+        },
+      }, null, 2)}\n`,
+    );
+    const runner = new FakeRunner([{ stdout: "done\n" }]);
+    const runtime = new PiRuntime(runner);
+
+    const result = runtime.resume({
+      run,
+      issue: fakeIssue(),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      execution: {
+        runtimeSessionRef: {
+          runtime: "pi",
+          sessionId: "pi-session-1",
+        },
+      },
+    });
+    expect(runner.calls[0]).toMatchObject({
+      command: "pi",
+      args: ["resume", "pi-session-1", "-"],
+    });
+  });
+
+  it("[UC-EXECUTION-06-S03] cancels Pi through the runtime monitor", async () => {
     const root = createTmpDir();
     const binDir = join(root, "bin");
     const oldPath = process.env.PATH;
@@ -380,15 +485,15 @@ describe("LocalCliRuntime", () => {
 
     mkdirSync(binDir, { recursive: true });
     writeFileSync(
-      join(binDir, "hermes"),
+      join(binDir, "pi"),
       "#!/bin/sh\ntrap 'echo terminated >&2; exit 130' TERM\nwhile true; do sleep 1; done\n",
       "utf8",
     );
-    chmodSync(join(binDir, "hermes"), 0o755);
+    chmodSync(join(binDir, "pi"), 0o755);
     process.env.PATH = `${binDir}:${oldPath ?? ""}`;
 
     try {
-      const runtime = new LocalCliRuntime("hermes");
+      const runtime = new PiRuntime();
       const result = await runtime.runAsync({
         run,
         issue: fakeIssue(),
@@ -402,7 +507,7 @@ describe("LocalCliRuntime", () => {
         ok: false,
         canceled: true,
         execution: {
-          runtime: "hermes",
+          runtime: "pi",
           canceled: true,
         },
       });
