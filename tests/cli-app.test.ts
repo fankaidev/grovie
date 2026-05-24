@@ -1325,7 +1325,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("runs an explicit daemon repository without reading the current checkout repository", async () => {
+  it("[UC-WORKER-06-S01] runs an explicit daemon repository without reading the current checkout repository", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
