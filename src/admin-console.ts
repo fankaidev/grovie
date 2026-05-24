@@ -9,6 +9,7 @@ import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.
 import { resolveLocalIdentity } from "./identity.js";
 import { writeRunCancellation, type LocalStatePaths } from "./local-state.js";
 import type { AgentRuntime } from "./runtime.js";
+import { parseRuntimeStdoutTranscript } from "./runtime-transcript.js";
 import { findLocalRun, listLocalRuns, type LocalRunSummary } from "./status.js";
 
 export type AdminConsoleResolvedConfig = {
@@ -207,6 +208,30 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
       stream: runLogMatch.groups.stream,
       path: log.path,
       content: log.content,
+    });
+    return;
+  }
+
+  const runTranscriptMatch = /^\/api\/runs\/(?<runId>[^/]+)\/logs\/stdout\/transcript$/.exec(url.pathname);
+
+  if (runTranscriptMatch?.groups?.runId !== undefined) {
+    const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runTranscriptMatch.groups.runId));
+
+    if (run === undefined) {
+      writeJson(response, 404, {
+        error: "not_found",
+        message: "Run not found.",
+      });
+      return;
+    }
+
+    const log = readRunLog(run, "stdout");
+
+    writeJson(response, 200, {
+      runId: run.runId,
+      stream: "stdout",
+      path: log.path,
+      transcript: parseRuntimeStdoutTranscript(run.runtime, log.content),
     });
     return;
   }

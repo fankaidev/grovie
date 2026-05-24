@@ -59,6 +59,16 @@ describe("admin web run detail route", () => {
             path: "/state/runs/run-1/stderr.log",
             content: "plain stderr\n",
           },
+          stdoutTranscript: {
+            stream: "stdout",
+            path: "/state/runs/run-1/stdout.log",
+            transcript: {
+              runtime: "codex",
+              recognized: false,
+              message: "stdout is not recognized as Codex JSONL. Use Raw stdout to inspect the original output.",
+              entries: [],
+            },
+          },
         }}
         cancelState={{ status: "idle" }}
         onCancel={() => {}}
@@ -75,6 +85,8 @@ describe("admin web run detail route", () => {
     expect(html).toContain("https://github.com/fankaidev/grovie/pull/134");
     expect(html).toContain("comment.created");
     expect(html).toContain("stdout");
+    expect(html).toContain("Raw stdout");
+    expect(html).toContain("Readable transcript");
     expect(html).toContain("stderr");
     expect(html).toContain("ansi-red");
     expect(html).toContain("red stdout");
@@ -98,7 +110,7 @@ describe("admin web run detail route", () => {
     });
   });
 
-  it("[UC-ADMIN-03-S02] fetches run detail, events, stdout, and stderr from existing admin APIs", async () => {
+  it("[UC-ADMIN-03-S02] [UC-ADMIN-04-S06] fetches run detail, events, raw logs, and stdout transcript from admin APIs", async () => {
     const requests: Array<{ url: string; method: string }> = [];
     const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);
@@ -138,6 +150,19 @@ describe("admin web run detail route", () => {
         });
       }
 
+      if (url === "/api/runs/run-1/logs/stdout/transcript") {
+        return jsonResponse(200, {
+          runId: "run-1",
+          stream: "stdout",
+          path: "/state/runs/run-1/stdout.log",
+          transcript: {
+            runtime: "codex",
+            recognized: true,
+            entries: [{ kind: "assistant_message", text: "Readable output" }],
+          },
+        });
+      }
+
       return jsonResponse(404, {
         error: "not_found",
       });
@@ -155,13 +180,63 @@ describe("admin web run detail route", () => {
       stderr: {
         content: "stderr\n",
       },
+      stdoutTranscript: {
+        transcript: {
+          recognized: true,
+        },
+      },
     });
     expect(requests).toEqual([
       { url: "/api/runs/run-1", method: "GET" },
       { url: "/api/runs/run-1/events", method: "GET" },
       { url: "/api/runs/run-1/logs/stdout", method: "GET" },
       { url: "/api/runs/run-1/logs/stderr", method: "GET" },
+      { url: "/api/runs/run-1/logs/stdout/transcript", method: "GET" },
     ]);
+  });
+
+  it("[UC-ADMIN-04-S06] renders recognized stdout as a readable transcript while keeping raw stdout selectable", () => {
+    const html = renderToStaticMarkup(
+      <RunDetailContent
+        state={{
+          status: "ready",
+          run: baseRun("run-1") as Extract<Parameters<typeof RunDetailContent>[0]["state"], { status: "ready" }>["run"],
+          events: [],
+          stdout: {
+            stream: "stdout",
+            path: "/state/runs/run-1/stdout.log",
+            content: "{\"type\":\"turn.started\"}\n",
+          },
+          stderr: {
+            stream: "stderr",
+            path: "/state/runs/run-1/stderr.log",
+            content: "",
+          },
+          stdoutTranscript: {
+            stream: "stdout",
+            path: "/state/runs/run-1/stdout.log",
+            transcript: {
+              runtime: "codex",
+              recognized: true,
+              entries: [
+                { kind: "assistant_message", text: "I will inspect the run." },
+                { kind: "command_execution", command: "pnpm check", status: "completed", exitCode: 0 },
+                { kind: "command_output", text: "ok\n" },
+              ],
+            },
+          },
+        }}
+        cancelState={{ status: "idle" }}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Raw stdout");
+    expect(html).toContain("Readable transcript");
+    expect(html).toContain("Assistant");
+    expect(html).toContain("I will inspect the run.");
+    expect(html).toContain("pnpm check");
+    expect(html).toContain("ok");
   });
 
   it("[UC-ADMIN-05-S01] [UC-ADMIN-05-S04] posts cancel requests and reports not-cancelable states", async () => {
