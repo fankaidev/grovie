@@ -9,6 +9,7 @@
 | R1 | Run log APIs read local run log files and do not require the original daemon process to still be alive. |
 | R2 | stdout and stderr remain separate streams. |
 | R3 | Log responses must not expose environment variable values added by Grovie itself. |
+| R4 | Log response and Server-Sent Events payload metadata use the shared admin API contract types. |
 
 ## Scenarios
 
