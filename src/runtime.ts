@@ -254,7 +254,7 @@ function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
         "--cd",
         input.run.worktreePath,
         "--sandbox",
-        "workspace-write",
+        "danger-full-access",
         "-",
       ],
       resumeCommand: (sessionId) => [

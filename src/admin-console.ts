@@ -4,6 +4,7 @@ import { dirname, extname, join, normalize, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
+import { readDaemonActivity, type DaemonActivityEntry } from "./daemon-activity.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import { resolveLocalIdentity } from "./identity.js";
 import { writeRunCancellation, type LocalStatePaths } from "./local-state.js";
@@ -155,6 +156,13 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
   if (url.pathname === "/api/runs") {
     writeJson(response, 200, {
       runs: listLocalRuns(context.paths.runsDir),
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/activity") {
+    writeJson(response, 200, {
+      activity: readDaemonActivity(context.paths, 50),
     });
     return;
   }
@@ -543,6 +551,7 @@ function renderAdminHome(context: AdminConsoleContext): string {
   };
   const globalConfig = loadGlobalConfig(context.paths.root);
   const runs = listLocalRuns(context.paths.runsDir).slice(0, 20);
+  const activity = readDaemonActivity(context.paths, 20);
   const identity = resolveLocalIdentity();
 
   return renderDocument("Grovie Admin Console", [
@@ -566,10 +575,38 @@ function renderAdminHome(context: AdminConsoleContext): string {
     renderWatchedRepositories(globalConfig.config.watchedRepositories),
     "</section>",
     "<section>",
+    "<h2>Recent Activity</h2>",
+    renderActivityTable(activity),
+    "</section>",
+    "<section>",
     "<h2>Recent Runs</h2>",
     renderRunsTable(runs),
     "</section>",
   ].join("\n"));
+}
+
+function renderActivityTable(activity: DaemonActivityEntry[]): string {
+  if (activity.length === 0) {
+    return "<p>No daemon activity recorded.</p>";
+  }
+
+  return [
+    "<table>",
+    "<thead><tr><th>Time</th><th>Type</th><th>Repository</th><th>Issue</th><th>Agent</th><th>Message</th></tr></thead>",
+    "<tbody>",
+    ...activity.map((entry) => [
+      "<tr>",
+      `<td>${escapeHtml(entry.timestamp)}</td>`,
+      `<td>${escapeHtml(entry.type)}</td>`,
+      `<td>${escapeHtml(entry.repository ?? "(none)")}</td>`,
+      `<td>${entry.issueNumber === undefined ? "(none)" : `#${entry.issueNumber}`}</td>`,
+      `<td>${escapeHtml(entry.agentId ?? "(none)")}</td>`,
+      `<td>${escapeHtml(entry.message)}</td>`,
+      "</tr>",
+    ].join("")),
+    "</tbody>",
+    "</table>",
+  ].join("\n");
 }
 
 function renderRunDetailPage(run: LocalRunSummary): string {

@@ -1325,6 +1325,8 @@ describe("runDaemonCycle", () => {
     });
     expect(runs).toEqual([]);
     expect(github.createdComments).toEqual([]);
+    expect(readFileSync(join(localState.getPaths().root, "daemon", "activity.jsonl"), "utf8")).toContain("queue.idle");
+    expect(readFileSync(join(localState.getPaths().root, "daemon", "activity.jsonl"), "utf8")).toContain("No queued issues found for fankaidev/grovie with label grovie.");
   });
 
   it("[UC-WORKER-04-S03] updates the handled cursor after terminal run completion", async () => {
