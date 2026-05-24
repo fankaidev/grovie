@@ -7,6 +7,7 @@ import {
   type AdminConsoleResolvedConfig,
   type StartedAdminConsole,
 } from "./admin-console.js";
+import { appendDaemonActivity } from "./daemon-activity.js";
 import {
   hasCancelRequest,
 } from "./claim.js";
@@ -228,11 +229,25 @@ async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Prom
   const policyErrors: string[] = [];
 
   for (const repository of input.repositories) {
+    recordActivity(input, {
+      type: "repository.poll_started",
+      message: `Polling ${repository.repository}.`,
+      repository: repository.repository,
+      data: {
+        label: repository.label,
+      },
+    });
+
     let loadedConfig: LoadedConfig | undefined;
 
     try {
       loadedConfig = input.repositoryConfigLoader?.(repository.repository);
     } catch (error) {
+      recordActivity(input, {
+        type: "repository.policy_failed",
+        message: `Skipped ${repository.repository}: ${toErrorMessage(error)}`,
+        repository: repository.repository,
+      });
       policyErrors.push(`Skipped ${repository.repository}: ${toErrorMessage(error)}`);
       continue;
     }
@@ -280,6 +295,16 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const identity = resolveLocalIdentity();
   const localAgents = input.localAgents ?? [];
 
+  recordActivity(input, {
+    type: "cycle.started",
+    message: `Checking ${input.repository} for label ${input.label}.`,
+    repository: input.repository,
+    data: {
+      label: input.label,
+      localAgents: localAgents.map((agent) => agent.agentId),
+    },
+  });
+
   if (input.localAgents !== undefined && localAgents.length === 0) {
     return {
       exitCode: 1,
@@ -292,6 +317,12 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const runtimeAvailability = input.runtime?.checkAvailability();
 
   if (runtimeAvailability !== undefined && !runtimeAvailability.available) {
+    recordActivity(input, {
+      type: "runtime.unavailable",
+      message: `Skipped assigned runs because ${runtimeAvailability.runtime} is unavailable: ${runtimeAvailability.message}`,
+      repository: input.repository,
+    });
+
     return {
       exitCode: 0,
       processed: false,
@@ -309,12 +340,35 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   });
 
   if (resumableRun !== undefined) {
+    recordActivity(input, {
+      type: "run.resume_detected",
+      message: `Found resumable run ${resumableRun.runId} for ${input.repository}#${resumableRun.issueNumber}.`,
+      repository: input.repository,
+      issueNumber: resumableRun.issueNumber,
+      agentId: resumableRun.agentId,
+      data: {
+        runId: resumableRun.runId,
+        status: resumableRun.status,
+      },
+    });
+
     if (!isConfiguredLocalAgent(input, resumableRun.agentId)) {
       const reason = `Agent ${resumableRun.agentId} is not configured locally.`;
       input.localState?.markRunRejected?.({
         runId: resumableRun.runId,
         now: now(),
         reason,
+      });
+
+      recordActivity(input, {
+        type: "run.resume_rejected",
+        message: `Rejected resumable run ${resumableRun.runId}: ${reason}`,
+        repository: input.repository,
+        issueNumber: resumableRun.issueNumber,
+        agentId: resumableRun.agentId,
+        data: {
+          runId: resumableRun.runId,
+        },
       });
 
       return {
@@ -354,6 +408,19 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const request = input.localState?.takeRunRequest?.(input.repository);
 
   if (request !== undefined) {
+    recordActivity(input, {
+      type: "run.request_received",
+      message: `Received ${request.reason ?? "manual"} run request ${request.id} for ${input.repository}#${request.issueNumber}.`,
+      repository: input.repository,
+      issueNumber: request.issueNumber,
+      agentId: request.agentId,
+      data: {
+        requestId: request.id,
+        reason: request.reason,
+        sourceRunId: request.sourceRunId,
+      },
+    });
+
     if (!isConfiguredLocalAgent(input, request.agentId)) {
       const reason = `Agent ${request.agentId} is not configured locally.`;
 
@@ -364,6 +431,17 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
           reason,
         });
       }
+
+      recordActivity(input, {
+        type: "run.request_rejected",
+        message: `Rejected run request ${request.id}: ${reason}`,
+        repository: input.repository,
+        issueNumber: request.issueNumber,
+        agentId: request.agentId,
+        data: {
+          requestId: request.id,
+        },
+      });
 
       return {
         exitCode: 0,
@@ -403,6 +481,12 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   });
 
   if (!queueResult.ok) {
+    recordActivity(input, {
+      type: "queue.failed",
+      message: queueResult.message,
+      repository: input.repository,
+    });
+
     return {
       exitCode: 1,
       processed: false,
@@ -413,6 +497,19 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const candidate = selectNextRunnableCandidate(queueResult.value);
 
   if (candidate !== undefined) {
+    recordActivity(input, {
+      type: "queue.runnable_found",
+      message: `Selected ${formatIssueReference(candidate.issueReference)} for ${candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId}.`,
+      repository: input.repository,
+      issueNumber: candidate.issueReference.number,
+      agentId: candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId,
+      data: {
+        priority: candidate.priority,
+        activityTimestamp: candidate.activity.timestamp,
+        issueFingerprint: candidate.activity.issueFingerprint,
+      },
+    });
+
     return runWithLocalExecutionLock({
       ...input,
       issueReference: candidate.issueReference,
@@ -424,6 +521,15 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   }
 
   const skippedSummary = renderSkippedQueueSummary(queueResult.value);
+
+  recordActivity(input, {
+    type: "queue.idle",
+    message: `No queued issues found for ${input.repository} with label ${input.label}.`,
+    repository: input.repository,
+    data: {
+      skippedSummary,
+    },
+  });
 
   return {
     exitCode: 0,
@@ -453,6 +559,14 @@ async function runRequestedIssue(input: DaemonInput & {
   const issueResult = input.github.readIssue(issueReference);
 
   if (!issueResult.ok) {
+    recordActivity(input, {
+      type: "issue.read_failed",
+      message: issueResult.error.message,
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      agentId: input.workerId,
+    });
+
     return {
       exitCode: 1,
       processed: false,
@@ -466,6 +580,14 @@ async function runRequestedIssue(input: DaemonInput & {
   };
 
   if (!relatedPullRequestsResult.ok) {
+    recordActivity(input, {
+      type: "pull_requests.read_failed",
+      message: relatedPullRequestsResult.error.message,
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      agentId: input.workerId,
+    });
+
     return {
       exitCode: 1,
       processed: false,
@@ -496,6 +618,14 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
   });
 
   if (executionLockResult !== undefined && !executionLockResult.ok) {
+    recordActivity(input, {
+      type: "run.lock_skipped",
+      message: `Skipped ${formatIssueReference(input.issueReference)} because local execution is already active for ${input.workerId}.`,
+      repository: input.repository,
+      issueNumber: input.issueReference.number,
+      agentId: input.workerId,
+    });
+
     return {
       exitCode: 0,
       processed: false,
@@ -512,6 +642,14 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
   if (!rereadResult.ok) {
     releaseExecutionLock(input, executionLockResult?.lock);
 
+    recordActivity(input, {
+      type: "issue.reread_failed",
+      message: rereadResult.error.message,
+      repository: input.repository,
+      issueNumber: input.issueReference.number,
+      agentId: input.workerId,
+    });
+
     return Promise.resolve({
       exitCode: 1,
       processed: false,
@@ -523,6 +661,14 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
 
   if (hasCancelRequest(rereadIssue, input.label)) {
     releaseExecutionLock(input, executionLockResult?.lock);
+
+    recordActivity(input, {
+      type: "run.canceled_before_start",
+      message: `Canceled ${formatIssueReference(input.issueReference)} before runtime start.`,
+      repository: input.repository,
+      issueNumber: input.issueReference.number,
+      agentId: input.workerId,
+    });
 
     return Promise.resolve({
       exitCode: 0,
@@ -536,6 +682,18 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
   }
 
   try {
+    recordActivity(input, {
+      type: "run.started",
+      message: `Starting ${formatIssueReference(input.issueReference)} for ${input.workerId}.`,
+      repository: input.repository,
+      issueNumber: input.issueReference.number,
+      agentId: input.workerId,
+      data: {
+        reason: input.runRequest?.reason,
+        sourceRunId: input.runRequest?.sourceRunId,
+      },
+    });
+
     const result = await input.issueRunner({
       issueReference: input.issueReference,
       repository: input.repository,
@@ -577,6 +735,18 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
       now: input.now(),
     });
 
+    recordActivity(input, {
+      type: result.exitCode === 0 ? "run.completed" : "run.failed",
+      message: `${formatIssueReference(input.issueReference)} finished for ${input.workerId} with exit code ${result.exitCode}.`,
+      repository: input.repository,
+      issueNumber: input.issueReference.number,
+      agentId: input.workerId,
+      data: {
+        exitCode: result.exitCode,
+        handledThrough,
+      },
+    });
+
     return {
       ...result,
       processed: true,
@@ -584,6 +754,16 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
   } finally {
     releaseExecutionLock(input, executionLockResult?.lock);
   }
+}
+
+function recordActivity(
+  input: Pick<DaemonInput, "localState" | "now">,
+  entry: Parameters<typeof appendDaemonActivity>[1],
+): void {
+  appendDaemonActivity(input.localState?.getPaths?.(), {
+    ...entry,
+    timestamp: entry.timestamp ?? (input.now?.() ?? new Date()).toISOString(),
+  });
 }
 
 function readPostRunPullRequestActivityTimestamp(input: Pick<DaemonInput, "github"> & {

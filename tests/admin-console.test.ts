@@ -12,6 +12,7 @@ import {
   type StartedAdminConsole,
 } from "../src/admin-console.js";
 import { saveGlobalConfig } from "../src/config.js";
+import { appendDaemonActivity } from "../src/daemon-activity.js";
 import type { DaemonLifecycle } from "../src/daemon-lifecycle.js";
 import type { LocalStatePaths } from "../src/local-state.js";
 import type { AgentRuntime } from "../src/runtime.js";
@@ -290,6 +291,45 @@ describe("admin console server", () => {
     expect((await fetch(`${started.url}/api/runs/missing/events`)).status).toBe(404);
   });
 
+  it("[UC-ADMIN-02-S07] exposes recent daemon activity through the activity API", async () => {
+    const root = createTmpDir();
+    const paths = pathsForRoot(root);
+    appendDaemonActivity(paths, {
+      timestamp: "2026-05-23T10:00:00.000Z",
+      type: "cycle.started",
+      message: "Checking fankaidev/grovie for label grovie.",
+      repository: "fankaidev/grovie",
+    });
+    appendDaemonActivity(paths, {
+      timestamp: "2026-05-23T10:00:01.000Z",
+      type: "run.started",
+      message: "Starting fankaidev/grovie#124 for coco@kai-mini.",
+      repository: "fankaidev/grovie",
+      issueNumber: 124,
+      agentId: "coco@kai-mini",
+    });
+    const started = await startTestServer(root);
+
+    expect(await (await fetch(`${started.url}/api/activity`)).json()).toEqual({
+      activity: [
+        {
+          timestamp: "2026-05-23T10:00:01.000Z",
+          type: "run.started",
+          message: "Starting fankaidev/grovie#124 for coco@kai-mini.",
+          repository: "fankaidev/grovie",
+          issueNumber: 124,
+          agentId: "coco@kai-mini",
+        },
+        {
+          timestamp: "2026-05-23T10:00:00.000Z",
+          type: "cycle.started",
+          message: "Checking fankaidev/grovie for label grovie.",
+          repository: "fankaidev/grovie",
+        },
+      ],
+    });
+  });
+
   it("[UC-ADMIN-03-S01] serves a local admin home view with daemon, runtime, repositories, and recent runs", async () => {
     const root = createTmpDir();
     saveGlobalConfig(root, {
@@ -319,6 +359,27 @@ describe("admin console server", () => {
     expect(html).toContain("fankaidev/grovie label=ready");
     expect(html).toContain("run-1");
     expect(html).toContain("/runs/run-1");
+  });
+
+  it("[UC-ADMIN-03-S04] shows recent daemon activity on the local admin home view", async () => {
+    const root = createTmpDir();
+    appendDaemonActivity(pathsForRoot(root), {
+      timestamp: "2026-05-23T10:00:01.000Z",
+      type: "run.request_received",
+      message: "Received manual run request request-1 for fankaidev/grovie#124.",
+      repository: "fankaidev/grovie",
+      issueNumber: 124,
+      agentId: "coco@kai-mini",
+    });
+    const started = await startTestServer(root);
+    const html = await (await fetch(`${started.url}/`)).text();
+
+    expect(html).toContain("Recent Activity");
+    expect(html).toContain("run.request_received");
+    expect(html).toContain("fankaidev/grovie");
+    expect(html).toContain("#124");
+    expect(html).toContain("coco@kai-mini");
+    expect(html).toContain("Received manual run request request-1");
   });
 
   it("[UC-ADMIN-03-S02] serves a local run detail view with paths, events, and result links", async () => {
