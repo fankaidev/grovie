@@ -599,12 +599,15 @@ async function claimAndRun(input: DaemonInput & {
           : "Session failed. See the Grovie result comment and local run logs.",
     );
 
+    const postRunPullRequestActivityTimestamp = readPostRunPullRequestActivityTimestamp(input);
+    const handledThrough = maxTimestamp(input.issueActivity.timestamp, postRunPullRequestActivityTimestamp);
+
     input.localState?.writeHandledCursor?.({
       repository: input.repository,
       issueNumber: input.issueReference.number,
       agentId: input.workerId,
-      handledThrough: input.issueActivity.timestamp,
-      issueFingerprint: input.issueActivity.issueFingerprint,
+      handledThrough,
+      issueFingerprint: handledThrough === input.issueActivity.timestamp ? input.issueActivity.issueFingerprint : undefined,
       now: input.now(),
     });
 
@@ -615,6 +618,41 @@ async function claimAndRun(input: DaemonInput & {
   } finally {
     releaseExecutionLock(input, executionLockResult?.lock);
   }
+}
+
+function readPostRunPullRequestActivityTimestamp(input: Pick<DaemonInput, "github"> & {
+  issueReference: IssueReference;
+}): string | undefined {
+  const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(input.issueReference) ?? {
+    ok: true as const,
+    value: [],
+  };
+
+  if (!relatedPullRequestsResult.ok) {
+    return undefined;
+  }
+
+  return relatedPullRequestsResult.value
+    .flatMap((pullRequest) => [
+      pullRequest.updatedAt,
+      ...pullRequest.comments.map((comment) => comment.updatedAt),
+      ...pullRequest.reviewComments.map((comment) => comment.updatedAt),
+      ...pullRequest.reviews.map((review) => review.submittedAt),
+    ])
+    .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)))
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
+}
+
+function maxTimestamp(left: string, right: string | undefined): string {
+  if (right === undefined || Number.isNaN(Date.parse(right))) {
+    return left;
+  }
+
+  if (Number.isNaN(Date.parse(left)) || Date.parse(right) > Date.parse(left)) {
+    return right;
+  }
+
+  return left;
 }
 
 function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {

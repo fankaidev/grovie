@@ -15,6 +15,7 @@ import type {
 } from "../src/github.js";
 import { resolveMachineId } from "../src/identity.js";
 import { LocalState } from "../src/local-state.js";
+import { inspectQueue } from "../src/queue.js";
 import type { RunIssueAsyncInput, RunIssueResult } from "../src/run.js";
 import type { AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
 
@@ -332,6 +333,79 @@ describe("runDaemonCycle", () => {
     });
     expect(runs).toEqual([]);
     expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
+  });
+
+  it("[UC-EXECUTION-02-S14] records post-run pull request activity as handled for the same issue-agent", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const relatedPullRequests: GitHubRelatedPullRequest[] = [];
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`],
+        updatedAt: "2026-05-22T00:00:00.000Z",
+      }),
+    ], {
+      relatedPullRequests,
+      commentNow: () => new Date("2026-05-22T00:00:03.000Z"),
+    });
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        relatedPullRequests.push(fakeRelatedPullRequest({
+          updatedAt: "2026-05-22T00:00:05.000Z",
+        }));
+
+        return {
+          exitCode: 0,
+          stdout: "created pull request",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "created pull request",
+    });
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `coder@${machineId}`,
+    })?.handledThrough).toBe("2026-05-22T00:00:05.000Z");
+
+    const queueResult = inspectQueue({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+      ],
+      github,
+      machineId,
+      localState,
+    });
+
+    expect(queueResult).toEqual({
+      ok: true,
+      value: [
+        expect.objectContaining({
+          candidates: [
+            expect.objectContaining({
+              status: "skipped",
+              reason: "no unhandled activity",
+            }),
+          ],
+        }),
+      ],
+    });
   });
 
   it("[UC-WORKER-04-S03] creates one run for a locally assigned agent with unhandled activity", async () => {
