@@ -6,7 +6,7 @@ import {
   selectActiveClaim,
   updateIssueClaim,
 } from "./claim.js";
-import type { GrovieConfig, RepositoryFileResult } from "./config.js";
+import type { GrovieConfig, RepositoryFileResult, StateRepoConfig } from "./config.js";
 import {
   formatIssueReference,
   type CreatedComment,
@@ -19,6 +19,7 @@ import { resolveLocalIdentity, type AgentMetadata } from "./identity.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type RunCancellation, type RunRequest } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { createRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeName, type RuntimeRunResult } from "./runtime.js";
+import { syncStateRepository } from "./state-repo.js";
 import type { SessionStatus } from "./task.js";
 
 export type RunIssueInput = {
@@ -31,6 +32,7 @@ export type RunIssueInput = {
   runtime?: AgentRuntime;
   localState?: RunLocalState;
   resultHandler?: ResultHandler;
+  stateRepo?: StateRepoConfig;
   agentId?: string;
   runRequest?: {
     sourceRunId?: string;
@@ -123,6 +125,7 @@ export function runIssue(input: RunIssueInput): RunIssueResult {
     config: input.config,
     configPath: input.configPath,
     resultHandler: input.resultHandler,
+    stateRepo: input.stateRepo,
     runtimeResult: prepared.runtime.run({
       run: prepared.run,
       issue: prepared.issue,
@@ -142,12 +145,12 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
       ? prepared.runtime.run({
         run: prepared.run,
         issue: prepared.issue,
-        monitor: mergeCancellationMonitor(prepared.localState, prepared.run, input.monitor),
+        monitor: mergeCancellationMonitor(prepared.localState, prepared.run, input.stateRepo, input.monitor),
       })
     : await prepared.runtime.runAsync({
         run: prepared.run,
         issue: prepared.issue,
-        monitor: mergeCancellationMonitor(prepared.localState, prepared.run, input.monitor),
+        monitor: mergeCancellationMonitor(prepared.localState, prepared.run, input.stateRepo, input.monitor),
       });
 
   return finishRun({
@@ -157,6 +160,7 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
     config: input.config,
     configPath: input.configPath,
     resultHandler: input.resultHandler,
+    stateRepo: input.stateRepo,
     runtimeResult,
   });
 }
@@ -164,15 +168,24 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
 function mergeCancellationMonitor(
   localState: RunLocalState,
   run: PreparedRun,
+  stateRepo: StateRepoConfig | undefined,
   monitor: RuntimeMonitor | undefined,
 ): RuntimeMonitor | undefined {
-  if (monitor === undefined && localState.isRunCancellationRequested === undefined) {
+  if (monitor === undefined && localState.isRunCancellationRequested === undefined && stateRepo === undefined) {
     return undefined;
   }
 
   return {
     heartbeatIntervalMs: monitor?.heartbeatIntervalMs,
-    onHeartbeat: monitor?.onHeartbeat,
+    onHeartbeat: async (event) => {
+      bestEffortStateSync({
+        localState,
+        stateRepo,
+        run,
+        agentId: run.agentId,
+      });
+      await monitor?.onHeartbeat?.(event);
+    },
     shouldCancel: async (event) => {
       if (localState.isRunCancellationRequested?.(run.runId) === true) {
         return true;
@@ -426,6 +439,7 @@ function finishRun(input: {
   config: GrovieConfig;
   configPath: string;
   resultHandler?: ResultHandler;
+  stateRepo?: StateRepoConfig;
   runtimeResult: RuntimeRunResult;
 }): RunIssueResult {
   let result: HandleRunResultResult | undefined;
@@ -468,6 +482,20 @@ function finishRun(input: {
   input.localState.appendEvent(input.run, runEventType(summary.status), {
     runtime: input.runtimeResult.execution.runtime,
     exitCode: input.runtimeResult.execution.exitCode,
+  });
+  bestEffortStateSync({
+    localState: input.localState,
+    stateRepo: input.stateRepo,
+    run: input.run,
+    agentId: input.run.agentId,
+    summary: {
+      status: summary.status,
+      runId: summary.runId,
+      issue: formatIssueReference(summary.issue.reference),
+      branchName: summary.branchName,
+      runtime: summary.runtime,
+      resultKind: summary.result?.kind,
+    },
   });
 
   const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
@@ -693,4 +721,36 @@ function resolveSummaryMachineId(agentId: string): string {
 
 function isReviewerRun(agentId: string): boolean {
   return agentId === "reviewer" || agentId.startsWith("reviewer@");
+}
+
+function bestEffortStateSync(input: {
+  localState: RunLocalState;
+  stateRepo: StateRepoConfig | undefined;
+  run: PreparedRun;
+  agentId: string;
+  summary?: Record<string, unknown>;
+}): void {
+  if (input.stateRepo === undefined) {
+    return;
+  }
+
+  const machineId = resolveSummaryMachineId(input.agentId);
+  const result = syncStateRepository({
+    config: input.stateRepo,
+    paths: input.localState.getPaths(),
+    machineId,
+    agentId: input.agentId,
+    run: input.run,
+    summary: input.summary,
+  });
+
+  input.localState.appendEvent(input.run, result.ok ? "state_repo.synced" : "state_repo.pending", result.ok
+    ? {
+      committed: result.committed,
+      path: result.path,
+    }
+    : {
+      pendingPath: result.pendingPath,
+      message: result.message,
+    });
 }

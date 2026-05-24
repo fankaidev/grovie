@@ -114,6 +114,12 @@ export type CreatedPullRequest = {
   url: string;
 };
 
+export type CreatedRepository = {
+  repository: string;
+  private: boolean;
+  url: string;
+};
+
 export type CreatePullRequestInput = {
   repository: string;
   title: string;
@@ -133,6 +139,9 @@ export type GitHubGateway = {
   updateIssueComment(repository: string, commentId: number, body: string): Result<CreatedComment>;
   createPullRequest(input: CreatePullRequestInput): Result<CreatedPullRequest>;
   readRelatedPullRequests?(reference: IssueReference): Result<GitHubRelatedPullRequest[]>;
+  listRepositoryOwners?(): Result<string[]>;
+  readRepository?(repository: string): Result<CreatedRepository>;
+  createRepository?(input: { repository: string; private: boolean }): Result<CreatedRepository>;
 };
 
 export class GhGitHubGateway implements GitHubGateway {
@@ -325,6 +334,90 @@ export class GhGitHubGateway implements GitHubGateway {
       ok: true,
       value: {
         number: result.value.number,
+        url: result.value.html_url,
+      },
+    };
+  }
+
+  listRepositoryOwners(): Result<string[]> {
+    const user = this.getAuthenticatedUser();
+
+    if (!user.ok) {
+      return {
+        ok: false,
+        error: user.error,
+      };
+    }
+
+    const orgs = this.apiJson<Array<{ login: string }>[]>("user/orgs", {
+      paginate: true,
+      slurp: true,
+    });
+
+    if (!orgs.ok) {
+      return orgs;
+    }
+
+    return {
+      ok: true,
+      value: [user.value.login, ...orgs.value.flat().map((org) => org.login)],
+    };
+  }
+
+  readRepository(repository: string): Result<CreatedRepository> {
+    const result = this.apiJson<GitHubRepositoryResponse>(`repos/${repository}`);
+
+    if (!result.ok) {
+      return result;
+    }
+
+    return {
+      ok: true,
+      value: {
+        repository: result.value.full_name,
+        private: result.value.private,
+        url: result.value.html_url,
+      },
+    };
+  }
+
+  createRepository(input: { repository: string; private: boolean }): Result<CreatedRepository> {
+    const parsed = parseRepositoryName(input.repository);
+
+    if (!parsed.ok) {
+      return parsed;
+    }
+
+    const authenticated = this.getAuthenticatedUser();
+
+    if (!authenticated.ok) {
+      return {
+        ok: false,
+        error: authenticated.error,
+      };
+    }
+
+    const path = parsed.value.owner === authenticated.value.login
+      ? "user/repos"
+      : `orgs/${parsed.value.owner}/repos`;
+    const result = this.apiJson<GitHubRepositoryResponse>(path, {
+      method: "POST",
+      body: {
+        name: parsed.value.repo,
+        private: input.private,
+        auto_init: true,
+      },
+    });
+
+    if (!result.ok) {
+      return result;
+    }
+
+    return {
+      ok: true,
+      value: {
+        repository: result.value.full_name,
+        private: result.value.private,
         url: result.value.html_url,
       },
     };
@@ -594,6 +687,9 @@ type GitHubUserResponse = {
 
 type GitHubRepositoryResponse = {
   default_branch: string;
+  full_name: string;
+  private: boolean;
+  html_url: string;
 };
 
 type GitHubIssueResponse = {

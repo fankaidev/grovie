@@ -1,4 +1,4 @@
-import type { GrovieConfig, LoadedConfig } from "./config.js";
+import type { GrovieConfig, LoadedConfig, StateRepoConfig } from "./config.js";
 import {
   createIssueClaim,
   hasCancelRequest,
@@ -24,6 +24,7 @@ export type DaemonInput = {
   github: GitHubGateway;
   runtime?: AgentRuntime;
   localState?: RunLocalState;
+  stateRepo?: StateRepoConfig;
   once: boolean;
   workerId?: string;
   pollIntervalMs?: number;
@@ -391,8 +392,11 @@ async function claimAndRun(input: DaemonInput & {
       runtime: input.runtime,
       localState: input.localState,
       runRequest: input.runRequest,
+      stateRepo: input.stateRepo,
       monitor: {
-        heartbeatIntervalMs: input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+        heartbeatIntervalMs: input.stateRepo?.syncIntervalSeconds === undefined
+          ? input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
+          : input.stateRepo.syncIntervalSeconds * 1000,
         onHeartbeat: () => {
           updateIssueClaim(input.github, claimResult.claim, "active", input.now());
         },

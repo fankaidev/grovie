@@ -68,6 +68,13 @@ export const globalConfigSchema = z.strictObject({
     repository: repositoryNameSchema,
     label: z.string().min(1, "must not be empty").optional(),
   })),
+  stateRepo: z.strictObject({
+    enabled: z.boolean(),
+    repository: repositoryNameSchema,
+    branch: z.string().min(1, "must not be empty"),
+    localPath: z.string().min(1, "must not be empty").optional(),
+    syncIntervalSeconds: z.number().int().min(10).max(3600),
+  }).optional(),
   adminConsole: z.strictObject({
     enabled: z.boolean(),
     host: z.literal("127.0.0.1").optional(),
@@ -83,6 +90,7 @@ export type LoadedGlobalConfig = {
 };
 
 export type WatchedRepository = GlobalGrovieConfig["watchedRepositories"][number];
+export type StateRepoConfig = NonNullable<GlobalGrovieConfig["stateRepo"]>;
 
 export function getConfigPath(cwd: string): string {
   return join(cwd, CONFIG_FILE_NAME);
@@ -353,10 +361,24 @@ export function renderGlobalConfig(config: GlobalGrovieConfig): string {
         .join("\n"),
     ].join("\n");
 
+  const stateRepo = config.stateRepo === undefined
+    ? ""
+    : [
+      "stateRepo:",
+      `  enabled: ${config.stateRepo.enabled}`,
+      `  repository: ${config.stateRepo.repository}`,
+      `  branch: ${config.stateRepo.branch}`,
+      ...(config.stateRepo.localPath === undefined ? [] : [`  localPath: ${config.stateRepo.localPath}`]),
+      `  syncIntervalSeconds: ${config.stateRepo.syncIntervalSeconds}`,
+      "",
+    ].join("\n");
+
   return `# Grovie global worker configuration.
 # This file schedules repositories for the local daemon. It is not a security allowlist.
 version: 1
 ${watchedRepositories}
+${stateRepo}# Optional state repo sync is for observability and recovery only.
+# Redaction is best-effort and is not a security boundary.
 adminConsole:
   enabled: ${config.adminConsole?.enabled ?? false}
 ${config.adminConsole?.host === undefined ? "" : `  host: ${config.adminConsole.host}\n`}${config.adminConsole?.port === undefined ? "" : `  port: ${config.adminConsole.port}\n`}`;
