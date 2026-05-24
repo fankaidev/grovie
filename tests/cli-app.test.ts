@@ -1167,6 +1167,36 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-ADMIN-01-S04] fails detached daemon start clearly when the enabled admin console port is unavailable", async () => {
+    const localState = new FakeLocalState(createTmpDir());
+    saveGlobalConfig(localState.paths.root, {
+      version: 1,
+      watchedRepositories: [],
+      adminConsole: {
+        enabled: true,
+        port: 9876,
+      },
+    });
+
+    await expect(
+      runCliAsync(["daemon", "start"], {
+        localState,
+        adminConsolePortCheck: async (config) => {
+          expect(config).toEqual({
+            enabled: true,
+            host: "127.0.0.1",
+            port: 9876,
+          });
+
+          throw new Error("Admin console port 9876 is unavailable on 127.0.0.1.");
+        },
+      }),
+    ).resolves.toEqual({
+      exitCode: 1,
+      stderr: "Admin console port 9876 is unavailable on 127.0.0.1.",
+    });
+  });
+
   it("[UC-WORKER-06-S02] refuses to start another live background daemon", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({
