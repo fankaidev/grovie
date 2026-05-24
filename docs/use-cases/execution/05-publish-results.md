@@ -18,3 +18,4 @@
 | UC-EXECUTION-05-S03 | P0 | A run whose result branch already exists remotely reports a publish conflict instead of overwriting it. |
 | UC-EXECUTION-05-S04 | P0 | A run whose computed result branch is the default branch is rejected before any push. |
 | UC-EXECUTION-05-S05 | P1 | A reviewer run with no intended code changes posts concise review output without modifying the coder branch or opening a PR. |
+| UC-EXECUTION-05-S06 | P0 | A comment-only run writes `.grovie/issue-comment.md`, and Grovie publishes that body as an issue comment without requiring runtime GitHub auth. |
