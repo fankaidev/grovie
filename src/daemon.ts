@@ -1,4 +1,4 @@
-import type { GrovieConfig } from "./config.js";
+import type { GrovieConfig, LoadedConfig } from "./config.js";
 import {
   createIssueClaim,
   hasCancelRequest,
@@ -14,7 +14,7 @@ import type { DaemonLock, ExecutionLock } from "./local-state.js";
 import { getIssueActivity, inspectQueue, renderSkippedQueueSummary, selectNextRunnableCandidate, type IssueActivity } from "./queue.js";
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
 import { runIssueAsync } from "./run.js";
-import type { AgentRuntime } from "./runtime.js";
+import { createRuntime, type AgentRuntime } from "./runtime.js";
 
 export type DaemonInput = {
   repository: string;
@@ -34,11 +34,14 @@ export type DaemonInput = {
 
 export type DaemonRepositoryInput = {
   repository: string;
-  label: string;
+  label?: string;
+  config?: GrovieConfig;
+  configPath?: string;
 };
 
 export type MultiRepositoryDaemonInput = Omit<DaemonInput, "repository" | "label"> & {
   repositories: DaemonRepositoryInput[];
+  repositoryConfigLoader?: (repository: string) => LoadedConfig;
 };
 
 type DaemonCycleResult = RunIssueResult & {
@@ -116,12 +119,26 @@ export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput
 
 async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Promise<DaemonCycleResult> {
   const idleMessages: string[] = [];
+  const policyErrors: string[] = [];
 
   for (const repository of input.repositories) {
+    let loadedConfig: LoadedConfig | undefined;
+
+    try {
+      loadedConfig = input.repositoryConfigLoader?.(repository.repository);
+    } catch (error) {
+      policyErrors.push(`Skipped ${repository.repository}: ${toErrorMessage(error)}`);
+      continue;
+    }
+
+    const config = loadedConfig?.config ?? repository.config ?? input.config;
     const result = await runDaemonCycle({
       ...input,
       repository: repository.repository,
-      label: repository.label,
+      label: repository.label ?? config.queue.label,
+      config,
+      configPath: loadedConfig?.path ?? repository.configPath ?? input.configPath,
+      runtime: input.runtime ?? createRuntime(config.runtime.default),
     });
 
     if (result.exitCode !== 0 || result.processed) {
@@ -134,9 +151,16 @@ async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Prom
   }
 
   return {
-    exitCode: 0,
+    exitCode: policyErrors.length > 0 ? 1 : 0,
     processed: false,
-    stdout: idleMessages.join("\n\n"),
+    stdout: idleMessages.join("\n\n") || undefined,
+    stderr: policyErrors.length > 0
+      ? [
+        "grovie daemon",
+        "",
+        ...policyErrors,
+      ].join("\n")
+      : undefined,
   };
 }
 
@@ -432,6 +456,10 @@ function releaseExecutionLock(input: Pick<DaemonInput, "localState">, lock: Exec
   if (lock !== undefined) {
     input.localState?.releaseExecutionLock?.(lock);
   }
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function sleepSync(ms: number): Promise<void> {

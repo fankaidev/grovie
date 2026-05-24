@@ -1292,6 +1292,155 @@ describe("runDaemonCycle", () => {
       number: 5,
     });
   });
+
+  it("[UC-WORKER-04-S12] uses repo-local daemon policy for queue label and run config", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["ready", `agent:default@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+    const config = {
+      ...defaultConfig(),
+      runtime: {
+        default: "cc" as const,
+      },
+      queue: {
+        label: "ready",
+      },
+      branches: {
+        prefix: "issue/",
+      },
+    };
+
+    const result = await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+        },
+      ],
+      repositoryConfigLoader: () => ({
+        path: "fankaidev/grovie:.grovie.yml",
+        config,
+      }),
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github,
+      once: true,
+      workerId: "worker-1",
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran repo policy issue",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "ran repo policy issue",
+    });
+    expect(runs[0]?.config).toMatchObject({
+      runtime: {
+        default: "cc",
+      },
+      queue: {
+        label: "ready",
+      },
+      branches: {
+        prefix: "issue/",
+      },
+    });
+    expect(runs[0]?.configPath).toBe("fankaidev/grovie:.grovie.yml");
+  });
+
+  it("[UC-WORKER-04-S13] reports invalid repo-local policy without blocking unrelated watched repositories", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: {
+          owner: "fankaidev",
+          repo: "other",
+          number: 5,
+        },
+        labels: ["grovie", `agent:default@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/bad",
+        },
+        {
+          repository: "fankaidev/other",
+        },
+      ],
+      repositoryConfigLoader: (repository) => {
+        if (repository === "fankaidev/bad") {
+          throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- runtime.default: Invalid option");
+        }
+
+        return {
+          config: defaultConfig(),
+        };
+      },
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github,
+      once: true,
+      workerId: "worker-1",
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran unrelated repo",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "ran unrelated repo",
+    });
+    expect(runs[0]?.repository).toBe("fankaidev/other");
+  });
+
+  it("[UC-WORKER-04-S13] fails clearly when every watched repository has invalid repo-local policy", async () => {
+    const result = await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/bad",
+        },
+      ],
+      repositoryConfigLoader: () => {
+        throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- runtime.default: Invalid option");
+      },
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github: new FakeGitHub([]),
+      once: true,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("issue runner was not expected");
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      stderr: [
+        "grovie daemon",
+        "",
+        "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
+        "- runtime.default: Invalid option",
+      ].join("\n"),
+    });
+  });
 });
 
 class FakeGitHub implements GitHubGateway {
