@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { dirname, extname, join, normalize, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
@@ -27,6 +28,7 @@ export type AdminConsoleContext = {
   paths: LocalStatePaths;
   daemonLifecycle: DaemonLifecycle;
   runtime: AgentRuntime;
+  adminWebAssetsDir?: string;
 };
 
 const DEFAULT_ADMIN_CONSOLE_PORT = 8765;
@@ -88,6 +90,14 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
     }
 
     if (context !== undefined && request.method === "GET") {
+      if (url.pathname.startsWith("/api/")) {
+        return handleAdminApiGet(context, request, url, response);
+      }
+
+      if (serveAdminWebAsset(context, url, response)) {
+        return;
+      }
+
       if (url.pathname === "/") {
         writeHtml(response, 200, renderAdminHome(context));
         return;
@@ -107,141 +117,149 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
         return;
       }
 
-      if (url.pathname === "/api/health") {
-        writeJson(response, 200, {
-          ok: true,
-          daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
-          runtime: context.runtime.checkAvailability(),
-        });
-        return;
-      }
-
-      if (url.pathname === "/api/config") {
-        const globalConfig = loadGlobalConfig(context.paths.root);
-
-        writeJson(response, 200, {
-          path: globalConfig.path,
-          config: globalConfig.config,
-        });
-        return;
-      }
-
-      if (url.pathname === "/api/repos") {
-        writeJson(response, 200, {
-          repositories: loadGlobalConfig(context.paths.root).config.watchedRepositories,
-        });
-        return;
-      }
-
-      if (url.pathname === "/api/runs") {
-        writeJson(response, 200, {
-          runs: listLocalRuns(context.paths.runsDir),
-        });
-        return;
-      }
-
-      if (url.pathname === "/api/activity") {
-        writeJson(response, 200, {
-          activity: readDaemonActivity(context.paths, 50),
-        });
-        return;
-      }
-
-      const runEventsMatch = /^\/api\/runs\/(?<runId>[^/]+)\/events$/.exec(url.pathname);
-
-      if (runEventsMatch?.groups?.runId !== undefined) {
-        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runEventsMatch.groups.runId));
-
-        if (run === undefined) {
-          writeJson(response, 404, {
-            error: "not_found",
-            message: "Run not found.",
-          });
-          return;
-        }
-
-        writeJson(response, 200, {
-          runId: run.runId,
-          events: run.events,
-        });
-        return;
-      }
-
-      const runLogMatch = /^\/api\/runs\/(?<runId>[^/]+)\/logs\/(?<stream>stdout|stderr)$/.exec(url.pathname);
-
-      if (runLogMatch?.groups?.runId !== undefined && isLogStream(runLogMatch.groups.stream)) {
-        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runLogMatch.groups.runId));
-
-        if (run === undefined) {
-          writeJson(response, 404, {
-            error: "not_found",
-            message: "Run not found.",
-          });
-          return;
-        }
-
-        const log = readRunLog(run, runLogMatch.groups.stream);
-
-        writeJson(response, 200, {
-          runId: run.runId,
-          stream: runLogMatch.groups.stream,
-          path: log.path,
-          content: log.content,
-        });
-        return;
-      }
-
-      const runLogStreamMatch = /^\/api\/runs\/(?<runId>[^/]+)\/logs\/stream$/.exec(url.pathname);
-
-      if (runLogStreamMatch?.groups?.runId !== undefined) {
-        const stream = url.searchParams.get("stream");
-
-        if (stream !== "stdout" && stream !== "stderr") {
-          writeJson(response, 400, {
-            error: "invalid_stream",
-            message: "Expected stream=stdout or stream=stderr.",
-          });
-          return;
-        }
-
-        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runLogStreamMatch.groups.runId));
-
-        if (run === undefined) {
-          writeJson(response, 404, {
-            error: "not_found",
-            message: "Run not found.",
-          });
-          return;
-        }
-
-        startRunLogStream(request, response, run, stream);
-        return;
-      }
-
-      const runMatch = /^\/api\/runs\/(?<runId>[^/]+)$/.exec(url.pathname);
-
-      if (runMatch?.groups?.runId !== undefined) {
-        const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runMatch.groups.runId));
-
-        if (run === undefined) {
-          writeJson(response, 404, {
-            error: "not_found",
-            message: "Run not found.",
-          });
-          return;
-        }
-
-        writeJson(response, 200, {
-          run,
-        });
-        return;
-      }
     }
 
     writeJson(response, 404, {
       error: "not_found",
       message: "Admin console endpoint not found.",
     });
+  });
+}
+
+function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessage, url: URL, response: ServerResponse): void {
+  if (url.pathname === "/api/health") {
+    writeJson(response, 200, {
+      ok: true,
+      daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
+      runtime: context.runtime.checkAvailability(),
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/config") {
+    const globalConfig = loadGlobalConfig(context.paths.root);
+
+    writeJson(response, 200, {
+      path: globalConfig.path,
+      config: globalConfig.config,
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/repos") {
+    writeJson(response, 200, {
+      repositories: loadGlobalConfig(context.paths.root).config.watchedRepositories,
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/runs") {
+    writeJson(response, 200, {
+      runs: listLocalRuns(context.paths.runsDir),
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/activity") {
+    writeJson(response, 200, {
+      activity: readDaemonActivity(context.paths, 50),
+    });
+    return;
+  }
+
+  const runEventsMatch = /^\/api\/runs\/(?<runId>[^/]+)\/events$/.exec(url.pathname);
+
+  if (runEventsMatch?.groups?.runId !== undefined) {
+    const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runEventsMatch.groups.runId));
+
+    if (run === undefined) {
+      writeJson(response, 404, {
+        error: "not_found",
+        message: "Run not found.",
+      });
+      return;
+    }
+
+    writeJson(response, 200, {
+      runId: run.runId,
+      events: run.events,
+    });
+    return;
+  }
+
+  const runLogMatch = /^\/api\/runs\/(?<runId>[^/]+)\/logs\/(?<stream>stdout|stderr)$/.exec(url.pathname);
+
+  if (runLogMatch?.groups?.runId !== undefined && isLogStream(runLogMatch.groups.stream)) {
+    const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runLogMatch.groups.runId));
+
+    if (run === undefined) {
+      writeJson(response, 404, {
+        error: "not_found",
+        message: "Run not found.",
+      });
+      return;
+    }
+
+    const log = readRunLog(run, runLogMatch.groups.stream);
+
+    writeJson(response, 200, {
+      runId: run.runId,
+      stream: runLogMatch.groups.stream,
+      path: log.path,
+      content: log.content,
+    });
+    return;
+  }
+
+  const runLogStreamMatch = /^\/api\/runs\/(?<runId>[^/]+)\/logs\/stream$/.exec(url.pathname);
+
+  if (runLogStreamMatch?.groups?.runId !== undefined) {
+    const stream = url.searchParams.get("stream");
+
+    if (stream !== "stdout" && stream !== "stderr") {
+      writeJson(response, 400, {
+        error: "invalid_stream",
+        message: "Expected stream=stdout or stream=stderr.",
+      });
+      return;
+    }
+
+    const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runLogStreamMatch.groups.runId));
+
+    if (run === undefined) {
+      writeJson(response, 404, {
+        error: "not_found",
+        message: "Run not found.",
+      });
+      return;
+    }
+
+    startRunLogStream(request, response, run, stream);
+    return;
+  }
+
+  const runMatch = /^\/api\/runs\/(?<runId>[^/]+)$/.exec(url.pathname);
+
+  if (runMatch?.groups?.runId !== undefined) {
+    const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runMatch.groups.runId));
+
+    if (run === undefined) {
+      writeJson(response, 404, {
+        error: "not_found",
+        message: "Run not found.",
+      });
+      return;
+    }
+
+    writeJson(response, 200, {
+      run,
+    });
+    return;
+  }
+
+  writeJson(response, 404, {
+    error: "not_found",
+    message: "Admin console endpoint not found.",
   });
 }
 
@@ -399,8 +417,113 @@ function writeHtml(response: ServerResponse, statusCode: number, value: string):
   response.end(value);
 }
 
+function writeFile(response: ServerResponse, statusCode: number, path: string): void {
+  response.writeHead(statusCode, {
+    "content-type": contentTypeForPath(path),
+  });
+  response.end(readFileSync(path));
+}
+
 function parseRequestUrl(url: string | undefined): URL {
   return new URL(url ?? "/", "http://127.0.0.1");
+}
+
+function serveAdminWebAsset(context: AdminConsoleContext, url: URL, response: ServerResponse): boolean {
+  const assetsDir = context.adminWebAssetsDir ?? resolveAdminWebAssetsDir();
+
+  if (!existsSync(join(assetsDir, "index.html"))) {
+    return false;
+  }
+
+  const requestedPath = decodeURIComponent(url.pathname);
+  const filePath = requestedPath === "/"
+    ? join(assetsDir, "index.html")
+    : resolveAssetPath(assetsDir, requestedPath);
+
+  if (filePath !== undefined && isRegularFile(filePath)) {
+    writeFile(response, 200, filePath);
+    return true;
+  }
+
+  if (hasFileExtension(requestedPath)) {
+    writeJson(response, 404, {
+      error: "not_found",
+      message: "Admin console asset not found.",
+    });
+    return true;
+  }
+
+  writeFile(response, 200, join(assetsDir, "index.html"));
+  return true;
+}
+
+function resolveAdminWebAssetsDir(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  const builtRelativeToModule = join(moduleDir, "admin-web");
+
+  if (existsSync(join(builtRelativeToModule, "index.html"))) {
+    return builtRelativeToModule;
+  }
+
+  return join(process.cwd(), "dist", "admin-web");
+}
+
+function resolveAssetPath(root: string, pathname: string): string | undefined {
+  const normalized = normalize(pathname).replace(/^[/\\]+/, "");
+  const path = join(root, normalized);
+  const rootRelative = relative(root, path);
+
+  if (rootRelative.startsWith("..") || rootRelative === "" || rootRelative.split(sep).includes("..")) {
+    return undefined;
+  }
+
+  return path;
+}
+
+function isRegularFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function hasFileExtension(pathname: string): boolean {
+  return extname(pathname) !== "";
+}
+
+function contentTypeForPath(path: string): string {
+  const extension = extname(path);
+
+  if (extension === ".html") {
+    return "text/html; charset=utf-8";
+  }
+
+  if (extension === ".js" || extension === ".mjs") {
+    return "text/javascript; charset=utf-8";
+  }
+
+  if (extension === ".css") {
+    return "text/css; charset=utf-8";
+  }
+
+  if (extension === ".json") {
+    return "application/json; charset=utf-8";
+  }
+
+  if (extension === ".svg") {
+    return "image/svg+xml";
+  }
+
+  if (extension === ".png") {
+    return "image/png";
+  }
+
+  if (extension === ".ico") {
+    return "image/x-icon";
+  }
+
+  return "application/octet-stream";
 }
 
 function renderApiDaemonStatus(status: DaemonLifecycleStatus): unknown {
