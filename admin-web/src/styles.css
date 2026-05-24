@@ -378,6 +378,28 @@ pre,
   white-space: pre-wrap;
 }
 
+.transcript-activity summary {
+  cursor: pointer;
+}
+
+.transcript-activity-list {
+  display: grid;
+  margin: 0.75rem 0 0 1.1rem;
+  padding: 0;
+  gap: 0.625rem;
+  list-style: none;
+}
+
+.transcript-activity-entry {
+  border-top: 1px solid var(--border);
+  padding-top: 0.625rem;
+}
+
+.transcript-activity-entry:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
 .transcript-label {
   color: var(--foreground);
   font-size: 0.8125rem;
@@ -388,6 +410,14 @@ pre,
   margin-left: 0.5rem;
   color: var(--muted-foreground);
   font-weight: 500;
+}
+
+.transcript-command summary {
+  cursor: pointer;
+}
+
+.transcript-command pre {
+  margin-left: 1.1rem;
 }
 
 .ansi-red {
