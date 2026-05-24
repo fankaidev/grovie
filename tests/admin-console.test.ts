@@ -368,6 +368,35 @@ describe("admin console server", () => {
     expect(html).toContain("Run not found.");
   });
 
+  it("[UC-ADMIN-03-S04] serves built admin web assets and SPA fallback routes", async () => {
+    const root = createTmpDir();
+    const assetsDir = join(root, "admin-web");
+    mkdirSync(join(assetsDir, "assets"), { recursive: true });
+    writeFileSync(join(assetsDir, "index.html"), '<!doctype html><div id="root"></div><script type="module" src="/assets/app-abc123.js"></script>', "utf8");
+    writeFileSync(join(assetsDir, "assets", "app-abc123.js"), "console.log('admin web');\n", "utf8");
+    const started = await startTestServer(root, {}, assetsDir);
+
+    const home = await fetch(`${started.url}/`);
+    const route = await fetch(`${started.url}/runs/run-1`);
+    const asset = await fetch(`${started.url}/assets/app-abc123.js`);
+    const api = await fetch(`${started.url}/api/health`);
+
+    expect(home.status).toBe(200);
+    expect(home.headers.get("content-type")).toContain("text/html");
+    expect(await home.text()).toContain("/assets/app-abc123.js");
+    expect(route.status).toBe(200);
+    expect(await route.text()).toContain('<div id="root"></div>');
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get("content-type")).toContain("text/javascript");
+    expect(await asset.text()).toContain("admin web");
+    expect(await api.json()).toMatchObject({
+      ok: true,
+      daemon: {
+        status: "stopped",
+      },
+    });
+  });
+
   it("[UC-ADMIN-04-S01] returns the local stdout log for a completed run", async () => {
     const root = createTmpDir();
     writeRun(pathsForRoot(root).runsDir, "run-1", {
@@ -632,7 +661,11 @@ function isFetchWorkerError(value: unknown): value is { error: string } {
   );
 }
 
-async function startTestServer(root = createTmpDir(), daemonLifecycleOverrides: Partial<DaemonLifecycle> = {}): Promise<StartedAdminConsole> {
+async function startTestServer(
+  root = createTmpDir(),
+  daemonLifecycleOverrides: Partial<DaemonLifecycle> = {},
+  adminWebAssetsDir = join(root, "missing-admin-web"),
+): Promise<StartedAdminConsole> {
   const port = await getAvailablePort();
   const started = await startAdminConsoleServer({
     config: {
@@ -644,6 +677,7 @@ async function startTestServer(root = createTmpDir(), daemonLifecycleOverrides: 
       paths: pathsForRoot(root),
       daemonLifecycle: fakeDaemonLifecycle(root, daemonLifecycleOverrides),
       runtime: fakeRuntime(),
+      adminWebAssetsDir,
     }),
   });
   servers.push(started);

@@ -8,8 +8,11 @@
   },
   "scripts": {
     "dev": "tsx src/cli.ts",
-    "build": "tsup",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm build:cli && pnpm build:admin-web && pnpm copy:admin-web",
+    "build:cli": "tsup",
+    "build:admin-web": "pnpm --dir admin-web build",
+    "copy:admin-web": "node scripts/copy-admin-web-build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm --dir admin-web typecheck",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
@@ -18,13 +21,21 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "tsup": "^8.5.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
+    "vite": "^8.0.14",
     "vitest": "^4.1.5"
   },
   "packageManager": "pnpm@10.26.1",
   "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "tailwind-merge": "^3.5.0",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   }
