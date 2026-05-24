@@ -31,3 +31,4 @@
 | UC-WORKER-06-S13 | P2 | `grovie daemon stop --force` passes a force stop request to the daemon lifecycle for crash recovery workflows. |
 | UC-WORKER-06-S14 | P1 | `grovie daemon run` starts the enabled admin console in the same daemon process and makes `GET /api/health` available at the configured local URL. |
 | UC-WORKER-06-S15 | P1 | Stopping the daemon also stops the admin console server owned by that daemon process. |
+| UC-WORKER-06-S16 | P1 | `grovie status` reports rejected local runs as rejected recent failures. |
