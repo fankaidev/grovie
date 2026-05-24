@@ -3,9 +3,11 @@ import type { DaemonActivityEntry } from "./daemon-activity.js";
 import type { DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import type { RunCancellation } from "./local-state.js";
 import type { RuntimeAvailability } from "./runtime.js";
+import type { RuntimeTranscript } from "./runtime-transcript.js";
 import type { LocalRunSummary, RunEvent } from "./status.js";
 
 export type { LocalRunSummary, RunEvent } from "./status.js";
+export type { RuntimeTranscript, RuntimeTranscriptEntry } from "./runtime-transcript.js";
 
 export type AdminApiErrorCode = "not_found" | "invalid_stream" | "not_cancelable";
 
@@ -61,6 +63,13 @@ export type AdminApiRunLogResponse = {
   stream: AdminLogStream;
   path: string;
   content: string;
+};
+
+export type AdminApiRunLogTranscriptResponse = {
+  runId: string;
+  stream: "stdout";
+  path: string;
+  transcript: RuntimeTranscript;
 };
 
 export type AdminApiRunLogStreamQuery = {

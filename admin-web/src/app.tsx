@@ -11,6 +11,9 @@ import type {
   AdminApiRunEventsResponse,
   AdminApiRunsResponse,
   AdminApiRunLogResponse,
+  AdminApiRunLogTranscriptResponse,
+  RuntimeTranscript,
+  RuntimeTranscriptEntry,
   LocalRunSummary,
 } from "../../src/admin-api.js";
 import "./styles.css";
@@ -40,8 +43,8 @@ type RunDetailState =
     events: AdminApiRunEventsResponse["events"];
     stdout: AdminApiRunLogResponse;
     stderr: AdminApiRunLogResponse;
+    stdoutTranscript: AdminApiRunLogTranscriptResponse;
   };
-
 export function App(): ReactNode {
   const route = useMemo(() => readRoute(window.location.pathname), []);
 
@@ -382,7 +385,7 @@ export function RunDetailContent(props: {
       </InfoPanel>
 
       <section className="logs-grid">
-        <LogPanel runId={run.runId} log={props.state.stdout} />
+        <LogPanel runId={run.runId} log={props.state.stdout} transcript={props.state.stdoutTranscript.transcript} />
         <LogPanel runId={run.runId} log={props.state.stderr} />
       </section>
 
@@ -456,7 +459,11 @@ function DescriptionList(props: { items: Array<[string, string]>; mono?: boolean
   );
 }
 
-function LogPanel(props: { runId: string; log: AdminApiRunLogResponse }): ReactNode {
+function LogPanel(props: { runId: string; log: AdminApiRunLogResponse; transcript?: RuntimeTranscript }): ReactNode {
+  const [mode, setMode] = useState<"raw" | "transcript">(
+    props.transcript?.recognized === true ? "transcript" : "raw",
+  );
+  const canShowTranscript = props.log.stream === "stdout" && props.transcript !== undefined;
   return (
     <section className="panel log-panel">
       <div className="section-heading">
@@ -464,11 +471,114 @@ function LogPanel(props: { runId: string; log: AdminApiRunLogResponse }): ReactN
         <a href={`/api/runs/${encodeURIComponent(props.runId)}/logs/${props.log.stream}`}>Raw</a>
       </div>
       <p className="log-path">{props.log.path}</p>
-      <pre className="log-output">
-        <code>{props.log.content.length === 0 ? "(no output)" : renderAnsi(props.log.content)}</code>
-      </pre>
+      {canShowTranscript ? (
+        <div className="log-mode-selector" aria-label="stdout log display mode">
+          <button type="button" className={mode === "raw" ? "active" : undefined} onClick={() => setMode("raw")}>
+            Raw stdout
+          </button>
+          <button type="button" className={mode === "transcript" ? "active" : undefined} onClick={() => setMode("transcript")}>
+            Readable transcript
+          </button>
+        </div>
+      ) : null}
+      {canShowTranscript && props.transcript?.recognized === false && mode === "raw" ? (
+        <p className="transcript-inline-fallback">
+          Readable transcript unavailable: {props.transcript.message ?? "stdout was not recognized by the runtime transcript parser."}
+        </p>
+      ) : null}
+      {mode === "transcript" && props.transcript !== undefined ? (
+        <TranscriptView transcript={props.transcript} />
+      ) : (
+        <pre className="log-output">
+          <code>{props.log.content.length === 0 ? "(no output)" : renderAnsi(props.log.content)}</code>
+        </pre>
+      )}
     </section>
   );
+}
+
+function TranscriptView(props: { transcript: RuntimeTranscript }): ReactNode {
+  if (!props.transcript.recognized) {
+    return (
+      <div className="transcript-fallback">
+        <strong>Readable transcript unavailable</strong>
+        <p>{props.transcript.message ?? "stdout was not recognized by the runtime transcript parser."}</p>
+      </div>
+    );
+  }
+
+  if (props.transcript.entries.length === 0) {
+    return (
+      <div className="transcript-fallback">
+        <strong>No transcript entries</strong>
+        <p>The runtime stdout was recognized, but no displayable entries were found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <ol className="transcript-list">
+      {props.transcript.entries.map((entry, index) => (
+        <li key={`${entry.kind}-${index}`} className={`transcript-entry transcript-${entry.kind}`}>
+          {renderTranscriptEntry(entry)}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function renderTranscriptEntry(entry: RuntimeTranscriptEntry): ReactNode {
+  if (entry.kind === "assistant_message") {
+    return (
+      <>
+        <div className="transcript-label">Assistant</div>
+        <p>{entry.text}</p>
+      </>
+    );
+  }
+
+  if (entry.kind === "command_execution") {
+    return (
+      <>
+        <div className="transcript-label">Command {renderTranscriptMeta([entry.status, entry.exitCode === undefined ? undefined : `exit ${entry.exitCode}`])}</div>
+        <pre><code>{entry.command}</code></pre>
+      </>
+    );
+  }
+
+  if (entry.kind === "command_output") {
+    return (
+      <>
+        <div className="transcript-label">Command output</div>
+        <pre><code>{entry.text}</code></pre>
+      </>
+    );
+  }
+
+  if (entry.kind === "exit_code") {
+    return <div className="transcript-label">Exit code {entry.exitCode}{entry.detail === undefined ? "" : ` (${entry.detail})`}</div>;
+  }
+
+  if (entry.kind === "tool_call") {
+    return (
+      <>
+        <div className="transcript-label">Tool {renderTranscriptMeta([entry.status])}</div>
+        <p>{entry.label}{entry.detail === undefined ? "" : `: ${entry.detail}`}</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="transcript-label">{entry.label}</div>
+      {entry.detail === undefined ? null : <p>{entry.detail}</p>}
+    </>
+  );
+}
+
+function renderTranscriptMeta(parts: Array<string | undefined>): ReactNode {
+  const value = parts.filter((part) => part !== undefined && part.length > 0).join(", ");
+  return value.length === 0 ? null : <span>{value}</span>;
 }
 
 function CenteredNotice(props: { title: string; message: string }): ReactNode {
@@ -522,10 +632,11 @@ export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch
     };
   }
 
-  const [eventsPayload, stdoutPayload, stderrPayload] = await Promise.all([
+  const [eventsPayload, stdoutPayload, stderrPayload, stdoutTranscriptPayload] = await Promise.all([
     fetchJson<AdminApiRunEventsResponse>(`/api/runs/${encodedRunId}/events`, fetcher),
     fetchJson<AdminApiRunLogResponse>(`/api/runs/${encodedRunId}/logs/stdout`, fetcher),
     fetchJson<AdminApiRunLogResponse>(`/api/runs/${encodedRunId}/logs/stderr`, fetcher),
+    fetchJson<AdminApiRunLogTranscriptResponse>(`/api/runs/${encodedRunId}/logs/stdout/transcript`, fetcher),
   ]);
 
   return {
@@ -534,6 +645,7 @@ export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch
     events: eventsPayload.events,
     stdout: stdoutPayload,
     stderr: stderrPayload,
+    stdoutTranscript: stdoutTranscriptPayload,
   };
 }
 

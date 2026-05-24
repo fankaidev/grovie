@@ -510,6 +510,69 @@ describe("admin console server", () => {
     });
   });
 
+  it("[UC-ADMIN-04-S06] exposes a parsed readable stdout transcript through the run log API", async () => {
+    const root = createTmpDir();
+    writeRun(pathsForRoot(root).runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 133,
+      },
+      events: [event("2026-05-24T14:00:00.000Z", "runtime.started", { runtime: "codex" })],
+      stdout: [
+        JSON.stringify({ type: "thread.started", thread_id: "codex-thread-1" }),
+        JSON.stringify({ type: "turn.started" }),
+        JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "I will inspect the run." } }),
+        JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "pnpm check", aggregated_output: "ok\n", exit_code: 0, status: "completed" } }),
+      ].join("\n"),
+    });
+    const started = await startTestServer(root);
+    const response = await fetch(`${started.url}/api/runs/run-1/logs/stdout/transcript`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      runId: "run-1",
+      stream: "stdout",
+      transcript: {
+        runtime: "codex",
+        recognized: true,
+        entries: [
+          { kind: "status", label: "Session started", detail: "codex-thread-1" },
+          { kind: "turn", label: "Turn started" },
+          { kind: "assistant_message", text: "I will inspect the run." },
+          { kind: "command_execution", command: "pnpm check", status: "completed", exitCode: 0 },
+          { kind: "command_output", text: "ok\n" },
+          { kind: "exit_code", exitCode: 0, detail: "completed" },
+        ],
+      },
+    });
+  });
+
+  it("[UC-ADMIN-04-S07] returns a clear transcript fallback for unrecognized stdout", async () => {
+    const root = createTmpDir();
+    writeRun(pathsForRoot(root).runsDir, "run-1", {
+      metadata: {
+        runId: "run-1",
+        repository: "fankaidev/grovie",
+        issueNumber: 133,
+      },
+      events: [event("2026-05-24T14:00:00.000Z", "runtime.started", { runtime: "codex" })],
+      stdout: "plain stdout\n",
+    });
+    const started = await startTestServer(root);
+    const response = await fetch(`${started.url}/api/runs/run-1/logs/stdout/transcript`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      transcript: {
+        runtime: "codex",
+        recognized: false,
+        message: "stdout is not recognized as Codex JSONL. Use Raw stdout to inspect the original output.",
+        entries: [],
+      },
+    });
+  });
+
   it("[UC-ADMIN-04-S02] returns the local stderr log separately from stdout", async () => {
     const root = createTmpDir();
     writeRun(pathsForRoot(root).runsDir, "run-1", {
