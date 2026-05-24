@@ -240,6 +240,7 @@ export class LocalState {
         continue;
       }
 
+      interruptRuntimeProcess(metadata.runtimePid);
       const runId = metadata.runId ?? runDirName;
       const interruptedAt = (input.now ?? new Date()).toISOString();
       writeJsonFile(metadataPath, {
@@ -291,6 +292,10 @@ export class LocalState {
           : undefined;
 
       if (status === undefined || isRunCancellationRequested(this.paths, metadata.runId ?? runDirName)) {
+        continue;
+      }
+
+      if (isLivePid(metadata.runtimePid)) {
         continue;
       }
 
@@ -757,6 +762,7 @@ type RunMetadata = {
   agentId?: string;
   worktreePath?: string;
   resumeEligible?: boolean;
+  runtimePid?: number;
 };
 
 export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalStatePaths {
@@ -902,6 +908,18 @@ function hasTerminalRunEvent(path: string): boolean {
         return false;
       }
     });
+}
+
+function interruptRuntimeProcess(pid: unknown): void {
+  if (typeof pid !== "number" || !isLivePid(pid)) {
+    return;
+  }
+
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    // Best-effort runtime interruption; recovery will avoid live pids.
+  }
 }
 
 function appendRunEvent(run: Pick<PreparedRun, "eventsPath">, type: string, data: Record<string, unknown> = {}): void {

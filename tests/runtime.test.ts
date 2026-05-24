@@ -221,6 +221,7 @@ describe("CodexRuntime", () => {
       join(binDir, "codex"),
       [
         "#!/bin/sh",
+        "echo '{\"type\":\"thread.started\",\"thread_id\":\"stream-thread-1\"}'",
         "echo streaming stdout",
         "echo streaming stderr >&2",
         "touch stream-ready",
@@ -252,6 +253,7 @@ describe("CodexRuntime", () => {
         await waitFor(() => existsSync(join(run.worktreePath, "stream-ready")));
         await waitFor(() => readFileSync(run.stdoutPath, "utf8").includes("streaming stdout"));
         await waitFor(() => readFileSync(run.stderrPath, "utf8").includes("streaming stderr"));
+        await waitFor(() => readFileSync(join(run.sessionDir, "runtime-session.json"), "utf8").includes("stream-thread-1"));
 
         expect(settled).toBe(false);
       } catch (error) {

@@ -498,6 +498,36 @@ describe("runDaemonCycle", () => {
     })).toBe(false);
   });
 
+  it("[UC-DAEMON-03-S03] does not recover a run while its runtime pid is still live", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "active-run", {
+      status: "interrupted",
+      resumeEligible: true,
+      runId: "active-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+      runtimePid: process.pid,
+    });
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([]),
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("live runtime was not expected to duplicate");
+      },
+    });
+
+    expect(result.processed).toBe(false);
+  });
+
   it("[UC-DAEMON-03-S04] does not auto-resume canceled runs", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
