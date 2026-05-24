@@ -191,6 +191,25 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     };
   }
 
+  const resumableRun = input.localState?.takeResumableRun?.({
+    repository: input.repository,
+    now: now(),
+  });
+
+  if (resumableRun !== undefined) {
+    return runRequestedIssue({
+      ...input,
+      issueNumber: resumableRun.issueNumber,
+      workerId: resumableRun.agentId,
+      runRequest: {
+        sourceRunId: resumableRun.runId,
+        reason: "resume",
+      },
+      now,
+      issueRunner,
+    });
+  }
+
   const request = input.localState?.takeRunRequest?.(input.repository);
 
   if (request !== undefined) {

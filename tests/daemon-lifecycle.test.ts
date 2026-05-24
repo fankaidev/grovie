@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -43,6 +43,42 @@ describe("LocalDaemonLifecycle", () => {
     } catch {
       // The detached process may have exited before cleanup.
     }
+  });
+
+  it("[UC-DAEMON-03-S01] marks active runs interrupted and resumable before stopping", () => {
+    const root = createTmpDir();
+    const lifecycle = new LocalDaemonLifecycle(() => true);
+    const startResult = lifecycle.start({
+      root,
+      args: ["start", "--once"],
+    });
+
+    expect(startResult.ok).toBe(true);
+
+    if (!startResult.ok) {
+      throw new Error(startResult.message);
+    }
+
+    const runDir = join(root, "runs", "active-run");
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(join(runDir, "metadata.json"), `${JSON.stringify({
+      status: "prepared",
+      runId: "active-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 104,
+      agentId: "default@kai-mini",
+    }, null, 2)}\n`, "utf8");
+    writeFileSync(join(runDir, "events.jsonl"), "", "utf8");
+
+    const stopResult = lifecycle.stop({ root });
+
+    expect(stopResult.ok).toBe(true);
+    expect(stopResult.message).toContain("Interrupted resumable runs: active-run.");
+    expect(JSON.parse(readFileSync(join(runDir, "metadata.json"), "utf8"))).toMatchObject({
+      status: "interrupted",
+      resumeEligible: true,
+    });
+    expect(readFileSync(join(runDir, "events.jsonl"), "utf8")).toContain('"type":"run.interrupted"');
   });
 });
 

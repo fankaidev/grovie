@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -323,6 +323,171 @@ describe("runDaemonCycle", () => {
     });
     expect(runs).toHaveLength(1);
     expect(github.createdComments[0]).toContain(`- Worker: \`coder@${machineId}\``);
+  });
+
+  it("[UC-DAEMON-03-S02] resumes an interrupted session before polling new queue items", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "old-run", {
+      status: "interrupted",
+      resumeEligible: true,
+      runId: "old-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: fakeReference(8),
+        labels: ["grovie"],
+      }),
+      fakeIssue({
+        reference: fakeReference(9),
+        labels: ["grovie", `agent:default@${machineId}`, "priority:p0"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "resumed interrupted session",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "resumed interrupted session",
+    });
+    expect(runs[0]?.issueReference.number).toBe(8);
+    expect(runs[0]?.runRequest).toEqual({
+      sourceRunId: "old-run",
+      reason: "resume",
+    });
+    expect(readRunMetadata(localState, "old-run").status).toBe("resuming");
+  });
+
+  it("[UC-DAEMON-03-S03] recovers active-looking runs left by a force stop", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "active-run", {
+      status: "prepared",
+      runId: "active-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    });
+    localState.acquireExecutionLock({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+      now: NOW,
+    });
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([fakeIssue({ labels: ["grovie"] })]),
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "recovered active-looking run",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]?.runRequest).toEqual({
+      sourceRunId: "active-run",
+      reason: "resume",
+    });
+    expect(localState.hasExecutionLock?.({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    })).toBe(false);
+  });
+
+  it("[UC-DAEMON-03-S04] does not auto-resume canceled runs", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "canceled-run", {
+      status: "interrupted",
+      resumeEligible: true,
+      runId: "canceled-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    });
+    localState.requestRunCancellation({
+      runId: "canceled-run",
+      reason: "User canceled the run.",
+      now: NOW,
+    });
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([]),
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("canceled run was not expected to resume");
+      },
+    });
+
+    expect(result.processed).toBe(false);
+  });
+
+  it("[UC-DAEMON-03-S05] does not auto-resume failed runs without an explicit retry or rerun", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "failed-run", {
+      status: "failed",
+      resumeEligible: true,
+      runId: "failed-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    });
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([]),
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("failed run was not expected to resume");
+      },
+    });
+
+    expect(result.processed).toBe(false);
   });
 
   it("[UC-WORKER-04-S09] picks runnable assigned issues by priority before GitHub list order", async () => {
@@ -1763,4 +1928,19 @@ function createTmpDir(): string {
   const dir = join(tmpdir(), `grovie-daemon-${Math.random().toString(16).slice(2)}`);
   tmpDirs.push(dir);
   return dir;
+}
+
+function writeRunMetadata(localState: LocalState, runId: string, metadata: Record<string, unknown>): void {
+  const runDir = join(localState.getPaths().runsDir, runId);
+  mkdirSync(runDir, { recursive: true });
+  writeFileSync(join(runDir, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
+  writeFileSync(join(runDir, "events.jsonl"), "", "utf8");
+  writeFileSync(join(runDir, "stdout.log"), "", "utf8");
+  writeFileSync(join(runDir, "stderr.log"), "", "utf8");
+  writeFileSync(join(runDir, "prompt.md"), "", "utf8");
+  writeFileSync(join(runDir, "task.json"), "{}\n", "utf8");
+}
+
+function readRunMetadata(localState: LocalState, runId: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(localState.getPaths().runsDir, runId, "metadata.json"), "utf8")) as Record<string, unknown>;
 }

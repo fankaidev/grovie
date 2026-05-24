@@ -16,7 +16,7 @@ import {
   type IssueReference,
 } from "./github.js";
 import { resolveLocalIdentity, type AgentMetadata } from "./identity.js";
-import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type RunCancellation, type RunRequest } from "./local-state.js";
+import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type ResumableRun, type RunCancellation, type RunRequest } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { createRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeName, type RuntimeRunResult } from "./runtime.js";
 import type { SessionStatus } from "./task.js";
@@ -67,6 +67,8 @@ export type RunLocalState = {
   releaseExecutionLock?(lock: ExecutionLock): void;
   enqueueRunRequest?(input: { repository: string; issueNumber: number; agentId: string; now?: Date; sourceRunId?: string; reason?: RunRequest["reason"] }): RunRequest;
   takeRunRequest?(repository: string): RunRequest | undefined;
+  interruptActiveRuns?(input: { now?: Date; reason: string }): ResumableRun[];
+  takeResumableRun?(input: { repository: string; now?: Date }): ResumableRun | undefined;
   requestRunCancellation?(input: { runId: string; reason?: string; now?: Date }): RunCancellation;
   isRunCancellationRequested?(runId: string): boolean;
   readHandledCursor?(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined;

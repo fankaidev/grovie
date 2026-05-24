@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { LocalState } from "./local-state.js";
 
 export type DaemonLifecycleState = {
   pid: number;
@@ -124,6 +125,10 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
       };
     }
 
+    const interrupted = new LocalState({ paths: { root: input.root } }).interruptActiveRuns({
+      reason: "Daemon stopped.",
+    });
+
     try {
       process.kill(currentStatus.state.pid, "SIGTERM");
     } catch (error) {
@@ -137,7 +142,10 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
 
     return {
       ok: true,
-      message: `Stopped Grovie daemon pid ${currentStatus.state.pid}.`,
+      message: [
+        `Stopped Grovie daemon pid ${currentStatus.state.pid}.`,
+        interrupted.length === 0 ? undefined : `Interrupted resumable runs: ${interrupted.map((run) => run.runId).join(", ")}.`,
+      ].filter((line): line is string => line !== undefined).join("\n"),
     };
   }
 
