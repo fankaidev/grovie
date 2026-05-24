@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe("CLI command registration", () => {
   it("[UC-WORKER-03-S01] [UC-WORKER-05-S01] [UC-ADMIN-01-S02] registers issue assignment, queue, daemon, and admin commands", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "admin", "watch"]);
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "state", "admin", "watch"]);
   });
 
   it("[UC-WORKER-05-S01] [UC-WORKER-06-S01] [UC-ADMIN-01-S02] renders help with queue, daemon, and admin commands", () => {
@@ -37,6 +37,7 @@ describe("CLI command registration", () => {
     expect(help).toContain("run");
     expect(help).toContain("queue");
     expect(help).toContain("daemon");
+    expect(help).toContain("state");
     expect(help).toContain("admin");
     expect(help).toContain("watch");
   });
@@ -130,6 +131,45 @@ describe("CLI command registration", () => {
         envKeys: ["OPENAI_API_KEY"],
       }),
     ]);
+  });
+
+  it("[UC-STATE-REPO-01-S01] configures a private default state repository through state init", () => {
+    const root = createTmpDir();
+    const created: Array<{ repository: string; private: boolean }> = [];
+
+    const result = runCli(["state", "init", "--owner", "fankaidev"], {
+      localState: new FakeLocalState(root),
+      github: fakeGitHubGateway({
+        readRepository: () => ({
+          ok: false,
+          error: {
+            code: "gh_failed",
+            message: "not found",
+          },
+        }),
+        createRepository: (request) => {
+          created.push(request);
+          return {
+            ok: true,
+            value: {
+              repository: request.repository,
+              private: request.private,
+              url: `https://github.com/${request.repository}`,
+            },
+          };
+        },
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Created private state repository fankaidev/grovie-state.");
+    expect(created).toEqual([
+      {
+        repository: "fankaidev/grovie-state",
+        private: true,
+      },
+    ]);
+    expect(readFileSync(join(root, "config.yml"), "utf8")).toContain("stateRepo:");
   });
 
   it("[UC-WORKER-01-S04] [UC-EXECUTION-03-S02] reports unavailable Codex runtime through doctor", () => {

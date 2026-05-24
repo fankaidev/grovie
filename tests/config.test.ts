@@ -235,11 +235,70 @@ describe("config helpers", () => {
           repository: "fankaidev/grovie",
         },
       ],
+      stateRepo: {
+        enabled: true,
+        repository: "fankaidev/grovie-state",
+        branch: "main",
+        localPath: "/tmp/grovie/state-repo",
+        syncIntervalSeconds: 60,
+      },
     });
 
     expect(config).toContain("schedules repositories");
     expect(config).toContain("not a security allowlist");
     expect(config).toContain("repository: fankaidev/grovie");
+    expect(config).toContain("stateRepo:");
+    expect(config).toContain("repository: fankaidev/grovie-state");
+    expect(config).toContain("Redaction is best-effort");
+  });
+
+  it("[UC-WORKER-02-S05] validates optional global state repository config", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "watchedRepositories: []",
+        "stateRepo:",
+        "  enabled: true",
+        "  repository: fankaidev/grovie-state",
+        "  branch: main",
+        "  syncIntervalSeconds: 60",
+        "adminConsole:",
+        "  enabled: false",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(loadGlobalConfig(root).config.stateRepo).toEqual({
+      enabled: true,
+      repository: "fankaidev/grovie-state",
+      branch: "main",
+      syncIntervalSeconds: 60,
+    });
+  });
+
+  it("[UC-STATE-REPO-01-S07] rejects unsafe state repository sync intervals", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "watchedRepositories: []",
+        "stateRepo:",
+        "  enabled: true",
+        "  repository: fankaidev/grovie-state",
+        "  branch: main",
+        "  syncIntervalSeconds: 1",
+        "adminConsole:",
+        "  enabled: false",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => loadGlobalConfig(root)).toThrow("stateRepo.syncIntervalSeconds");
   });
 });
 

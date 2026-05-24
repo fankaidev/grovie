@@ -12,6 +12,14 @@
 | R4 | Remote redaction is best-effort and is not a security boundary. |
 | R5 | GitHub issue content is not synced to the state repo; any needed issue input snapshots stay in local run state. |
 
+## Setup
+
+`grovie state init` configures the optional global `stateRepo` block. By default it creates or configures a private `grovie-state` repository for the authenticated user, uses branch `main`, writes the local checkout under `~/.grovie/state-repo`, and syncs on roughly one-minute daemon ticks plus final run completion. If the authenticated account can create repositories under multiple owners, non-interactive setup must pass `--owner` or `--repo`.
+
+State repo contents are for remote observability and recovery support only. A sync failure writes a local pending marker and the next sync retries; active runs continue based on local state.
+
+Remote state is a sanitized projection of local execution files. It may include machine, daemon, heartbeat, agent, session, run metadata, prompt, stdout, stderr, events, and summary files, but it must not copy `task.json`, issue bodies, issue comments, or current issue-content snapshots. Redaction handles common token, key, secret, password, database URL, bearer token, GitHub token, and OpenAI key patterns on a best-effort basis; users must not treat it as a security boundary.
+
 ## Scenarios
 
 | ID | Priority | Scenario |

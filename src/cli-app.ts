@@ -25,6 +25,7 @@ import { inspectQueue, renderQueueInspection } from "./queue.js";
 import type { RunLocalState } from "./run.js";
 import { createRuntime, type AgentRuntime } from "./runtime.js";
 import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail, renderRunsList } from "./status.js";
+import { initStateRepository } from "./state-repo.js";
 import { GROVIE_VERSION } from "./version.js";
 
 export type CliResult = {
@@ -690,6 +691,7 @@ const commandDefinitions = [
             github: context.github,
             runtime: context.runtime ?? createRuntime(loaded.config.runtime.default),
             localState: context.localState,
+            stateRepo: globalConfig.config.stateRepo,
             once: runArgs.includes("--once"),
             adminConsole: resolveAdminConsoleConfig(globalConfig.config),
             daemonLifecycle: context.daemonLifecycle,
@@ -709,10 +711,94 @@ const commandDefinitions = [
           github: context.github,
           runtime: context.runtime,
           localState: context.localState,
+          stateRepo: globalConfig.config.stateRepo,
           once: runArgs.includes("--once"),
           adminConsole: resolveAdminConsoleConfig(globalConfig.config),
           daemonLifecycle: context.daemonLifecycle,
         });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  },
+  {
+    name: "state",
+    description: "Configure optional private state repository sync.",
+    usage: "grovie state init [--owner owner|--repo owner/grovie-state] [--branch main] [--path ~/.grovie/state-repo] [--sync-interval 60]",
+    issue: "#57",
+    run: (args: string[], context: CliContext) => {
+      const [subcommand] = args;
+
+      if (subcommand !== "init") {
+        return {
+          exitCode: 1,
+          stderr: "Missing state subcommand. Usage: grovie state init [--owner owner|--repo owner/grovie-state]",
+        };
+      }
+
+      const ownerOption = readStringOption(args, "--owner");
+      const repoOption = readStringOption(args, "--repo");
+      const branchOption = readStringOption(args, "--branch");
+      const pathOption = readStringOption(args, "--path");
+      const intervalOption = readNumberOption(args, "--sync-interval");
+
+      if (!ownerOption.ok) {
+        return ownerOption.result;
+      }
+
+      if (!repoOption.ok) {
+        return repoOption.result;
+      }
+
+      if (!branchOption.ok) {
+        return branchOption.result;
+      }
+
+      if (!pathOption.ok) {
+        return pathOption.result;
+      }
+
+      if (!intervalOption.ok) {
+        return intervalOption.result;
+      }
+
+      try {
+        const root = context.localState.getPaths().root;
+        const initialized = initStateRepository({
+          root,
+          github: context.github,
+          owner: ownerOption.value,
+          repository: repoOption.value,
+          branch: branchOption.value,
+          localPath: pathOption.value,
+          syncIntervalSeconds: intervalOption.value,
+        });
+        const loaded = loadGlobalConfig(root);
+        const config = {
+          ...loaded.config,
+          stateRepo: {
+            enabled: true,
+            repository: initialized.repository,
+            branch: initialized.branch,
+            localPath: initialized.localPath,
+            syncIntervalSeconds: initialized.syncIntervalSeconds,
+          },
+        };
+        const path = saveGlobalConfig(root, config);
+
+        return {
+          exitCode: 0,
+          stdout: [
+            "grovie state init",
+            "",
+            initialized.created ? `Created private state repository ${initialized.repository}.` : `Configured state repository ${initialized.repository}.`,
+            `Branch: ${initialized.branch}`,
+            `Local path: ${initialized.localPath}`,
+            `Sync interval: ${initialized.syncIntervalSeconds}s`,
+            `Config: ${path}`,
+            "State repo sync is optional; local execution does not depend on it.",
+          ].join("\n"),
+        };
       } catch (error) {
         return errorResult(error);
       }
