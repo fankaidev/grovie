@@ -1394,6 +1394,7 @@ describe("runDaemonCycle", () => {
       config: defaultConfig(),
       configPath: "built-in defaults",
       github,
+      runtime: fakeRuntime(),
       once: true,
       workerId: "worker-1",
       now: () => NOW,
