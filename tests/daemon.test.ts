@@ -446,6 +446,48 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
+  it("[UC-WORKER-04-S15] inspects only event-affected issues during filtered queue checks", () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: fakeReference(8),
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+      fakeIssue({
+        reference: fakeReference(9),
+        labels: ["other", `agent:coder@${machineId}`],
+      }),
+    ]);
+
+    const queueResult = inspectQueue({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+      ],
+      github,
+      machineId,
+      issueNumbers: [8, 9],
+    });
+
+    expect(queueResult).toMatchObject({
+      ok: true,
+      value: [
+        {
+          candidates: [
+            {
+              issueReference: fakeReference(8),
+              status: "runnable",
+            },
+          ],
+        },
+      ],
+    });
+    expect(github.listOpenIssueCalls).toEqual([]);
+    expect(github.readIssueCalls.map((reference) => reference.number)).toEqual([8, 9]);
+  });
+
   it("[UC-WORKER-04-S14] skips a machine-local agent label when that agent is not configured", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
@@ -2210,6 +2252,8 @@ describe("runDaemonCycle", () => {
 class FakeGitHub implements GitHubGateway {
   readonly createdComments: string[] = [];
   readonly updatedComments: Array<{ commentId: number; body: string }> = [];
+  readonly listOpenIssueCalls: Array<{ repository: string; label: string }> = [];
+  readonly readIssueCalls: IssueReference[] = [];
   private nextCommentId = 1;
 
   constructor(
@@ -2226,6 +2270,7 @@ class FakeGitHub implements GitHubGateway {
   }
 
   listOpenIssues(repository: string, label: string): ReturnType<GitHubGateway["listOpenIssues"]> {
+    this.listOpenIssueCalls.push({ repository, label });
     const summaries: GitHubIssueSummary[] = this.issues
       .filter((issue) => `${issue.reference.owner}/${issue.reference.repo}` === repository)
       .filter((issue) => issue.state === "open")
@@ -2243,6 +2288,8 @@ class FakeGitHub implements GitHubGateway {
   }
 
   readIssue(reference: IssueReference): ReturnType<GitHubGateway["readIssue"]> {
+    this.readIssueCalls.push(reference);
+
     if (this.options.failReadIssueFor === reference.number) {
       return {
         ok: false,

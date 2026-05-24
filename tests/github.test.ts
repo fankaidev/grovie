@@ -425,6 +425,83 @@ describe("GhGitHubGateway", () => {
     ]);
   });
 
+  it("[UC-WORKER-04-S15] lists repository events through gh", () => {
+    const runner = new FakeRunner([
+      {
+        stdout: JSON.stringify([
+          {
+            id: "event-1",
+            type: "IssueCommentEvent",
+            created_at: "2026-05-24T12:49:36Z",
+            actor: { login: "fankaidev" },
+            payload: {
+              action: "created",
+              issue: {
+                number: 127,
+                html_url: "https://github.com/fankaidev/grovie/pull/127",
+              },
+              comment: {
+                html_url: "https://github.com/fankaidev/grovie/pull/127#issuecomment-1",
+              },
+            },
+          },
+        ]),
+      },
+    ]);
+    const gateway = new GhGitHubGateway(runner);
+
+    expect(gateway.listRepositoryEvents("fankaidev/grovie")).toEqual({
+      ok: true,
+      value: [
+        {
+          id: "event-1",
+          type: "IssueCommentEvent",
+          createdAt: "2026-05-24T12:49:36Z",
+          actor: "fankaidev",
+          action: "created",
+          issueNumber: 127,
+          issueUrl: "https://github.com/fankaidev/grovie/pull/127",
+          commentUrl: "https://github.com/fankaidev/grovie/pull/127#issuecomment-1",
+        },
+      ],
+    });
+    expect(runner.calls.map((call) => call.args)).toEqual([
+      ["api", "repos/fankaidev/grovie/events?per_page=100"],
+    ]);
+  });
+
+  it("[UC-WORKER-04-S15] resolves pull request issue links from closing references, body, and branch", () => {
+    const runner = new FakeRunner([
+      {
+        stdout: JSON.stringify({
+          data: {
+            repository: {
+              pullRequest: {
+                body: "Closes #8 and mentions #9",
+                headRefName: "grovie/fankaidev-grovie-issue-10-coco-kai-mini",
+                closingIssuesReferences: {
+                  nodes: [{ number: 7 }],
+                },
+              },
+            },
+          },
+        }),
+      },
+    ]);
+    const gateway = new GhGitHubGateway(runner);
+
+    expect(gateway.readPullRequestIssueLinks("fankaidev/grovie", 127)).toEqual({
+      ok: true,
+      value: [
+        { pullRequestNumber: 127, issueNumber: 7, source: "closing-reference" },
+        { pullRequestNumber: 127, issueNumber: 8, source: "body" },
+        { pullRequestNumber: 127, issueNumber: 9, source: "body" },
+        { pullRequestNumber: 127, issueNumber: 10, source: "branch" },
+      ],
+    });
+    expect(runner.calls[0]?.args.slice(0, 2)).toEqual(["api", "graphql"]);
+  });
+
   it("returns structured errors when gh fails", () => {
     const gateway = new GhGitHubGateway(
       new FakeRunner([
