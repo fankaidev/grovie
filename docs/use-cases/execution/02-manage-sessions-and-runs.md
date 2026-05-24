@@ -27,3 +27,4 @@
 | UC-EXECUTION-02-S11 | P2 | Retry and rerun refuse to enqueue a duplicate when the same issue-agent execution is already active locally. |
 | UC-EXECUTION-02-S12 | P0 | A daemon restart rejects a resumable run whose agent id is not configured locally. |
 | UC-EXECUTION-02-S13 | P0 | A daemon run request for an unconfigured local agent is rejected before runtime start. |
+| UC-EXECUTION-02-S14 | P0 | A successful run that creates related pull request activity does not immediately make the same issue-agent runnable again. |
