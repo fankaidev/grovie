@@ -28,3 +28,4 @@
 | UC-WORKER-04-S11 | P1 | A daemon cycle with skipped assigned issues reports skipped issue references and reasons instead of only saying no queued issues were found. |
 | UC-WORKER-04-S12 | P1 | A watched repository's `.grovie.yml` supplies daemon policy defaults such as `runtime.default`, queue label, branch prefix, pull request behavior, comments mode, and safety policy for runs in that repository. |
 | UC-WORKER-04-S13 | P1 | An invalid watched repository `.grovie.yml` prevents runs for that repository with a clear error while the daemon can continue checking unrelated watched repositories. |
+| UC-WORKER-04-S14 | P0 | A daemon cycle skips an issue assigned to an agent id that matches the machine but is not configured locally. |

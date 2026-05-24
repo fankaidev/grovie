@@ -48,6 +48,7 @@ export type QueueInspectionInput = {
   repositories: QueueRepositoryInput[];
   github: GitHubGateway;
   machineId: string;
+  configuredAgentIds?: string[];
   localState?: RunLocalState;
 };
 
@@ -88,6 +89,7 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
         label: repository.label,
         issue: issueResult.value,
         machineId: input.machineId,
+        configuredAgentIds: input.configuredAgentIds,
         localState: input.localState,
       });
 
@@ -177,6 +179,7 @@ function evaluateCheapIssueSkips(input: {
   label: string;
   issue: GitHubIssue;
   machineId: string;
+  configuredAgentIds?: string[];
   localState?: RunLocalState;
 }): IssueSkipCheck {
   const priority = getIssuePriority(input.issue.labels);
@@ -205,10 +208,21 @@ function evaluateCheapIssueSkips(input: {
   }
 
   const localAgentIds = assignedAgentIds.filter((agentId) => agentId.endsWith(`@${input.machineId}`));
+  const configuredAgentIds = input.configuredAgentIds === undefined
+    ? undefined
+    : new Set(input.configuredAgentIds);
+  const configuredLocalAgentIds = configuredAgentIds === undefined
+    ? localAgentIds
+    : localAgentIds.filter((agentId) => configuredAgentIds.has(agentId));
+  const unconfiguredCandidates = configuredAgentIds === undefined
+    ? []
+    : localAgentIds
+      .filter((agentId) => !configuredAgentIds.has(agentId))
+      .map((agentId) => skippedCandidate(input, priority, activity, agentId, "agent not configured locally"));
   const lockedCandidates: QueueCandidate[] = [];
   const unlockedAgentIds: string[] = [];
 
-  for (const agentId of localAgentIds) {
+  for (const agentId of configuredLocalAgentIds) {
     if (input.localState?.hasExecutionLock?.({
       repository: input.repository,
       issueNumber: input.issue.reference.number,
@@ -223,7 +237,10 @@ function evaluateCheapIssueSkips(input: {
   if (unlockedAgentIds.length === 0) {
     return {
       skipped: true,
-      candidates: lockedCandidates,
+      candidates: [
+        ...unconfiguredCandidates,
+        ...lockedCandidates,
+      ],
     };
   }
 

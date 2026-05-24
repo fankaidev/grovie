@@ -340,6 +340,27 @@ export class LocalState {
     });
   }
 
+  markRunRejected(input: { runId: string; now?: Date; reason: string }): void {
+    const runDir = join(this.paths.runsDir, sanitizePathPart(input.runId));
+    const metadataPath = join(runDir, "metadata.json");
+    const metadata = readJsonFile<RunMetadata>(metadataPath);
+
+    if (metadata === undefined) {
+      return;
+    }
+
+    writeJsonFile(metadataPath, {
+      ...metadata,
+      status: "rejected",
+      resumeEligible: false,
+      rejectedAt: (input.now ?? new Date()).toISOString(),
+      rejectReason: input.reason,
+    });
+    appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "run.rejected", {
+      reason: input.reason,
+    });
+  }
+
   enqueueRunRequest(input: {
     repository: string;
     issueNumber: number;

@@ -25,3 +25,5 @@
 | UC-EXECUTION-02-S09 | P2 | `grovie runs retry <run-id>` enqueues a new daemon run for a failed, canceled, or stale run without overwriting the original run history. |
 | UC-EXECUTION-02-S10 | P2 | `grovie runs rerun owner/repo#123 --agent coder@machine` enqueues a new daemon run in the existing issue-agent session and reports that the session worktree will be reused. |
 | UC-EXECUTION-02-S11 | P2 | Retry and rerun refuse to enqueue a duplicate when the same issue-agent execution is already active locally. |
+| UC-EXECUTION-02-S12 | P0 | A daemon restart rejects a resumable run whose agent id is not configured locally. |
+| UC-EXECUTION-02-S13 | P0 | A daemon run request for an unconfigured local agent is rejected before runtime start. |
