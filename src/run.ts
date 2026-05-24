@@ -6,7 +6,7 @@ import {
   selectActiveClaim,
   updateIssueClaim,
 } from "./claim.js";
-import type { GrovieConfig } from "./config.js";
+import type { GrovieConfig, RepositoryFileResult } from "./config.js";
 import {
   formatIssueReference,
   type CreatedComment,
@@ -58,6 +58,7 @@ export type RunClaimedIssueAsyncInput = RunIssueAsyncInput & {
 export type RunLocalState = {
   getPaths(): LocalStatePaths;
   registerAgent?(metadata: AgentMetadata): void;
+  readRepositoryFile?(input: { repository: string; path: string }): RepositoryFileResult;
   acquireDaemonLock?(machineId: string, now?: Date): LockResult<DaemonLock>;
   releaseDaemonLock?(lock: DaemonLock): void;
   isDaemonRunning?(machineId: string): boolean;

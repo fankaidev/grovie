@@ -6,6 +6,7 @@ import {
   addWatchedRepository,
   loadConfig,
   loadGlobalConfig,
+  loadRepositoryConfig,
   parseGitHubRemote,
   removeWatchedRepository,
   renderDefaultConfig,
@@ -69,6 +70,31 @@ describe("config helpers", () => {
 
       expect(loadConfig(cwd).config.runtime.default).toBe(runtime);
     }
+  });
+
+  it("[UC-WORKER-04-S12] loads repo-local policy config through a repository file reader", () => {
+    const loaded = loadRepositoryConfig("fankaidev/grovie", {
+      readRepositoryFile: ({ repository, path }) => ({
+        exists: true,
+        path: `${repository}:${path}`,
+        content: renderDefaultConfig().replace("default: codex", "default: cc"),
+      }),
+    });
+
+    expect(loaded.path).toBe("fankaidev/grovie:.grovie.yml");
+    expect(loaded.config.runtime.default).toBe("cc");
+  });
+
+  it("[UC-WORKER-04-S13] rejects invalid repo-local policy config from a watched repository", () => {
+    expect(() => {
+      loadRepositoryConfig("fankaidev/grovie", {
+        readRepositoryFile: ({ repository, path }) => ({
+          exists: true,
+          path: `${repository}:${path}`,
+          content: renderDefaultConfig().replace("default: codex", "default: unknown"),
+        }),
+      });
+    }).toThrow("Invalid fankaidev/grovie:.grovie.yml:");
   });
 
   it("rejects unsafe and unknown nested config values", () => {

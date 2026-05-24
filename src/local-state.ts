@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { RepositoryFileResult } from "./config.js";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
 import type { AgentMetadata } from "./identity.js";
 
@@ -444,6 +445,34 @@ export class LocalState {
     return JSON.parse(readFileSync(run.taskPath, "utf8"));
   }
 
+  readRepositoryFile(input: { repository: string; path: string }): RepositoryFileResult {
+    this.ensureBaseDirectories();
+    const { cachePath, ref } = this.ensureRepositoryCacheAtRemoteHead(input.repository);
+    const result = this.runner.run("git", ["-C", cachePath, "show", `${ref}:${input.path}`]);
+    const path = `${input.repository}:${input.path}`;
+
+    if (result.exitCode === 0) {
+      return {
+        exists: true,
+        path,
+        content: result.stdout,
+      };
+    }
+
+    if (
+      result.stderr.includes("exists on disk, but not in") ||
+      result.stderr.includes("Path ") ||
+      result.stderr.includes("does not exist")
+    ) {
+      return {
+        exists: false,
+        path,
+      };
+    }
+
+    throw new Error(result.stderr.trim() || `git show failed with exit code ${result.exitCode}.`);
+  }
+
   private getRunRequestPath(id: string): { id: string; path: string } {
     let candidate = id;
     let path = join(this.paths.requestsDir, `${candidate}.json`);
@@ -486,6 +515,60 @@ export class LocalState {
     }
 
     return cachePath;
+  }
+
+  private ensureRepositoryCacheAtRemoteHead(repository: string): { cachePath: string; ref: string } {
+    const cachePath = this.getRepositoryCachePath(repository);
+    const remoteUrl = `https://github.com/${repository}.git`;
+
+    if (!existsSync(cachePath)) {
+      const cloneResult = this.runner.run("git", ["clone", "--bare", remoteUrl, cachePath]);
+
+      if (cloneResult.exitCode !== 0) {
+        throw new Error(cloneResult.stderr.trim() || `git clone --bare failed with exit code ${cloneResult.exitCode}.`);
+      }
+    }
+
+    const ref = this.resolveRepositoryHeadRef(cachePath);
+    const fetchResult = this.runner.run("git", [
+      "-C",
+      cachePath,
+      "fetch",
+      "origin",
+      `+refs/heads/${ref}:refs/heads/${ref}`,
+    ]);
+
+    if (fetchResult.exitCode !== 0) {
+      throw new Error(fetchResult.stderr.trim() || `git fetch failed with exit code ${fetchResult.exitCode}.`);
+    }
+
+    return {
+      cachePath,
+      ref,
+    };
+  }
+
+  private resolveRepositoryHeadRef(repositoryCachePath: string): string {
+    const remoteResult = this.runner.run("git", ["-C", repositoryCachePath, "ls-remote", "--symref", "origin", "HEAD"]);
+
+    if (remoteResult.exitCode === 0) {
+      const headLine = remoteResult.stdout
+        .split("\n")
+        .find((line) => line.startsWith("ref: refs/heads/") && line.endsWith("\tHEAD"));
+      const branch = headLine?.replace(/^ref: refs\/heads\//, "").replace(/\tHEAD$/, "");
+
+      if (branch !== undefined && branch.length > 0) {
+        return branch;
+      }
+    }
+
+    const result = this.runner.run("git", ["-C", repositoryCachePath, "symbolic-ref", "--short", "HEAD"]);
+
+    if (result.exitCode === 0 && result.stdout.trim().length > 0) {
+      return result.stdout.trim();
+    }
+
+    return "main";
   }
 
   private getRepositoryCachePath(repository: string): string {
