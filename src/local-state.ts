@@ -234,7 +234,7 @@ export class LocalState {
 
       if (
         metadata === undefined
-        || hasTerminalRunEvent(join(runDir, "events.jsonl"))
+        || (metadata.status !== "interrupted" && metadata.status !== "resuming" && hasTerminalRunEvent(join(runDir, "events.jsonl")))
         || !isRecoverableRunMetadata(metadata, "active-looking")
       ) {
         continue;
@@ -277,7 +277,11 @@ export class LocalState {
       const eventsPath = join(runDir, "events.jsonl");
       const metadata = readJsonFile<RunMetadata>(metadataPath);
 
-      if (metadata === undefined || metadata.repository !== input.repository || hasTerminalRunEvent(eventsPath)) {
+      if (
+        metadata === undefined
+        || metadata.repository !== input.repository
+        || (metadata.status !== "interrupted" && metadata.status !== "resuming" && hasTerminalRunEvent(eventsPath))
+      ) {
         continue;
       }
 

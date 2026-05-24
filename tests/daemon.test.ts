@@ -498,6 +498,60 @@ describe("runDaemonCycle", () => {
     })).toBe(false);
   });
 
+  it("[UC-DAEMON-03-S01] lets interrupted state win over stop-time runtime failure events", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "interrupted-run", {
+      status: "interrupted",
+      resumeEligible: true,
+      runId: "interrupted-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    }, [
+      {
+        timestamp: "2026-05-22T00:00:00.000Z",
+        type: "run.interrupted",
+        data: { resumeEligible: true },
+      },
+      {
+        timestamp: "2026-05-22T00:00:01.000Z",
+        type: "runtime.finished",
+        data: { exitCode: 143 },
+      },
+      {
+        timestamp: "2026-05-22T00:00:02.000Z",
+        type: "run.failed",
+        data: { exitCode: 143 },
+      },
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([fakeIssue({ labels: ["grovie"] })]),
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "resumed stop-time failure",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]?.runRequest).toEqual({
+      sourceRunId: "interrupted-run",
+      reason: "resume",
+    });
+  });
+
   it("[UC-DAEMON-03-S03] does not recover a run while its runtime pid is still live", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });

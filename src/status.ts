@@ -272,6 +272,10 @@ function deriveRunStatus(
   now: Date,
   staleAfterMs: number,
 ): LocalRunSummary["status"] {
+  if (metadataStatus === "interrupting" || metadataStatus === "interrupted" || metadataStatus === "resuming") {
+    return metadataStatus;
+  }
+
   for (const event of [...events].reverse()) {
     const terminalStatus = TERMINAL_STATUS_BY_EVENT[event.type];
 
@@ -294,7 +298,7 @@ function deriveRunStatus(
     return metadataStatus;
   }
 
-  if (metadataStatus === "running" || metadataStatus === "interrupting" || metadataStatus === "interrupted" || metadataStatus === "resuming") {
+  if (metadataStatus === "running") {
     return metadataStatus;
   }
 
