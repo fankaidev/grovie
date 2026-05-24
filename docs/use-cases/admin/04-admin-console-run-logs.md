@@ -24,3 +24,4 @@
 | UC-ADMIN-04-S05 | P2 | Missing runs and invalid streams return clear errors. |
 | UC-ADMIN-04-S06 | P0 | Codex JSONL stdout from `GET /api/runs/:runId/logs/stdout/transcript` is parsed into readable transcript entries, and the React run detail route lets the user switch between Raw stdout and Readable transcript. |
 | UC-ADMIN-04-S07 | P0 | Unrecognized stdout returns a clear transcript fallback without breaking the run detail page or hiding Raw stdout. |
+| UC-ADMIN-04-S08 | P1 | The React readable transcript keeps assistant messages visible and groups non-assistant runtime activity between assistant messages into a collapsed Activity block. |

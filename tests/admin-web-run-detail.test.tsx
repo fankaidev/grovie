@@ -370,7 +370,7 @@ describe("admin web run detail route", () => {
     ]);
   });
 
-  it("[UC-ADMIN-04-S06] renders recognized stdout as a readable transcript while keeping raw stdout selectable", () => {
+  it("[UC-ADMIN-04-S06] [UC-ADMIN-04-S08] renders recognized stdout as a readable transcript with grouped activity", () => {
     const html = renderToStaticMarkup(
       <RunDetailContent
         state={{
@@ -400,6 +400,7 @@ describe("admin web run detail route", () => {
                 { kind: "assistant_message", text: "I will inspect the run." },
                 { kind: "command_execution", command: "pnpm check", status: "completed", exitCode: 0 },
                 { kind: "command_output", text: "ok\n" },
+                { kind: "assistant_message", text: "The run passed." },
               ],
             },
           },
@@ -413,8 +414,11 @@ describe("admin web run detail route", () => {
     expect(html).toContain("Readable transcript");
     expect(html).toContain("Assistant");
     expect(html).toContain("I will inspect the run.");
+    expect(html).toContain("Activity");
+    expect(html).toContain("2 entries");
     expect(html).toContain("pnpm check");
     expect(html).toContain("ok");
+    expect(html).toContain("The run passed.");
   });
 
   it("[UC-ADMIN-05-S01] [UC-ADMIN-05-S04] posts cancel requests and reports not-cancelable states", async () => {

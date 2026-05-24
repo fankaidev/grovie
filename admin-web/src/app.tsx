@@ -45,6 +45,10 @@ type RunDetailState =
     stderr: AdminApiRunLogResponse;
     stdoutTranscript: AdminApiRunLogTranscriptResponse;
   };
+
+type TranscriptBlock =
+  | { kind: "assistant"; entry: Extract<RuntimeTranscriptEntry, { kind: "assistant_message" }> }
+  | { kind: "activity"; entries: RuntimeTranscriptEntry[] };
 export function App(): ReactNode {
   const route = useMemo(() => readRoute(window.location.pathname), []);
 
@@ -518,12 +522,56 @@ function TranscriptView(props: { transcript: RuntimeTranscript }): ReactNode {
 
   return (
     <ol className="transcript-list">
-      {props.transcript.entries.map((entry, index) => (
-        <li key={`${entry.kind}-${index}`} className={`transcript-entry transcript-${entry.kind}`}>
-          {renderTranscriptEntry(entry)}
+      {buildTranscriptBlocks(props.transcript.entries).map((block, index) => (
+        <li key={`${block.kind}-${index}`} className={`transcript-entry transcript-${block.kind}`}>
+          {renderTranscriptBlock(block)}
         </li>
       ))}
     </ol>
+  );
+}
+
+function buildTranscriptBlocks(entries: RuntimeTranscriptEntry[]): TranscriptBlock[] {
+  const blocks: TranscriptBlock[] = [];
+  let activityEntries: RuntimeTranscriptEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.kind === "assistant_message") {
+      if (activityEntries.length > 0) {
+        blocks.push({ kind: "activity", entries: activityEntries });
+        activityEntries = [];
+      }
+
+      blocks.push({ kind: "assistant", entry });
+      continue;
+    }
+
+    activityEntries.push(entry);
+  }
+
+  if (activityEntries.length > 0) {
+    blocks.push({ kind: "activity", entries: activityEntries });
+  }
+
+  return blocks;
+}
+
+function renderTranscriptBlock(block: TranscriptBlock): ReactNode {
+  if (block.kind === "assistant") {
+    return renderTranscriptEntry(block.entry);
+  }
+
+  return (
+    <details className="transcript-activity">
+      <summary className="transcript-label">Activity {renderTranscriptMeta([`${block.entries.length} entries`])}</summary>
+      <ol className="transcript-activity-list">
+        {block.entries.map((entry, index) => (
+          <li key={`${entry.kind}-${index}`} className={`transcript-activity-entry transcript-${entry.kind}`}>
+            {renderTranscriptEntry(entry)}
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 
@@ -539,19 +587,19 @@ function renderTranscriptEntry(entry: RuntimeTranscriptEntry): ReactNode {
 
   if (entry.kind === "command_execution") {
     return (
-      <>
-        <div className="transcript-label">Command {renderTranscriptMeta([entry.status, entry.exitCode === undefined ? undefined : `exit ${entry.exitCode}`])}</div>
+      <details className="transcript-command">
+        <summary className="transcript-label">Command {renderTranscriptMeta([entry.status, entry.exitCode === undefined ? undefined : `exit ${entry.exitCode}`])}</summary>
         <pre><code>{entry.command}</code></pre>
-      </>
+      </details>
     );
   }
 
   if (entry.kind === "command_output") {
     return (
-      <>
-        <div className="transcript-label">Command output</div>
+      <details className="transcript-command">
+        <summary className="transcript-label">Command output</summary>
         <pre><code>{entry.text}</code></pre>
-      </>
+      </details>
     );
   }
 
