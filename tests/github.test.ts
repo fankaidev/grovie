@@ -320,6 +320,11 @@ describe("GhGitHubGateway", () => {
         ]),
       },
       {
+        stdout: JSON.stringify({
+          mergeable_state: "dirty",
+        }),
+      },
+      {
         stdout: JSON.stringify([[
           {
             id: 10,
@@ -371,6 +376,7 @@ describe("GhGitHubGateway", () => {
           number: 20,
           title: "Implement result handling",
           state: "open",
+          mergeStateStatus: "DIRTY",
           url: "https://github.com/fankaidev/grovie/pull/20",
           body: "Closes #9",
           baseRef: "main",
@@ -417,6 +423,7 @@ describe("GhGitHubGateway", () => {
     });
     expect(runner.calls.map((call) => call.args)).toEqual([
       ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/pulls?state=all&per_page=100"],
+      ["api", "repos/fankaidev/grovie/pulls/20"],
       ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/issues/20/comments"],
       ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/pulls/20/comments"],
       ["api", "--paginate", "--slurp", "repos/fankaidev/grovie/pulls/20/reviews"],

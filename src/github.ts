@@ -73,6 +73,7 @@ export type GitHubRelatedPullRequest = {
   number: number;
   title: string;
   state: string;
+  mergeStateStatus?: string;
   url: string;
   body: string;
   baseRef: string;
@@ -465,6 +466,12 @@ export class GhGitHubGateway implements GitHubGateway {
     const contexts: GitHubRelatedPullRequest[] = [];
 
     for (const pullRequest of related) {
+      const detailsResult = this.apiJson<GitHubPullRequestDetailsResponse>(`repos/${repository}/pulls/${pullRequest.number}`);
+
+      if (!detailsResult.ok) {
+        return detailsResult;
+      }
+
       const commentsResult = this.apiJson<GitHubCommentResponse[][]>(
         `repos/${repository}/issues/${pullRequest.number}/comments`,
         {
@@ -530,6 +537,7 @@ export class GhGitHubGateway implements GitHubGateway {
         number: pullRequest.number,
         title: pullRequest.title,
         state: pullRequest.state,
+        mergeStateStatus: normalizeMergeStateStatus(detailsResult.value.mergeable_state),
         url: pullRequest.html_url,
         body: pullRequest.body ?? "",
         baseRef: pullRequest.base.ref,
@@ -860,6 +868,10 @@ type GitHubPullRequestListItemResponse = {
   };
 };
 
+type GitHubPullRequestDetailsResponse = {
+  mergeable_state?: string | null;
+};
+
 type GitHubPullRequestReviewResponse = {
   id: number;
   state: string;
@@ -961,6 +973,14 @@ function summarizeCheckRuns(checkRuns: GitHubCheckRunResponse[]): GitHubCheckSum
     totalCount: checkRuns.length,
     conclusionCounts,
   };
+}
+
+function normalizeMergeStateStatus(value: string | null | undefined): string | undefined {
+  if (value === null || value === undefined || value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value.trim().toUpperCase();
 }
 
 function toRepositoryEvent(event: GitHubRepositoryEventResponse): GitHubRepositoryEvent {

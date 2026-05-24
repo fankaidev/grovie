@@ -1306,6 +1306,79 @@ describe("runDaemonCycle", () => {
     })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
   });
 
+  it("[UC-WORKER-04-S16] reruns a handled issue when a linked open pull request becomes unmergeable", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const relatedPullRequests = [
+      fakeRelatedPullRequest({
+        number: 20,
+        state: "open",
+        mergeStateStatus: "CLEAN",
+        updatedAt: "2026-05-22T00:00:02.000Z",
+      }),
+    ];
+    const github = new FakeGitHub([
+      fakeIssue({
+        updatedAt: "2026-05-22T00:00:00.000Z",
+      }),
+    ], {
+      relatedPullRequests,
+    });
+    const runs: RunIssueAsyncInput[] = [];
+
+    await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "opened clean pull request",
+        };
+      },
+    });
+
+    relatedPullRequests[0] = {
+      ...relatedPullRequests[0]!,
+      mergeStateStatus: "DIRTY",
+    };
+
+    const secondResult = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "resolved mergeability",
+        };
+      },
+    });
+
+    expect(secondResult).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "resolved mergeability",
+    });
+    expect(runs).toHaveLength(2);
+    expect(runs[1]?.issueReference.number).toBe(8);
+    expect(runs[1]?.agentId).toBe(`default@${machineId}`);
+    expect(readFileSync(join(localState.getPaths().root, "daemon", "activity.jsonl"), "utf8"))
+      .toContain("pull request #20 merge state DIRTY requires branch update work");
+  });
+
   it("[UC-EXECUTION-02-S03] creates a run when the issue itself is updated after the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
@@ -2552,6 +2625,7 @@ function fakeRelatedPullRequest(overrides: Partial<GitHubRelatedPullRequest> = {
     number: 20,
     title: "Implement daemon",
     state: "open",
+    mergeStateStatus: undefined,
     url: "https://github.com/fankaidev/grovie/pull/20",
     body: "Closes #8",
     baseRef: "main",

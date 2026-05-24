@@ -562,9 +562,11 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const candidate = selectNextRunnableCandidate(queueResult.value);
 
   if (candidate !== undefined) {
+    const triggerMessage = renderActivityTriggerMessage(candidate.activity.trigger);
+
     recordActivity(input, {
       type: "queue.runnable_found",
-      message: `Selected ${formatIssueReference(candidate.issueReference)} for ${candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId}.`,
+      message: `Selected ${formatIssueReference(candidate.issueReference)} for ${candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId}${triggerMessage}.`,
       repository: input.repository,
       issueNumber: candidate.issueReference.number,
       agentId: candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId,
@@ -572,6 +574,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
         priority: candidate.priority,
         activityTimestamp: candidate.activity.timestamp,
         issueFingerprint: candidate.activity.issueFingerprint,
+        trigger: candidate.activity.trigger,
       },
     });
 
@@ -606,6 +609,14 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       ...(skippedSummary === undefined ? [] : ["", skippedSummary]),
     ].join("\n"),
   };
+}
+
+function renderActivityTriggerMessage(trigger: IssueActivity["trigger"]): string {
+  if (trigger?.kind !== "pull-request-mergeability") {
+    return "";
+  }
+
+  return ` because pull request #${trigger.pullRequestNumber} merge state ${trigger.mergeStateStatus} requires branch update work`;
 }
 
 function planRepositoryCycle(input: Pick<DaemonInput, "once" | "github" | "localState" | "now">, repository: string) {
