@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import { parseRepositoryName } from "./github.js";
+import { buildAgentId, slugifyIdentityPart, type AgentMetadata } from "./identity.js";
 import type { RuntimeName } from "./runtime.js";
 
 export const CONFIG_FILE_NAME = ".grovie.yml";
@@ -13,11 +14,16 @@ export const repositoryNameSchema = z.string().regex(
   /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/,
   "must use the owner/repo format",
 );
+export const runtimeNameSchema = z.enum(["codex", "cc", "pi", "opencode", "hermes"] satisfies RuntimeName[]);
+export const agentNameSchema = z.string()
+  .min(1, "must not be empty")
+  .refine((value) => slugifyIdentityPart(value).length > 0, "must contain at least one letter or number")
+  .refine((value) => slugifyIdentityPart(value) !== "default", "default is reserved; configure a named local agent");
 
 export const configSchema = z.strictObject({
   version: z.literal(1),
   runtime: z.strictObject({
-    default: z.enum(["codex", "cc", "pi", "opencode", "hermes"] satisfies RuntimeName[]),
+    default: runtimeNameSchema,
   }),
   queue: z.strictObject({
     label: z.string().min(1, "must not be empty"),
@@ -64,6 +70,14 @@ export type RepositoryPolicyReader = {
 
 export const globalConfigSchema = z.strictObject({
   version: z.literal(1),
+  agents: z.array(z.strictObject({
+    name: agentNameSchema,
+    runtime: runtimeNameSchema,
+    instructions: z.string().min(1, "must not be empty").optional(),
+    model: z.string().min(1, "must not be empty").optional(),
+    args: z.array(z.string()).default([]),
+    envKeys: z.array(z.string().min(1, "must not be empty")).default([]),
+  })).default([]),
   watchedRepositories: z.array(z.strictObject({
     repository: repositoryNameSchema,
     label: z.string().min(1, "must not be empty").optional(),
@@ -91,6 +105,7 @@ export type LoadedGlobalConfig = {
 
 export type WatchedRepository = GlobalGrovieConfig["watchedRepositories"][number];
 export type StateRepoConfig = NonNullable<GlobalGrovieConfig["stateRepo"]>;
+export type GlobalAgentConfig = GlobalGrovieConfig["agents"][number];
 
 export function getConfigPath(cwd: string): string {
   return join(cwd, CONFIG_FILE_NAME);
@@ -204,6 +219,30 @@ export function saveGlobalConfig(root: string, config: GlobalGrovieConfig): stri
   return configPath;
 }
 
+export function resolveConfiguredAgents(config: GlobalGrovieConfig, machineId: string): AgentMetadata[] {
+  const agents = config.agents.map((agent) => ({
+    agentId: buildAgentId(agent.name, machineId),
+    name: slugifyIdentityPart(agent.name),
+    machineId: slugifyIdentityPart(machineId),
+    runtime: agent.runtime,
+    instructions: agent.instructions,
+    model: agent.model,
+    args: agent.args,
+    envKeys: agent.envKeys,
+  }));
+  const seen = new Set<string>();
+
+  for (const agent of agents) {
+    if (seen.has(agent.agentId)) {
+      throw new Error(`Duplicate local agent id ${agent.agentId}. Agent names must be unique after normalization.`);
+    }
+
+    seen.add(agent.agentId);
+  }
+
+  return agents;
+}
+
 export function addWatchedRepository(
   config: GlobalGrovieConfig,
   watchedRepository: WatchedRepository,
@@ -305,6 +344,7 @@ export function defaultConfig(): GrovieConfig {
 export function defaultGlobalConfig(): GlobalGrovieConfig {
   return {
     version: 1,
+    agents: [],
     watchedRepositories: [],
     adminConsole: {
       enabled: false,
@@ -344,6 +384,39 @@ safety:
 }
 
 export function renderGlobalConfig(config: GlobalGrovieConfig): string {
+  const agents = config.agents.length === 0
+    ? "agents: []"
+    : [
+      "agents:",
+      config.agents
+        .map((agent) => {
+          const lines = [
+            `  - name: ${agent.name}`,
+            `    runtime: ${agent.runtime}`,
+          ];
+
+          if (agent.instructions !== undefined) {
+            lines.push(`    instructions: ${agent.instructions}`);
+          }
+
+          if (agent.model !== undefined) {
+            lines.push(`    model: ${agent.model}`);
+          }
+
+          if (agent.args.length > 0) {
+            lines.push("    args:");
+            lines.push(...agent.args.map((arg) => `      - ${arg}`));
+          }
+
+          if (agent.envKeys.length > 0) {
+            lines.push("    envKeys:");
+            lines.push(...agent.envKeys.map((envKey) => `      - ${envKey}`));
+          }
+
+          return lines.join("\n");
+        })
+        .join("\n"),
+    ].join("\n");
   const watchedRepositories = config.watchedRepositories.length === 0
     ? "watchedRepositories: []"
     : [
@@ -376,6 +449,7 @@ export function renderGlobalConfig(config: GlobalGrovieConfig): string {
   return `# Grovie global worker configuration.
 # This file schedules repositories for the local daemon. It is not a security allowlist.
 version: 1
+${agents}
 ${watchedRepositories}
 ${stateRepo}# Optional state repo sync is for observability and recovery only.
 # Redaction is best-effort and is not a security boundary.

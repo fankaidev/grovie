@@ -3,14 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { RepositoryFileResult } from "./config.js";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
-import type { AgentMetadata } from "./identity.js";
 
 export type LocalStatePaths = {
   root: string;
   reposDir: string;
   worktreesDir: string;
   runsDir: string;
-  agentsDir: string;
   locksDir: string;
   requestsDir: string;
   sessionsDir: string;
@@ -133,17 +131,10 @@ export class LocalState {
     mkdirSync(this.paths.reposDir, { recursive: true });
     mkdirSync(this.paths.worktreesDir, { recursive: true });
     mkdirSync(this.paths.runsDir, { recursive: true });
-    mkdirSync(this.paths.agentsDir, { recursive: true });
     mkdirSync(this.paths.locksDir, { recursive: true });
     mkdirSync(this.paths.requestsDir, { recursive: true });
     mkdirSync(this.paths.sessionsDir, { recursive: true });
   }
-
-  registerAgent(metadata: AgentMetadata): void {
-    this.ensureBaseDirectories();
-    writeJsonFile(join(this.paths.agentsDir, `${sanitizePathPart(metadata.agentId)}.json`), metadata);
-  }
-
   acquireDaemonLock(machineId: string, now = new Date()): LockResult<DaemonLock> {
     this.ensureBaseDirectories();
     const path = join(this.paths.locksDir, `daemon-${sanitizePathPart(machineId)}.json`);
@@ -777,7 +768,6 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
     reposDir: overrides.reposDir ?? join(root, "repos"),
     worktreesDir: overrides.worktreesDir ?? join(root, "worktrees"),
     runsDir: overrides.runsDir ?? join(root, "runs"),
-    agentsDir: overrides.agentsDir ?? join(root, "agents"),
     locksDir: overrides.locksDir ?? join(root, "locks"),
     requestsDir: overrides.requestsDir ?? join(root, "requests"),
     sessionsDir: overrides.sessionsDir ?? join(root, "sessions"),

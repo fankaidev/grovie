@@ -16,7 +16,7 @@ import {
   type GitHubGateway,
   type IssueReference,
 } from "./github.js";
-import { resolveLocalIdentity } from "./identity.js";
+import { type AgentMetadata, resolveLocalIdentity } from "./identity.js";
 import type { DaemonLock, ExecutionLock } from "./local-state.js";
 import { getIssueActivity, inspectQueue, renderSkippedQueueSummary, selectNextRunnableCandidate, type IssueActivity } from "./queue.js";
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
@@ -34,6 +34,7 @@ export type DaemonInput = {
   runtime?: AgentRuntime;
   localState?: RunLocalState;
   stateRepo?: StateRepoConfig;
+  localAgents?: AgentMetadata[];
   once: boolean;
   workerId?: string;
   pollIntervalMs?: number;
@@ -62,8 +63,15 @@ type DaemonCycleResult = RunIssueResult & {
 };
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
+export const NO_LOCAL_AGENTS_MESSAGE = "No local agents are configured. Add agents to the global Grovie config before starting the daemon.";
 
 export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
+  const localAgentError = validateLocalAgents(input);
+
+  if (localAgentError !== undefined) {
+    return localAgentError;
+  }
+
   const daemonLockResult = acquireDaemonLock(input);
 
   if (!daemonLockResult.ok) {
@@ -104,6 +112,12 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
 }
 
 export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput): Promise<RunIssueResult> {
+  const localAgentError = validateLocalAgents(input);
+
+  if (localAgentError !== undefined) {
+    return localAgentError;
+  }
+
   const daemonLockResult = acquireDaemonLock(input);
 
   if (!daemonLockResult.ok) {
@@ -155,6 +169,7 @@ export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput
 async function startDaemonAdminConsole(input: MultiRepositoryDaemonInput | DaemonInput): Promise<StartedAdminConsole | undefined> {
   const config = input.adminConsole ?? resolveAdminConsoleConfig({
     version: 1,
+    agents: [],
     watchedRepositories: [],
     adminConsole: {
       enabled: false,
@@ -256,7 +271,16 @@ function toRunIssueResult(result: DaemonCycleResult): RunIssueResult {
 export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleResult> {
   const now = input.now ?? (() => new Date());
   const identity = resolveLocalIdentity();
-  input.localState?.registerAgent?.(identity.defaultAgent);
+  const localAgents = input.localAgents ?? [];
+
+  if (input.localAgents !== undefined && localAgents.length === 0) {
+    return {
+      exitCode: 1,
+      processed: false,
+      stderr: NO_LOCAL_AGENTS_MESSAGE,
+    };
+  }
+
   const issueRunner = input.issueRunner ?? runIssueAsync;
   const runtimeAvailability = input.runtime?.checkAvailability();
 
@@ -343,7 +367,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     return claimAndRun({
       ...input,
       issueReference: candidate.issueReference,
-      workerId: candidate.agentId ?? input.workerId ?? `default@${identity.machineId}`,
+      workerId: candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId,
       issueActivity: candidate.activity,
       now,
       issueRunner,
@@ -557,6 +581,17 @@ function acquireDaemonLock(input: Pick<DaemonInput, "localState" | "now">) {
     ok: true as const,
     lock: undefined,
   };
+}
+
+function validateLocalAgents(input: Pick<DaemonInput, "localAgents">): RunIssueResult | undefined {
+  if (input.localAgents !== undefined && input.localAgents.length === 0) {
+    return {
+      exitCode: 1,
+      stderr: NO_LOCAL_AGENTS_MESSAGE,
+    };
+  }
+
+  return undefined;
 }
 
 function releaseDaemonLock(input: Pick<DaemonInput, "localState">, lock: DaemonLock | undefined): void {

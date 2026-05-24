@@ -1,10 +1,11 @@
 import { hostname } from "node:os";
+import type { RuntimeName } from "./runtime.js";
 
 export type AgentMetadata = {
   agentId: string;
   name: string;
   machineId: string;
-  runtime: "codex";
+  runtime: RuntimeName;
   instructions?: string;
   model?: string;
   args: string[];
@@ -13,7 +14,6 @@ export type AgentMetadata = {
 
 export type LocalIdentity = {
   machineId: string;
-  defaultAgent: AgentMetadata;
 };
 
 export function slugifyIdentityPart(value: string): string {
@@ -48,22 +48,10 @@ export function buildAgentId(agentName: string, machineId: string): string {
   return `${agentSlug}@${machineSlug}`;
 }
 
-export function buildDefaultCodexAgent(machineId: string): AgentMetadata {
-  return {
-    agentId: buildAgentId("default", machineId),
-    name: "default",
-    machineId: slugifyIdentityPart(machineId),
-    runtime: "codex",
-    args: [],
-    envKeys: ["OPENAI_API_KEY"],
-  };
-}
-
 export function resolveLocalIdentity(hostnameValue = hostname()): LocalIdentity {
   const machineId = resolveMachineId(hostnameValue);
 
   return {
     machineId,
-    defaultAgent: buildDefaultCodexAgent(machineId),
   };
 }

@@ -68,7 +68,7 @@ describe("runDaemonCycle", () => {
     ]);
   });
 
-  it("[UC-WORKER-01-S04] uses the default local agent id as the daemon worker id", async () => {
+  it("[UC-WORKER-01-S04] uses the assigned local agent id as the daemon worker id", async () => {
     const github = new FakeGitHub([fakeIssue()]);
     const machineId = resolveMachineId(hostname());
 

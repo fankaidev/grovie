@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
 import { saveGlobalConfig } from "../src/config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "../src/daemon-lifecycle.js";
-import { type AgentMetadata, resolveMachineId } from "../src/identity.js";
+import { resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
 import type { HandledCursor, LocalStatePaths, PreparedRun, RunRequest } from "../src/local-state.js";
@@ -100,13 +100,14 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-01-S04] validates the default local agent through doctor", () => {
+  it("[UC-WORKER-01-S04] reports explicitly configured local agents through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
 
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
     const machineId = resolveMachineId(hostname());
+    configureLocalAgent(localState);
 
     expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState })).toEqual({
       exitCode: 0,
@@ -116,21 +117,13 @@ describe("CLI command registration", () => {
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
-        `Default agent: default@${machineId} (codex)`,
+        `Configured agents: coder@${machineId} (codex)`,
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
         "Codex: available (codex-cli 0.133.0).",
       ].join("\n"),
     });
-    expect(localState.registeredAgents).toEqual([
-      expect.objectContaining({
-        agentId: `default@${machineId}`,
-        machineId,
-        runtime: "codex",
-        envKeys: ["OPENAI_API_KEY"],
-      }),
-    ]);
   });
 
   it("[UC-STATE-REPO-01-S01] configures a private default state repository through state init", () => {
@@ -196,7 +189,7 @@ describe("CLI command registration", () => {
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
-        `Default agent: default@${machineId} (codex)`,
+        "Configured agents: none",
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
@@ -245,6 +238,7 @@ describe("CLI command registration", () => {
     const localState = new FakeLocalState(globalRoot);
     saveGlobalConfig(globalRoot, {
       version: 1,
+      agents: [],
       watchedRepositories: [{ repository: "fankaidev/grovie" }],
       adminConsole: {
         enabled: true,
@@ -691,10 +685,11 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-01-S05] runs one daemon polling cycle from global watched repositories and records default agent metadata", async () => {
+  it("[UC-WORKER-01-S05] runs one daemon polling cycle from global watched repositories with explicit agent config", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
+    configureLocalAgent(localState);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
     expect(
@@ -722,13 +717,6 @@ describe("CLI command registration", () => {
         "No queued issues found for fankaidev/grovie with label grovie.",
       ].join("\n"),
     });
-    expect(localState.registeredAgents).toEqual([
-      expect.objectContaining({
-        agentId: expect.stringMatching(/^default@.+/),
-        runtime: "codex",
-        envKeys: ["OPENAI_API_KEY"],
-      }),
-    ]);
   });
 
   it("[UC-WORKER-05-S01] [UC-WORKER-05-S03] lists global watched assigned issues in daemon pick order", async () => {
@@ -1117,6 +1105,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
+    configureLocalAgent(localState);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
     expect(
@@ -1150,6 +1139,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
+    configureLocalAgent(localState);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
     expect(
@@ -1179,9 +1169,30 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-WORKER-02-S07] exits clearly when the daemon has no configured local agents", async () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    writeInvalidPolicyConfig(cwd);
+    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+
+    expect(
+      await runCliAsync(["daemon", "run", "--once"], {
+        cwd,
+        localState,
+        github: fakeGitHubGateway(),
+        runtime: fakeRuntime(),
+      }),
+    ).toEqual({
+      exitCode: 1,
+      stderr: "No local agents are configured. Add agents to the global Grovie config before starting the daemon.",
+      stdout: undefined,
+    });
+  });
+
   it("[UC-WORKER-06-S02] starts a detached background daemon and reports local state", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
+    configureLocalAgent(localState);
     const daemonLifecycle = fakeDaemonLifecycle({
       start: ({ root, args }) => {
         expect(root).toBe(localState.paths.root);
@@ -1207,10 +1218,32 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-WORKER-02-S07] refuses detached daemon start when no local agents are configured", () => {
+    const localState = new FakeLocalState(createTmpDir());
+    const daemonLifecycle = fakeDaemonLifecycle({
+      start: () => {
+        throw new Error("daemon start was not expected");
+      },
+    });
+
+    expect(runCli(["daemon", "start"], { localState, daemonLifecycle })).toEqual({
+      exitCode: 1,
+      stderr: "No local agents are configured. Add agents to the global Grovie config before starting the daemon.",
+    });
+  });
+
   it("[UC-ADMIN-01-S04] fails detached daemon start clearly when the enabled admin console port is unavailable", async () => {
     const localState = new FakeLocalState(createTmpDir());
     saveGlobalConfig(localState.paths.root, {
       version: 1,
+      agents: [
+        {
+          name: "coder",
+          runtime: "codex",
+          args: [],
+          envKeys: ["OPENAI_API_KEY"],
+        },
+      ],
       watchedRepositories: [],
       adminConsole: {
         enabled: true,
@@ -1239,6 +1272,7 @@ describe("CLI command registration", () => {
 
   it("[UC-WORKER-06-S02] refuses to start another live background daemon", () => {
     const localState = new FakeLocalState(createTmpDir());
+    configureLocalAgent(localState);
     const daemonLifecycle = fakeDaemonLifecycle({
       start: () => ({
         ok: false,
@@ -1369,6 +1403,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
+    configureLocalAgent(localState);
 
     expect(
       await runCliAsync(["daemon", "--repo", "fankaidev/other", "--label", "ready", "--once"], {
@@ -1539,9 +1574,26 @@ function writeDaemonLogs(root: string, input: { stdout: string; stderr: string }
   writeFileSync(join(daemonDir, "stderr.log"), input.stderr, "utf8");
 }
 
+function configureLocalAgent(localState: FakeLocalState): void {
+  saveGlobalConfig(localState.paths.root, {
+    version: 1,
+    agents: [
+      {
+        name: "coder",
+        runtime: "codex",
+        args: [],
+        envKeys: ["OPENAI_API_KEY"],
+      },
+    ],
+    watchedRepositories: [],
+    adminConsole: {
+      enabled: false,
+    },
+  });
+}
+
 class FakeLocalState implements RunLocalState {
   readonly paths: LocalStatePaths;
-  readonly registeredAgents: AgentMetadata[] = [];
   readonly requests: RunRequest[] = [];
   readonly run: PreparedRun = {
     sessionId: "fankaidev-grovie-issue-2-codex",
@@ -1568,7 +1620,6 @@ class FakeLocalState implements RunLocalState {
       reposDir: `${root}/repos`,
       worktreesDir: `${root}/worktrees`,
       runsDir: `${root}/runs`,
-      agentsDir: `${root}/agents`,
       locksDir: `${root}/locks`,
       requestsDir: `${root}/requests`,
       sessionsDir: `${root}/sessions`,
@@ -1584,10 +1635,6 @@ class FakeLocalState implements RunLocalState {
   }
 
   appendEvent(): void {}
-
-  registerAgent(metadata: AgentMetadata): void {
-    this.registeredAgents.push(metadata);
-  }
 
   isDaemonRunning(): boolean {
     return this.options.daemonRunning === true;

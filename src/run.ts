@@ -15,7 +15,7 @@ import {
   type GitHubRelatedPullRequest,
   type IssueReference,
 } from "./github.js";
-import { resolveLocalIdentity, type AgentMetadata } from "./identity.js";
+import { resolveLocalIdentity } from "./identity.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type ResumableRun, type RunCancellation, type RunRequest } from "./local-state.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { createRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeName, type RuntimeRunResult } from "./runtime.js";
@@ -59,7 +59,6 @@ export type RunClaimedIssueAsyncInput = RunIssueAsyncInput & {
 
 export type RunLocalState = {
   getPaths(): LocalStatePaths;
-  registerAgent?(metadata: AgentMetadata): void;
   readRepositoryFile?(input: { repository: string; path: string }): RepositoryFileResult;
   acquireDaemonLock?(machineId: string, now?: Date): LockResult<DaemonLock>;
   releaseDaemonLock?(lock: DaemonLock): void;

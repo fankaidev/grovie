@@ -30,6 +30,7 @@ describe("admin console server", () => {
   it("[UC-ADMIN-01-S02] resolves the enabled local admin console default bind address and port", () => {
     expect(resolveAdminConsoleConfig({
       version: 1,
+      agents: [],
       watchedRepositories: [],
       adminConsole: {
         enabled: true,
@@ -128,6 +129,7 @@ describe("admin console server", () => {
     const root = createTmpDir();
     saveGlobalConfig(root, {
       version: 1,
+      agents: [],
       watchedRepositories: [
         {
           repository: "fankaidev/grovie",
@@ -161,6 +163,7 @@ describe("admin console server", () => {
     const root = createTmpDir();
     saveGlobalConfig(root, {
       version: 1,
+      agents: [],
       watchedRepositories: [{ repository: "fankaidev/grovie", label: "ready" }],
       adminConsole: { enabled: true },
     });
@@ -261,6 +264,7 @@ describe("admin console server", () => {
     const root = createTmpDir();
     saveGlobalConfig(root, {
       version: 1,
+      agents: [],
       watchedRepositories: [{ repository: "fankaidev/grovie", label: "ready" }],
       adminConsole: { enabled: true },
     });
@@ -572,7 +576,6 @@ function pathsForRoot(root: string): LocalStatePaths {
     reposDir: join(root, "repos"),
     worktreesDir: join(root, "worktrees"),
     runsDir: join(root, "runs"),
-    agentsDir: join(root, "agents"),
     locksDir: join(root, "locks"),
     requestsDir: join(root, "requests"),
     sessionsDir: join(root, "sessions"),

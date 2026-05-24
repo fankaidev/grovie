@@ -14,7 +14,7 @@
 
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-EXECUTION-03-S01 | P0 | A daemon with an available Codex CLI records the runtime as available for the default local agent. |
+| UC-EXECUTION-03-S01 | P0 | A daemon with an available Codex CLI records the runtime as available for an explicitly configured local agent. |
 | UC-EXECUTION-03-S02 | P0 | A daemon without an available Codex CLI marks the runtime unavailable and does not start assigned runs for that agent. |
 | UC-EXECUTION-03-S03 | P0 | A run starts Codex in the agent session worktree with a prompt that separates trusted Grovie context from issue body and comments. |
 | UC-EXECUTION-03-S04 | P0 | A running Codex process streams stdout and stderr to local log files before the process exits. |
