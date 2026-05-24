@@ -17,5 +17,5 @@
 | UC-ADMIN-04-S01 | P2 | `GET /api/runs/:runId/logs/stdout` returns the local stdout log for a run. |
 | UC-ADMIN-04-S02 | P2 | `GET /api/runs/:runId/logs/stderr` returns the local stderr log for a run. |
 | UC-ADMIN-04-S03 | P2 | `GET /api/runs/:runId/logs/stream?stream=stdout|stderr` keeps a Server-Sent Events connection open and sends appended log output for the selected stream. |
-| UC-ADMIN-04-S04 | P2 | The run detail view keeps stdout and stderr previews distinguishable and renders basic ANSI colors. |
+| UC-ADMIN-04-S04 | P2 | The React run detail route keeps stdout and stderr previews distinguishable and renders basic ANSI colors. |
 | UC-ADMIN-04-S05 | P2 | Missing runs and invalid streams return clear errors. |
