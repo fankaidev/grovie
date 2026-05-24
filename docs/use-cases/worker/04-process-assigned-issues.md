@@ -31,3 +31,4 @@
 | UC-WORKER-04-S13 | P1 | An invalid watched repository `.grovie.yml` prevents runs for that repository with a clear error while the daemon can continue checking unrelated watched repositories. |
 | UC-WORKER-04-S14 | P0 | A daemon cycle skips an issue assigned to an agent id that matches the machine but is not configured locally. |
 | UC-WORKER-04-S15 | P1 | A long-running daemon cycle reads repository events, skips queue inspection when no relevant events changed, resolves pull request events to related issues through GitHub with a local cache, and periodically falls back to a full queue scan. |
+| UC-WORKER-04-S16 | P1 | A daemon cycle reruns a handled issue when a linked open pull request's merge state changes to `DIRTY` or otherwise requires branch update work, and records daemon activity explaining the mergeability trigger. |

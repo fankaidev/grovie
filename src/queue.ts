@@ -47,6 +47,13 @@ export type QueueInspectionResult = {
 export type IssueActivity = {
   timestamp: string;
   issueFingerprint: string;
+  trigger?: IssueActivityTrigger;
+};
+
+export type IssueActivityTrigger = {
+  kind: "pull-request-mergeability";
+  pullRequestNumber: number;
+  mergeStateStatus: string;
 };
 
 export type IssuePriority = "p0" | "p1" | "p2" | "none";
@@ -327,6 +334,7 @@ function evaluateActivityCandidates(input: {
 }): QueueCandidate[] {
   const priority = getIssuePriority(input.issue.labels);
   const activity = getIssueActivity(input.issue, input.relatedPullRequests);
+  const mergeabilityTrigger = findPullRequestMergeabilityTrigger(input.relatedPullRequests);
 
   return input.agentIds.map((agentId) => {
     const handledCursor = input.localState?.readHandledCursor?.({
@@ -339,6 +347,13 @@ function evaluateActivityCandidates(input: {
       return skippedCandidate(input, priority, activity, agentId, "no unhandled activity");
     }
 
+    const candidateActivity = mergeabilityTrigger === undefined
+      ? activity
+      : {
+        ...activity,
+        trigger: mergeabilityTrigger,
+      };
+
     return {
       repository: input.repository,
       issueReference: input.issue.reference,
@@ -346,7 +361,7 @@ function evaluateActivityCandidates(input: {
       agentId,
       status: "runnable",
       priority,
-      activity,
+      activity: candidateActivity,
     };
   });
 }
@@ -429,6 +444,7 @@ function getIssueFingerprint(issue: GitHubIssue, relatedPullRequests: GitHubRela
         baseRef: pullRequest.baseRef,
         headRef: pullRequest.headRef,
         headSha: pullRequest.headSha,
+        mergeStateStatus: pullRequest.mergeStateStatus,
         updatedAt: pullRequest.updatedAt,
         comments: pullRequest.comments.map((comment) => ({
           id: comment.id,
@@ -457,6 +473,27 @@ function getPullRequestActivityTimestamps(pullRequest: GitHubRelatedPullRequest)
     ...pullRequest.reviewComments.map((comment) => comment.updatedAt),
     ...pullRequest.reviews.map((review) => review.submittedAt),
   ];
+}
+
+function findPullRequestMergeabilityTrigger(relatedPullRequests: GitHubRelatedPullRequest[]): IssueActivityTrigger | undefined {
+  const pullRequest = relatedPullRequests
+    .filter((candidate) => candidate.state === "open")
+    .find((candidate) => requiresBranchUpdate(candidate.mergeStateStatus));
+
+  if (pullRequest === undefined || pullRequest.mergeStateStatus === undefined) {
+    return undefined;
+  }
+
+  return {
+    kind: "pull-request-mergeability",
+    pullRequestNumber: pullRequest.number,
+    mergeStateStatus: pullRequest.mergeStateStatus,
+  };
+}
+
+function requiresBranchUpdate(mergeStateStatus: string | undefined): boolean {
+  const normalized = mergeStateStatus?.toUpperCase();
+  return normalized === "DIRTY" || normalized === "BEHIND";
 }
 
 export function renderQueueInspection(results: QueueInspectionResult[], title = "grovie queue list"): string {

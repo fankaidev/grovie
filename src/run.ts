@@ -445,6 +445,7 @@ function buildTaskContext(input: {
       number: pullRequest.number,
       title: pullRequest.title,
       state: pullRequest.state,
+      mergeStateStatus: pullRequest.mergeStateStatus,
       url: pullRequest.url,
       baseRef: pullRequest.baseRef,
       headRef: pullRequest.headRef,
