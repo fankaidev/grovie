@@ -163,6 +163,14 @@ pre,
   font-weight: 650;
 }
 
+.tile-icon.tone-success {
+  background: var(--success);
+}
+
+.tile-icon.tone-danger {
+  background: var(--danger);
+}
+
 .tile p,
 .tile strong,
 .panel h2,
@@ -194,8 +202,39 @@ pre,
 .panel h2 + p,
 .panel h2 + .description-list,
 .panel h2 + .link-list,
-.panel h2 + .event-list {
+.panel h2 + .event-list,
+.panel h2 + .data-table {
   margin-top: 0.75rem;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.625rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.data-table td {
+  overflow-wrap: anywhere;
+}
+
+.status-badge.compact {
+  display: inline-flex;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
 }
 
 .description-list {
