@@ -291,6 +291,49 @@ describe("runDaemonCycle", () => {
     expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
   });
 
+  it("[UC-EXECUTION-02-S13] rejects a daemon request for an unconfigured local agent before runtime start", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.enqueueRunRequest({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+      reason: "manual",
+      now: NOW,
+    });
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github: new FakeGitHub([fakeIssue()]),
+      once: true,
+      localState,
+      localAgents: [configuredCodexAgent("coder", machineId)],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: [
+        "grovie daemon",
+        "",
+        `Rejected run request 20260522T000000Z-fankaidev-grovie-issue-8-default-${machineId} for fankaidev/grovie#8: Agent default@${machineId} is not configured locally.`,
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
+  });
+
   it("[UC-WORKER-04-S03] creates one run for a locally assigned agent with unhandled activity", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
@@ -324,6 +367,48 @@ describe("runDaemonCycle", () => {
     });
     expect(runs).toHaveLength(1);
     expect(github.createdComments[0]).toContain(`- Worker: \`coder@${machineId}\``);
+  });
+
+  it("[UC-WORKER-04-S14] skips a machine-local agent label when that agent is not configured", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:default@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localAgents: [configuredCodexAgent("coder", machineId)],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: false,
+      stdout: [
+        "grovie daemon",
+        "",
+        "No queued issues found for fankaidev/grovie with label grovie.",
+        "",
+        "Skipped assigned issues:",
+        `- fankaidev/grovie#8 agent=default@${machineId} reason=agent not configured locally`,
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(github.createdComments).toEqual([]);
   });
 
   it("[UC-DAEMON-03-S02] resumes an interrupted session before polling new queue items", async () => {
@@ -378,6 +463,60 @@ describe("runDaemonCycle", () => {
       reason: "resume",
     });
     expect(readRunMetadata(localState, "old-run").status).toBe("resuming");
+  });
+
+  it("[UC-EXECUTION-02-S12] rejects a resumable run whose agent is no longer configured locally", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    writeRunMetadata(localState, "old-run", {
+      status: "interrupted",
+      resumeEligible: true,
+      runId: "old-run",
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: fakeReference(8),
+        labels: ["grovie"],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      localAgents: [configuredCodexAgent("coder", machineId)],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: [
+        "grovie daemon",
+        "",
+        `Skipped resumable run old-run for fankaidev/grovie#8: Agent default@${machineId} is not configured locally.`,
+      ].join("\n"),
+    });
+    expect(runs).toEqual([]);
+    expect(readRunMetadata(localState, "old-run")).toMatchObject({
+      status: "rejected",
+      resumeEligible: false,
+      rejectReason: `Agent default@${machineId} is not configured locally.`,
+    });
   });
 
   it("[UC-DAEMON-03-S02] leaves an interrupted run resumable when recovery cannot start", async () => {
@@ -2293,6 +2432,17 @@ function createTmpDir(): string {
   const dir = join(tmpdir(), `grovie-daemon-${Math.random().toString(16).slice(2)}`);
   tmpDirs.push(dir);
   return dir;
+}
+
+function configuredCodexAgent(name: string, machineId: string) {
+  return {
+    agentId: `${name}@${machineId}`,
+    name,
+    machineId,
+    runtime: "codex" as const,
+    args: [],
+    envKeys: ["OPENAI_API_KEY"],
+  };
 }
 
 function writeRunMetadata(

@@ -71,6 +71,7 @@ export type RunLocalState = {
   interruptActiveRuns?(input: { now?: Date; reason: string }): ResumableRun[];
   takeResumableRun?(input: { repository: string; now?: Date }): ResumableRun | undefined;
   markRunResuming?(input: { runId: string; now?: Date; reason: string }): void;
+  markRunRejected?(input: { runId: string; now?: Date; reason: string }): void;
   requestRunCancellation?(input: { runId: string; reason?: string; now?: Date }): RunCancellation;
   isRunCancellationRequested?(runId: string): boolean;
   readHandledCursor?(input: { repository: string; issueNumber: number; agentId: string }): HandledCursor | undefined;

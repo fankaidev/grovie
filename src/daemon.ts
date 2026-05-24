@@ -302,6 +302,25 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   });
 
   if (resumableRun !== undefined) {
+    if (!isConfiguredLocalAgent(input, resumableRun.agentId)) {
+      const reason = `Agent ${resumableRun.agentId} is not configured locally.`;
+      input.localState?.markRunRejected?.({
+        runId: resumableRun.runId,
+        now: now(),
+        reason,
+      });
+
+      return {
+        exitCode: 0,
+        processed: true,
+        stdout: [
+          "grovie daemon",
+          "",
+          `Skipped resumable run ${resumableRun.runId} for ${input.repository}#${resumableRun.issueNumber}: ${reason}`,
+        ].join("\n"),
+      };
+    }
+
     const result = await runRequestedIssue({
       ...input,
       issueNumber: resumableRun.issueNumber,
@@ -328,6 +347,28 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   const request = input.localState?.takeRunRequest?.(input.repository);
 
   if (request !== undefined) {
+    if (!isConfiguredLocalAgent(input, request.agentId)) {
+      const reason = `Agent ${request.agentId} is not configured locally.`;
+
+      if (request.sourceRunId !== undefined) {
+        input.localState?.markRunRejected?.({
+          runId: request.sourceRunId,
+          now: now(),
+          reason,
+        });
+      }
+
+      return {
+        exitCode: 0,
+        processed: true,
+        stdout: [
+          "grovie daemon",
+          "",
+          `Rejected run request ${request.id} for ${input.repository}#${request.issueNumber}: ${reason}`,
+        ].join("\n"),
+      };
+    }
+
     return runRequestedIssue({
       ...input,
       issueNumber: request.issueNumber,
@@ -350,6 +391,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     ],
     github: input.github,
     machineId: identity.machineId,
+    configuredAgentIds: input.localAgents?.map((agent) => agent.agentId),
     localState: input.localState,
   });
 
@@ -592,6 +634,10 @@ function validateLocalAgents(input: Pick<DaemonInput, "localAgents">): RunIssueR
   }
 
   return undefined;
+}
+
+function isConfiguredLocalAgent(input: Pick<DaemonInput, "localAgents">, agentId: string): boolean {
+  return input.localAgents === undefined || input.localAgents.some((agent) => agent.agentId === agentId);
 }
 
 function releaseDaemonLock(input: Pick<DaemonInput, "localState">, lock: DaemonLock | undefined): void {
