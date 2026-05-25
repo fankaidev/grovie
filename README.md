@@ -1,5 +1,9 @@
 # Grovie
 
+[![CI](https://github.com/fankaidev/grovie/actions/workflows/ci.yml/badge.svg)](https://github.com/fankaidev/grovie/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/%40fankaidev%2Fgrovie.svg)](https://www.npmjs.com/package/@fankaidev/grovie)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Grovie is an open-source, local-first workspace for GitHub-native multi-agent workflows.
 
 It lets you coordinate AI teammates and other local agents without a hosted platform. GitHub stays the control plane for issues, labels, comments, branches, pull requests, reviews, and CI; your local machine stays the executor for agents, worktrees, credentials, and logs.
