@@ -121,6 +121,7 @@ Grovie is a local executor, so it runs with your local filesystem, GitHub creden
 - `grovie daemon` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
+- It passes runtime child processes only a small baseline environment plus variables explicitly listed in the configured agent `envKeys`.
 - It refuses config that enables default-branch pushes.
 - It publishes code changes through a generated Grovie branch.
 - It excludes `.grovie/` handoff files from commits and unstages them before commit.
