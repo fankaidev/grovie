@@ -1,3 +1,4 @@
+import type { AgentHealth } from "./agent-health.js";
 import type { GlobalGrovieConfig, LoadedGlobalConfig, WatchedRepository } from "./config.js";
 import type { DaemonActivityEntry } from "./daemon-activity.js";
 import type { DaemonLifecycleStatus } from "./daemon-lifecycle.js";
@@ -32,6 +33,7 @@ export type AdminApiHealthResponse = {
   ok: true;
   daemon: AdminApiDaemonStatus;
   runtime: RuntimeAvailability;
+  agents: AgentHealth[];
 };
 
 export type AdminApiConfigResponse = {

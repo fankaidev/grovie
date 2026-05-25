@@ -40,6 +40,36 @@ describe("admin web home route", () => {
             available: true,
             message: "codex is available.",
           },
+          agents: [
+            {
+              agentId: "codex@kai-mini",
+              name: "codex",
+              machineId: "kai-mini",
+              runtime: "codex",
+              args: [],
+              envKeys: [],
+              availability: {
+                runtime: "codex",
+                command: "codex",
+                available: true,
+                message: "codex is available.",
+              },
+            },
+            {
+              agentId: "pi@kai-mini",
+              name: "pi",
+              machineId: "kai-mini",
+              runtime: "pi",
+              args: [],
+              envKeys: [],
+              availability: {
+                runtime: "pi",
+                command: "pi",
+                available: false,
+                message: "pi command not found.",
+              },
+            },
+          ],
         });
       }
 
@@ -139,6 +169,36 @@ describe("admin web home route", () => {
               available: true,
               message: "codex is available.",
             },
+            agents: [
+              {
+                agentId: "codex@kai-mini",
+                name: "codex",
+                machineId: "kai-mini",
+                runtime: "codex",
+                args: [],
+                envKeys: [],
+                availability: {
+                  runtime: "codex",
+                  command: "codex",
+                  available: true,
+                  message: "codex is available.",
+                },
+              },
+              {
+                agentId: "pi@kai-mini",
+                name: "pi",
+                machineId: "kai-mini",
+                runtime: "pi",
+                args: [],
+                envKeys: [],
+                availability: {
+                  runtime: "pi",
+                  command: "pi",
+                  available: false,
+                  message: "pi command not found.",
+                },
+              },
+            ],
           },
           config: {
             path: "/state/config.yml",
@@ -179,6 +239,11 @@ describe("admin web home route", () => {
 
     expect(html).toContain("running pid 321");
     expect(html).toContain("codex: available");
+    expect(html).toContain("2 configured, 1 unavailable");
+    expect(html).toContain("codex@kai-mini");
+    expect(html).toContain("command");
+    expect(html).toContain("pi");
+    expect(html).toContain("pi command not found.");
     expect(html).toContain("/state/config.yml");
     expect(html).toContain("/state/daemon/stdout.log");
     expect(html).toContain("fankaidev/grovie");

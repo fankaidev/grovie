@@ -15,7 +15,7 @@ import { saveGlobalConfig } from "../src/config.js";
 import { appendDaemonActivity } from "../src/daemon-activity.js";
 import type { DaemonLifecycle } from "../src/daemon-lifecycle.js";
 import type { LocalStatePaths } from "../src/local-state.js";
-import type { AgentRuntime } from "../src/runtime.js";
+import type { AgentRuntime, RuntimeName } from "../src/runtime.js";
 import type {
   AdminApiCancelRunResponse,
   AdminApiConfigResponse,
@@ -146,7 +146,43 @@ describe("admin console server", () => {
         runtime: "codex",
         available: true,
       },
+      agents: [],
     });
+  });
+
+  it("[UC-ADMIN-02-S01] exposes configured agent availability through the health API", async () => {
+    const root = createTmpDir();
+    saveGlobalConfig(root, {
+      version: 1,
+      agents: [
+        { name: "codex", runtime: "codex", args: [], envKeys: [] },
+        { name: "pi", runtime: "pi", args: [], envKeys: [] },
+      ],
+      watchedRepositories: [],
+      adminConsole: { enabled: true },
+    });
+    const started = await startTestServer(root, {}, join(root, "missing-admin-web"), fakeRuntimeAvailability);
+
+    const payload = await (await fetch(`${started.url}/api/health`)).json() as AdminApiHealthResponse;
+
+    expect(payload.agents).toMatchObject([
+      {
+        agentId: expect.stringMatching(/^codex@/),
+        runtime: "codex",
+        availability: {
+          available: true,
+          message: "available (codex-cli 0.133.0)",
+        },
+      },
+      {
+        agentId: expect.stringMatching(/^pi@/),
+        runtime: "pi",
+        availability: {
+          available: false,
+          message: "pi command not found",
+        },
+      },
+    ]);
   });
 
   it("[UC-ADMIN-02-S01] does not expose daemon verification tokens through the health API", async () => {
@@ -356,11 +392,14 @@ describe("admin console server", () => {
     });
   });
 
-  it("[UC-ADMIN-03-S01] serves a local admin home view with daemon, runtime, repositories, and recent runs", async () => {
+  it("[UC-ADMIN-03-S01] serves a local admin home view with daemon, runtime, agents, repositories, and recent runs", async () => {
     const root = createTmpDir();
     saveGlobalConfig(root, {
       version: 1,
-      agents: [],
+      agents: [
+        { name: "codex", runtime: "codex", args: [], envKeys: [] },
+        { name: "pi", runtime: "pi", args: [], envKeys: [] },
+      ],
       watchedRepositories: [{ repository: "fankaidev/grovie", label: "ready" }],
       adminConsole: { enabled: true },
     });
@@ -374,7 +413,7 @@ describe("admin console server", () => {
       },
       events: [event("2026-05-23T10:00:00.000Z", "runtime.started", { runtime: "codex" })],
     });
-    const started = await startTestServer(root);
+    const started = await startTestServer(root, {}, join(root, "missing-admin-web"), fakeRuntimeAvailability);
     const html = await (await fetch(`${started.url}/`)).text();
 
     expect(html).toContain("Grovie Admin Console");
@@ -382,6 +421,8 @@ describe("admin console server", () => {
     expect(html).toContain(root);
     expect(html).toContain("Daemon");
     expect(html).toContain("codex");
+    expect(html).toContain("codex@");
+    expect(html).toContain("pi command not found");
     expect(html).toContain("fankaidev/grovie label=ready");
     expect(html).toContain("run-1");
     expect(html).toContain("/runs/run-1");
@@ -824,6 +865,7 @@ async function startTestServer(
   root = createTmpDir(),
   daemonLifecycleOverrides: Partial<DaemonLifecycle> = {},
   adminWebAssetsDir = join(root, "missing-admin-web"),
+  runtimeAvailabilityChecker?: (runtime: RuntimeName) => ReturnType<AgentRuntime["checkAvailability"]>,
 ): Promise<StartedAdminConsole> {
   const port = await getAvailablePort();
   const started = await startAdminConsoleServer({
@@ -836,11 +878,35 @@ async function startTestServer(
       paths: pathsForRoot(root),
       daemonLifecycle: fakeDaemonLifecycle(root, daemonLifecycleOverrides),
       runtime: fakeRuntime(),
+      runtimeAvailabilityChecker,
       adminWebAssetsDir,
     }),
   });
   servers.push(started);
   return started;
+}
+
+function fakeRuntimeAvailability(runtime: RuntimeName): ReturnType<AgentRuntime["checkAvailability"]> {
+  if (runtime === "pi") {
+    return {
+      runtime,
+      command: "pi",
+      available: false,
+      message: "pi command not found",
+    };
+  }
+
+  if (runtime === "claude-code") {
+    return {
+      runtime,
+      command: "claude",
+      available: true,
+      version: "2.1.142 (Claude Code)",
+      message: "available (2.1.142 (Claude Code))",
+    };
+  }
+
+  return fakeRuntime().checkAvailability();
 }
 
 function pathsForRoot(root: string): LocalStatePaths {
