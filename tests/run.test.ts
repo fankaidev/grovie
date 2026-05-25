@@ -224,6 +224,43 @@ describe("runIssue", () => {
     expect(github.comments[1]).not.toContain("- Pull request:");
   });
 
+  it("[UC-EXECUTION-05-S07] includes explicit result action and reason in visible summaries", () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+        action: "request-human",
+        reason: "The task needs a product decision before implementation.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Result action: request-human");
+    expect(result.stdout).toContain("Reason: The task needs a product decision before implementation.");
+    expect(github.comments[1]).toContain("- Result action: request-human");
+    expect(github.comments[1]).toContain("- Reason: The task needs a product decision before implementation.");
+  });
+
   it("[UC-GITHUB-01-S02] includes pull request output when result handling creates one", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();

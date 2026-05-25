@@ -386,6 +386,8 @@ function finishRun(input: {
       });
       input.localState.appendEvent(input.run, "result.handled", {
         kind: result.kind,
+        action: result.action,
+        reason: result.reason,
         pullRequestUrl: result.kind === "pull-request" ? result.pullRequest.url : undefined,
         issueCommentUrl: result.kind === "issue-comment" ? result.comment.url : undefined,
       });
@@ -683,6 +685,14 @@ function renderRunResultComment(summary: RunSummary): string {
     lines.push(`- Error: ${summarizeError(summary)}`);
   }
 
+  if (summary.result?.action !== undefined) {
+    lines.push(`- Result action: ${summary.result.action}`);
+  }
+
+  if (summary.result?.reason !== undefined) {
+    lines.push(`- Reason: ${summary.result.reason}`);
+  }
+
   if (summary.result?.kind === "no-changes") {
     lines.push("- Changes: none");
 
@@ -738,6 +748,14 @@ function renderCliRunOutput(summary: RunSummary): string {
 
   if (summary.comment !== undefined) {
     lines.push(`Comment: ${summary.comment.url}`);
+  }
+
+  if (summary.result?.action !== undefined) {
+    lines.push(`Result action: ${summary.result.action}`);
+  }
+
+  if (summary.result?.reason !== undefined) {
+    lines.push(`Reason: ${summary.result.reason}`);
   }
 
   if (summary.result?.kind === "no-changes") {
