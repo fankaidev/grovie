@@ -243,6 +243,75 @@ describe("config helpers", () => {
     expect(config).toContain("Redaction is best-effort");
   });
 
+  it("[UC-WORKER-02-S01] round-trips schema-valid global config strings through rendered YAML", () => {
+    const root = createTmpDir();
+    const rendered = renderGlobalConfig({
+      version: 1,
+      agents: [
+        {
+          name: "coder",
+          runtime: "codex",
+          instructions: "Use #tag\nKeep a: b literal.",
+          model: "gpt: 5",
+          args: ["--model", "a: b"],
+          envKeys: ["OPENAI_API_KEY", "KEY:VALUE"],
+        },
+      ],
+      watchedRepositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "ready #1",
+        },
+      ],
+      stateRepo: {
+        enabled: false,
+        repository: "fankaidev/grovie-state",
+        branch: "main: dev",
+        localPath: "/tmp/grovie/state # repo",
+        syncIntervalSeconds: 60,
+      },
+      adminConsole: {
+        enabled: true,
+        host: "127.0.0.1",
+        port: 4317,
+      },
+    });
+
+    writeFileSync(join(root, "config.yml"), rendered, "utf8");
+
+    expect(loadGlobalConfig(root).config).toEqual({
+      version: 1,
+      agents: [
+        {
+          name: "coder",
+          runtime: "codex",
+          instructions: "Use #tag\nKeep a: b literal.",
+          model: "gpt: 5",
+          args: ["--model", "a: b"],
+          envKeys: ["OPENAI_API_KEY", "KEY:VALUE"],
+        },
+      ],
+      watchedRepositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "ready #1",
+        },
+      ],
+      stateRepo: {
+        enabled: false,
+        repository: "fankaidev/grovie-state",
+        branch: "main: dev",
+        localPath: "/tmp/grovie/state # repo",
+        syncIntervalSeconds: 60,
+      },
+      adminConsole: {
+        enabled: true,
+        host: "127.0.0.1",
+        port: 4317,
+      },
+    });
+  });
+
   it("[UC-WORKER-01-S05] validates explicit global agent config without environment values", () => {
     const root = createTmpDir();
     writeFileSync(
