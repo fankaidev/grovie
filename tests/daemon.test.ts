@@ -93,6 +93,36 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
+  it("[UC-STATE-REPO-01-S07] treats disabled state repo config as absent for runtime heartbeat interval", async () => {
+    const github = new FakeGitHub([fakeIssue()]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      pollIntervalMs: 1234,
+      stateRepo: {
+        enabled: false,
+        repository: "fankaidev/grovie-state",
+        branch: "main",
+        syncIntervalSeconds: 60,
+      },
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(runs[0]?.monitor?.heartbeatIntervalMs).toBe(1234);
+  });
+
   it("[UC-WORKER-03-S05] [UC-WORKER-04-S11] reports issues assigned only to another machine as skipped", async () => {
     const github = new FakeGitHub([
       fakeIssue({

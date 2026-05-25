@@ -179,7 +179,7 @@ export async function runWithLocalExecutionLock(input: DaemonInput & {
       triggerContext: input.triggerContext,
       stateRepo: input.stateRepo,
       monitor: {
-        heartbeatIntervalMs: input.stateRepo?.syncIntervalSeconds === undefined
+        heartbeatIntervalMs: input.stateRepo?.enabled !== true
           ? input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
           : input.stateRepo.syncIntervalSeconds * 1000,
         onHeartbeat: () => undefined,

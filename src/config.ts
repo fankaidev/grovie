@@ -219,6 +219,10 @@ export function saveGlobalConfig(root: string, config: GlobalGrovieConfig): stri
   return configPath;
 }
 
+export function resolveEnabledStateRepo(config: GlobalGrovieConfig): StateRepoConfig | undefined {
+  return config.stateRepo?.enabled === true ? config.stateRepo : undefined;
+}
+
 export function resolveConfiguredAgents(config: GlobalGrovieConfig, machineId: string): AgentMetadata[] {
   const agents = config.agents.map((agent) => ({
     agentId: buildAgentId(agent.name, machineId),

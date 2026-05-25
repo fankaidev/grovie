@@ -10,6 +10,7 @@ import {
   loadRepositoryConfig,
   removeWatchedRepository,
   resolveConfiguredAgents,
+  resolveEnabledStateRepo,
   saveGlobalConfig,
 } from "../../config.js";
 import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "../../cleanup.js";
@@ -225,7 +226,7 @@ export const daemonCommand = {
             github: context.github,
             runtime: context.runtime,
             localState: context.localState,
-            stateRepo: globalConfig.config.stateRepo,
+            stateRepo: resolveEnabledStateRepo(globalConfig.config),
             localAgents,
             once: runArgs.includes("--once"),
             adminConsole: resolveAdminConsoleConfig(globalConfig.config),
@@ -247,7 +248,7 @@ export const daemonCommand = {
           github: context.github,
           runtime: context.runtime,
           localState: context.localState,
-          stateRepo: globalConfig.config.stateRepo,
+          stateRepo: resolveEnabledStateRepo(globalConfig.config),
           localAgents,
           once: runArgs.includes("--once"),
           adminConsole: resolveAdminConsoleConfig(globalConfig.config),
