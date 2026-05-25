@@ -583,7 +583,35 @@ describe("runDaemonCycle", () => {
       sourceRunId: "old-run",
       reason: "resume",
     });
-    expect(readRunMetadata(localState, "old-run").status).toBe("resuming");
+    expect(readRunMetadata(localState, "old-run")).toMatchObject({
+      status: "interrupted",
+      resumeEligible: false,
+      sessionResumingAt: NOW.toISOString(),
+    });
+    expect(readRunEvents(localState, "old-run").map((event) => event.type)).toContain("session.resuming");
+
+    const secondResult = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "unexpected second resume",
+        };
+      },
+    });
+
+    expect(secondResult.processed).toBe(true);
+    expect(runs).toHaveLength(2);
+    expect(runs[1]?.issueReference.number).toBe(9);
+    expect(runs[1]?.runRequest).toBeUndefined();
   });
 
   it("[UC-EXECUTION-02-S12] rejects a resumable run whose agent is no longer configured locally", async () => {
@@ -2714,4 +2742,11 @@ function writeRunMetadata(
 
 function readRunMetadata(localState: LocalState, runId: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(localState.getPaths().runsDir, runId, "metadata.json"), "utf8")) as Record<string, unknown>;
+}
+
+function readRunEvents(localState: LocalState, runId: string): Array<{ type?: string }> {
+  return readFileSync(join(localState.getPaths().runsDir, runId, "events.jsonl"), "utf8")
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as { type?: string });
 }

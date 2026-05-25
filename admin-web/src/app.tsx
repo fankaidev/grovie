@@ -61,7 +61,7 @@ type RunGroup = {
   latestTime: string;
 };
 
-const ACTIVE_RUN_STATUSES = new Set(["preparing", "prepared", "running", "interrupting", "resuming", "stale"]);
+const ACTIVE_RUN_STATUSES = new Set(["preparing", "prepared", "running", "interrupting", "stale"]);
 
 export function App(): ReactNode {
   const route = useMemo(() => readRoute(window.location.pathname), []);

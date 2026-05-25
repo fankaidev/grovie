@@ -76,7 +76,6 @@ const TERMINAL_STATUS_BY_EVENT: Record<string, LocalRunSummary["status"] | undef
   "run.failed": "failed",
   "run.canceled": "canceled",
   "run.interrupted": "interrupted",
-  "run.resuming": "resuming",
   "run.rejected": "rejected",
 };
 
@@ -159,7 +158,6 @@ export function renderLocalStatusOverview(input: LocalStatusOverviewInput): stri
     || run.status === "preparing"
     || run.status === "prepared"
     || run.status === "interrupting"
-    || run.status === "resuming"
   );
   const recentFailures = input.runs.filter((run) => run.status === "failed" || run.status === "stale" || run.status === "interrupted" || run.status === "rejected").slice(0, 3);
 
@@ -296,7 +294,11 @@ function deriveRunStatus(
   now: Date,
   staleAfterMs: number,
 ): LocalRunSummary["status"] {
-  if (metadataStatus === "interrupting" || metadataStatus === "interrupted" || metadataStatus === "resuming" || metadataStatus === "rejected") {
+  if (metadataStatus === "resuming") {
+    return "interrupted";
+  }
+
+  if (metadataStatus === "interrupting" || metadataStatus === "interrupted" || metadataStatus === "rejected") {
     return metadataStatus;
   }
 

@@ -320,8 +320,8 @@ export class LocalState {
     return undefined;
   }
 
-  markRunResuming(input: { runId: string; now?: Date; reason: string }): void {
-    const runDir = join(this.paths.runsDir, sanitizePathPart(input.runId));
+  markSessionResuming(input: { sourceRunId: string; now?: Date; reason: string }): void {
+    const runDir = join(this.paths.runsDir, sanitizePathPart(input.sourceRunId));
     const metadataPath = join(runDir, "metadata.json");
     const metadata = readJsonFile<RunMetadata>(metadataPath);
 
@@ -331,11 +331,11 @@ export class LocalState {
 
     writeJsonFile(metadataPath, {
       ...metadata,
-      status: "resuming",
-      resumeEligible: true,
-      resumingAt: (input.now ?? new Date()).toISOString(),
+      status: metadata.status === "resuming" ? "interrupted" : metadata.status,
+      resumeEligible: false,
+      sessionResumingAt: (input.now ?? new Date()).toISOString(),
     });
-    appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "run.resuming", {
+    appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "session.resuming", {
       reason: input.reason,
     });
   }

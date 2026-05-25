@@ -459,8 +459,8 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     });
 
     if (result.processed) {
-      input.localState?.markRunResuming?.({
-        runId: resumableRun.runId,
+      input.localState?.markSessionResuming?.({
+        sourceRunId: resumableRun.runId,
         now: now(),
         reason: "daemon restart recovery",
       });
