@@ -1625,6 +1625,49 @@ describe("runDaemonCycle", () => {
     expect(secondResult.processed).toBe(false);
   });
 
+  it("[UC-EXECUTION-02-S04] ignores issue updated timestamps caused only by Grovie session comments", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.writeHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+      handledThrough: "2026-05-22T00:00:01.000Z",
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        updatedAt: "2026-05-22T00:00:04.000Z",
+        comments: [
+          fakeComment({
+            body: "user activity",
+            updatedAt: "2026-05-22T00:00:01.000Z",
+          }),
+          fakeComment({
+            body: '<!-- grovie:session {"runId":"run-1","status":"succeeded","runtime":"codex"} -->\nGrovie session succeeded.',
+            updatedAt: "2026-05-22T00:00:03.000Z",
+          }),
+        ],
+      }),
+    ]);
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => {
+        throw new Error("Grovie session comment activity should not trigger a rerun");
+      },
+    });
+
+    expect(result.processed).toBe(false);
+  });
+
   it("[UC-EXECUTION-02-S03] creates another run when a user comment arrives during execution", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
