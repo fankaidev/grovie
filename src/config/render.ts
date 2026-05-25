@@ -11,10 +11,6 @@ queue:
 branches:
   prefix: grovie/
 
-worktrees:
-  # Keep failed worktrees for inspection; successful runs can be cleaned up.
-  cleanup: on-success
-
 pullRequests:
   create: true
   draft: false

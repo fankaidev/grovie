@@ -2813,9 +2813,6 @@ function defaultConfig(): GrovieConfig {
     branches: {
       prefix: "grovie/",
     },
-    worktrees: {
-      cleanup: "on-success",
-    },
     pullRequests: {
       create: true,
       draft: false,
