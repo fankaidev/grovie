@@ -54,7 +54,7 @@ describe("runIssue", () => {
         "Branch: grovie/issue-7",
         "Run id: fankaidev-grovie-issue-7",
         "Run directory: /tmp/grovie/runs/fankaidev-grovie-issue-7",
-        "Comment: https://github.com/fankaidev/grovie/issues/7#issuecomment-2",
+        "Comment: https://github.com/fankaidev/grovie/issues/7#issuecomment-1",
         "Changes: none",
       ].join("\n"),
       stderr: undefined,
@@ -71,24 +71,23 @@ describe("runIssue", () => {
       },
     });
     expect(runtime.runInput?.run).toBe(localState.run);
-    expect(github.comments[0]).toContain("Grovie run started.");
-    expect(github.comments[0]).toContain('<!-- grovie:run {"phase":"progress","runId":"fankaidev-grovie-issue-7","status":"running","runtime":"codex","agentId":"codex"} -->');
-    expect(github.comments[0]).toContain("- Run status: running");
-    expect(github.comments[1]).toContain("Grovie run succeeded.");
-    expect(github.comments[1]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"codex","agentId":"codex"} -->');
-    expect(github.comments[1]).toContain("- Run status: succeeded");
-    expect(github.comments[1]).toContain("- Agent: `codex`");
-    expect(github.comments[1]).toContain("- Machine: `");
-    expect(github.comments[1]).toContain("- Changes: none");
-    expect(github.comments[1]).toContain("- Branch: `grovie/issue-7` (local; not pushed)");
-    expect(github.comments[1]).not.toContain("Prompt will be generated");
-    expect(github.comments[1]).not.toContain("raw log");
+    expect(github.comments[0]).toContain("Grovie run finished.");
+    expect(github.comments[0]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"codex","agentId":"codex"} -->');
+    expect(github.comments[0]).toContain("- Started at: 2026-05-22T00:00:00Z");
+    expect(github.comments[0]).toContain("- Ended at: 2026-05-22T00:00:01Z");
+    expect(github.comments[0]).toContain("- Run status: succeeded");
+    expect(github.comments[0]).toContain("- Agent: `codex`");
+    expect(github.comments[0]).toContain("- Machine: `");
+    expect(github.comments[0]).toContain("- Changes: none");
+    expect(github.comments[0]).toContain("- Branch: `grovie/issue-7` (local; not pushed)");
+    expect(github.comments[0]).not.toContain("Prompt will be generated");
+    expect(github.comments[0]).not.toContain("raw log");
     expect(localState.events.map((event) => event.type)).toEqual([
       "run.started",
       "progress_comment.created",
       "result.handled",
       "run.succeeded",
-      "comment.created",
+      "comment.updated",
     ]);
   });
 
@@ -136,8 +135,8 @@ describe("runIssue", () => {
       expect(readFileSync(localState.run.taskPath, "utf8")).toContain('"runtime": "pi"');
       expect(readFileSync(localState.run.stdoutPath, "utf8")).toContain("pi done");
       expect(readFileSync(localState.run.eventsPath, "utf8")).toContain('"runtime":"pi"');
-      expect(github.comments[1]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"pi","agentId":"pi"} -->');
-      expect(github.comments[1]).toContain("- Runtime: pi");
+      expect(github.comments[0]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"pi","agentId":"pi"} -->');
+      expect(github.comments[0]).toContain("- Runtime: pi");
     } finally {
       process.env.PATH = previousPath;
     }
@@ -176,12 +175,12 @@ describe("runIssue", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("raw stderr line 1\nraw stderr line 2\nraw stdout line 1");
     expect(result.stdout).toContain("Run status: failed");
-    expect(github.comments[1]).toContain("Grovie run failed.");
-    expect(github.comments[1]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"failed","runtime":"codex","agentId":"codex"} -->');
-    expect(github.comments[1]).toContain("- Error: Runtime failed. See the local run directory for stdout and stderr.");
-    expect(github.comments[1]).not.toContain("raw stderr line 1");
-    expect(github.comments[1]).not.toContain("raw stdout line 1");
-    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "progress_comment.created", "run.failed", "comment.created"]);
+    expect(github.comments[0]).toContain("Grovie run finished.");
+    expect(github.comments[0]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"failed","runtime":"codex","agentId":"codex"} -->');
+    expect(github.comments[0]).toContain("- Error: Runtime failed. See the local run directory for stdout and stderr.");
+    expect(github.comments[0]).not.toContain("raw stderr line 1");
+    expect(github.comments[0]).not.toContain("raw stdout line 1");
+    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "progress_comment.created", "run.failed", "comment.updated"]);
   });
 
   it("[UC-EXECUTION-05-S05] posts reviewer no-change output without opening a PR", () => {
@@ -215,11 +214,11 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Changes: none");
-    expect(github.comments[1]).toContain("- Agent: `reviewer@fankai-mac`");
-    expect(github.comments[1]).toContain("- Machine: `fankai-mac`");
-    expect(github.comments[1]).toContain("- Changes: none");
-    expect(github.comments[1]).toContain("- Review output: Review approved: the implementation matches the issue intent.");
-    expect(github.comments[1]).not.toContain("- Pull request:");
+    expect(github.comments[0]).toContain("- Agent: `reviewer@fankai-mac`");
+    expect(github.comments[0]).toContain("- Machine: `fankai-mac`");
+    expect(github.comments[0]).toContain("- Changes: none");
+    expect(github.comments[0]).toContain("- Review output: Review approved: the implementation matches the issue intent.");
+    expect(github.comments[0]).not.toContain("- Pull request:");
   });
 
   it("[UC-GITHUB-01-S02] includes pull request output when result handling creates one", () => {
@@ -257,13 +256,13 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Pull request: https://github.com/fankaidev/grovie/pull/20");
-    expect(github.comments[1]).toContain("- Pull request: https://github.com/fankaidev/grovie/pull/20");
+    expect(github.comments[0]).toContain("- Pull request: https://github.com/fankaidev/grovie/pull/20");
     expect(localState.events.map((event) => event.type)).toEqual([
       "run.started",
       "progress_comment.created",
       "result.handled",
       "run.succeeded",
-      "comment.created",
+      "comment.updated",
     ]);
   });
 
@@ -355,11 +354,16 @@ describe("runIssue", () => {
       {
         repository: "fankaidev/grovie",
         commentId: 99,
-        body: expect.stringContaining('"runId":"fankaidev-grovie-issue-7"') as string,
+        body: expect.stringContaining('"status":"running"') as string,
+      },
+      {
+        repository: "fankaidev/grovie",
+        commentId: 99,
+        body: expect.stringContaining('"status":"succeeded"') as string,
       },
     ]);
-    expect(github.comments).toHaveLength(1);
-    expect(github.comments[0]).toContain("Grovie run succeeded.");
+    expect(github.comments).toHaveLength(0);
+    expect(github.updatedComments[1]?.body).toContain("Grovie run finished.");
     expect(localState.events.map((event) => event.type)).toContain("progress_comment.updated");
   });
 
@@ -464,13 +468,13 @@ describe("runIssue", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("pull request failed");
     expect(result.stdout).toContain("Run status: failed");
-    expect(github.comments[1]).toContain("Grovie run failed.");
+    expect(github.comments[0]).toContain("Grovie run finished.");
     expect(localState.events.map((event) => event.type)).toEqual([
       "run.started",
       "progress_comment.created",
       "result.failed",
       "run.failed",
-      "comment.created",
+      "comment.updated",
     ]);
   });
 
@@ -508,8 +512,8 @@ describe("runIssue", () => {
     expect(result.exitCode).toBe(0);
     expect(result.canceled).toBe(true);
     expect(result.stdout).toContain("Run status: canceled");
-    expect(github.comments[1]).toContain("Grovie run canceled.");
-    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "progress_comment.created", "run.canceled", "comment.created"]);
+    expect(github.comments[0]).toContain("Grovie run finished.");
+    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "progress_comment.created", "run.canceled", "comment.updated"]);
   });
 
   it("[UC-ADMIN-05-S02] passes local run cancellation requests into the runtime monitor", async () => {
@@ -567,7 +571,7 @@ describe("runIssue", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("git clone failed");
     expect(result.stdout).toContain("Run directory: /tmp/grovie/runs/fankaidev-grovie-issue-7");
-    expect(github.comments[0]).toContain("Grovie run failed.");
+    expect(github.comments[0]).toContain("Grovie run finished.");
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 
@@ -655,6 +659,11 @@ class FakeGitHub implements GitHubGateway {
     body: string,
   ): ReturnType<GitHubGateway["updateIssueComment"]> {
     this.updatedComments.push({ repository, commentId, body });
+    const commentIndex = commentId - 1;
+
+    if (commentIndex >= 0 && commentIndex < this.comments.length) {
+      this.comments[commentIndex] = body;
+    }
 
     return {
       ok: true as const,

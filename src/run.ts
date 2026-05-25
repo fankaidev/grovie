@@ -97,6 +97,13 @@ type RunSummary = {
   comment?: CreatedComment;
   error?: string;
   errorSource?: "prepare" | "runtime" | "result";
+  startedAt?: string;
+  endedAt?: string;
+};
+
+type RunLifecycleComment = {
+  id: number;
+  url: string;
 };
 
 const RUN_MARKER = "grovie:run";
@@ -193,6 +200,7 @@ type PreparedIssueRun =
     run: PreparedRun;
     localState: RunLocalState;
     runtime: AgentRuntime;
+    lifecycleComment?: RunLifecycleComment;
   }
   | {
     ok: false;
@@ -315,6 +323,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
     runtime: runtime.name,
     agentId,
     machineId,
+    startedAt: now.toISOString(),
   });
 
   if (!progressComment.ok) {
@@ -334,6 +343,12 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
     run,
     localState,
     runtime,
+    lifecycleComment: progressComment.ok
+      ? {
+        id: progressComment.comment.id,
+        url: progressComment.comment.url,
+      }
+      : undefined,
   };
 }
 
@@ -348,6 +363,7 @@ function finishRun(input: {
   resultHandler?: ResultHandler;
   stateRepo?: StateRepoConfig;
   runtimeResult: RuntimeRunResult;
+  lifecycleComment?: RunLifecycleComment;
 }): RunIssueResult {
   let result: HandleRunResultResult | undefined;
   let resultError: string | undefined;
@@ -411,7 +427,11 @@ function finishRun(input: {
     },
   });
 
-  const commentResult = input.github.createIssueComment(input.issueReference, renderRunResultComment(summary));
+  const commentBody = renderRunResultComment(summary);
+  const repository = formatIssueReference(input.issueReference).split("#")[0] ?? "";
+  const commentResult = input.lifecycleComment === undefined
+    ? input.github.createIssueComment(input.issueReference, commentBody)
+    : input.github.updateIssueComment(repository, input.lifecycleComment.id, commentBody);
 
   if (!commentResult.ok) {
     input.localState.appendEvent(input.run, "comment.failed", {
@@ -426,7 +446,7 @@ function finishRun(input: {
     };
   }
 
-  input.localState.appendEvent(input.run, "comment.created", {
+  input.localState.appendEvent(input.run, input.lifecycleComment === undefined ? "comment.created" : "comment.updated", {
     id: commentResult.value.id,
     url: commentResult.value.url,
   });
@@ -536,6 +556,8 @@ function runSummaryFromRuntimeResult(input: {
     result: input.result,
     error: input.resultError ?? (input.runtimeResult.ok ? undefined : input.runtimeResult.error.message),
     errorSource: input.resultError !== undefined ? "result" : input.runtimeResult.ok ? undefined : "runtime",
+    startedAt: input.runtimeResult.execution.startedAt,
+    endedAt: input.runtimeResult.execution.endedAt,
   };
 }
 
@@ -547,6 +569,7 @@ function upsertRunProgressComment(input: {
   runtime: RuntimeName;
   agentId: string;
   machineId: string;
+  startedAt: string;
 }): { ok: true; action: "created" | "updated"; comment: CreatedComment } | { ok: false; error: string } {
   const body = renderRunProgressComment(input);
   const repository = formatIssueReference(input.issueReference).split("#")[0] ?? "";
@@ -577,6 +600,7 @@ function renderRunProgressComment(input: {
   runtime: RuntimeName;
   agentId: string;
   machineId: string;
+  startedAt: string;
 }): string {
   const marker = `<!-- ${RUN_MARKER} ${JSON.stringify({
     phase: "progress",
@@ -597,6 +621,7 @@ function renderRunProgressComment(input: {
     `- Branch: \`${input.run.branchName}\` (local; not pushed)`,
     `- Run id: \`${input.run.runId}\``,
     `- Run directory: \`${input.run.runDir}\``,
+    `- Started at: ${input.startedAt}`,
   ].join("\n");
 }
 
@@ -610,9 +635,9 @@ function renderRunResultComment(summary: RunSummary): string {
   })} -->`;
   const lines = [
     marker,
-    `Grovie run ${summary.status}.`,
+    "Grovie run finished.",
     "",
-    `- Run status: ${summary.status}`,
+    "- Run status: running",
     `- Runtime: ${summary.runtime}`,
     `- Agent: \`${summary.agentId}\``,
     `- Machine: \`${summary.machineId}\``,
@@ -620,6 +645,12 @@ function renderRunResultComment(summary: RunSummary): string {
     `- Branch: \`${summary.branchName}\` (local; not pushed)`,
     `- Run id: \`${summary.runId}\``,
     `- Run directory: \`${summary.runDir}\``,
+    `- Started at: ${summary.startedAt ?? "(unknown)"}`,
+    "",
+    "Result:",
+    "",
+    `- Run status: ${summary.status}`,
+    `- Ended at: ${summary.endedAt ?? "(unknown)"}`,
   ];
 
   if (summary.error !== undefined) {
