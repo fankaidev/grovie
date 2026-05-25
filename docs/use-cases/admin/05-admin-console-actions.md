@@ -7,8 +7,7 @@
 | ID | Rule |
 |----|------|
 | R1 | The admin console supports canceling active local runs only. |
-| R2 | Cancellation writes local run state and is consumed by the existing runtime cancellation path. |
-| R3 | The admin console does not expose cleanup, branch deletion, force-push, merge, or secret-editing actions. |
+| R2 | The admin console does not expose cleanup, branch deletion, force-push, merge, or secret-editing actions. |
 
 ## Scenarios
 

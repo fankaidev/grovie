@@ -6,10 +6,9 @@
 
 | ID | Rule |
 |----|------|
-| R1 | Slugs are lowercase and contain only `a-z`, `0-9`, and `-`. |
+| R1 | Machine and agent identities are stable, readable slugs suitable for labels and local state. |
 | R2 | Agent ids use `<agent-slug>@<machine-slug>`. |
 | R3 | Local agents must be explicitly configured in global worker config. |
-| R4 | Configured local agents expose runtime availability separately from their presence in config. |
 
 ## Scenarios
 

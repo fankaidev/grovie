@@ -6,11 +6,10 @@
 
 | ID | Rule |
 |----|------|
-| R1 | The admin console is disabled by default. |
+| R1 | The admin console is disabled by default and does not bind a port unless explicitly enabled. |
 | R2 | The admin console binds only to `127.0.0.1` for the MVP. |
 | R3 | The admin console must fail clearly when its configured port is unavailable. |
-| R4 | A disabled admin console is not bound by daemon startup. |
-| R5 | A long-running daemon keeps the admin console responsive while the daemon polls repositories or runs agents. |
+| R4 | A long-running daemon keeps the admin console responsive while the daemon polls repositories or runs agents. |
 
 ## Scenarios
 

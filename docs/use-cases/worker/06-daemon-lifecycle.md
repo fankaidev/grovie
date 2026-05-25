@@ -6,11 +6,9 @@
 
 | ID | Rule |
 |----|------|
-| R1 | Background daemon state and logs live under `~/.grovie/daemon`. |
-| R2 | `daemon stop` validates the recorded process before sending a termination signal. |
-| R3 | Daemon process logs stay separate from per-run stdout and stderr logs. |
-| R4 | `daemon stop --force` is available for crash recovery when recorded daemon ownership cannot be verified. |
-| R5 | When the admin console is enabled, the daemon process owns the admin console server lifecycle. |
+| R1 | `daemon stop` validates the recorded process before sending a termination signal. |
+| R2 | Daemon process logs stay separate from per-run stdout and stderr logs. |
+| R3 | When the admin console is enabled, the daemon process owns the admin console server lifecycle. |
 
 ## Scenarios
 

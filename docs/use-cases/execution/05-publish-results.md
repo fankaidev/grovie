@@ -8,7 +8,6 @@
 |----|------|
 | R1 | Grovie never force-pushes over an existing remote branch. |
 | R2 | Grovie refuses to push the default branch. |
-| R3 | `.grovie/result.json` may explicitly classify an agent result as `no-op`, `comment`, `code-change`, `review`, `request-human`, or `handoff`; when it is absent, Grovie preserves the existing filesystem-based behavior. |
 
 ## Scenarios
 

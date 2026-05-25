@@ -9,9 +9,8 @@
 | R1 | A machine should have at most one active daemon. |
 | R2 | Execution locks are local and keyed by `(issue, agent)`. |
 | R3 | Different agents can work on the same issue independently. |
-| R4 | Before polling a watched repository, the daemon resolves that repository's `.grovie.yml` from the bare cache on the remote default branch; the issue worktree is prepared later with the same resolved policy. |
-| R5 | Long-running daemon cycles use GitHub repository events as change hints, but fresh issue and pull request reads remain the source of truth before starting work. |
-| R6 | Automatic queue runs require the issue creator to be trusted; repo-local `trust.trustedAuthors` supplies the trusted list, and the authenticated `gh` user is the default when no trusted authors are configured. |
+| R4 | Fresh issue and pull request reads remain the source of truth before starting work. |
+| R5 | Automatic queue runs require the issue creator to be trusted; repo-local `trust.trustedAuthors` supplies the trusted list, and the authenticated `gh` user is the default when no trusted authors are configured. |
 
 ## Scenarios
 

@@ -8,9 +8,6 @@
 |----|------|
 | R1 | Admin views are served by the opt-in local admin console server. |
 | R2 | Admin views are inspection-focused and do not create a hosted dashboard. |
-| R3 | Admin views link run list entries to local React run detail routes. |
-| R4 | The admin home shows recent daemon activity so operators can see incoming changes and local actions without tailing process logs. |
-| R5 | Production admin UI assets are served from the root build output under `dist/admin-web`. |
 
 ## Scenarios
 
