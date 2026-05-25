@@ -73,6 +73,7 @@ const PRIORITY_RANK: Record<IssuePriority, number> = {
   p2: 2,
   none: 3,
 };
+const GITHUB_COMMENT_UPDATE_SKEW_MS = 10_000;
 
 export function inspectQueue(input: QueueInspectionInput): { ok: true; value: QueueInspectionResult[] } | { ok: false; message: string } {
   const results: QueueInspectionResult[] = [];
@@ -402,7 +403,7 @@ export function getIssueActivity(issue: GitHubIssue, relatedPullRequests: GitHub
     .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)))
     .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
   const issueUpdatedAt =
-    latestGrovieActivity === undefined || Date.parse(issue.updatedAt) > Date.parse(latestGrovieActivity)
+    latestGrovieActivity === undefined || isAfterGrovieCommentUpdateWindow(issue.updatedAt, latestGrovieActivity)
       ? [issue.updatedAt]
       : [];
   const timestamps = [
@@ -427,7 +428,11 @@ export function getIssueActivity(issue: GitHubIssue, relatedPullRequests: GitHub
 }
 
 function isGrovieActivityComment(body: string): boolean {
-  return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:session ");
+  return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:run ") || body.includes("<!-- grovie:session ");
+}
+
+function isAfterGrovieCommentUpdateWindow(issueUpdatedAt: string, latestGrovieActivity: string): boolean {
+  return Date.parse(issueUpdatedAt) > Date.parse(latestGrovieActivity) + GITHUB_COMMENT_UPDATE_SKEW_MS;
 }
 
 function getIssueFingerprint(issue: GitHubIssue, relatedPullRequests: GitHubRelatedPullRequest[]): string {

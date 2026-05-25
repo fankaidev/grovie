@@ -99,7 +99,7 @@ type RunSummary = {
   errorSource?: "prepare" | "runtime" | "result";
 };
 
-const SESSION_MARKER = "grovie:session";
+const RUN_MARKER = "grovie:run";
 
 export function runIssue(input: RunIssueInput): RunIssueResult {
   const prepared = prepareIssueRun(input);
@@ -281,7 +281,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
       error: toErrorMessage(error),
       errorSource: "prepare",
     });
-    const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
+    const commentResult = input.github.createIssueComment(input.issueReference, renderRunResultComment(summary));
 
     if (!commentResult.ok) {
       return {
@@ -306,6 +306,27 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   localState.appendEvent(run, "run.started", {
     runtime: runtime.name,
   });
+
+  const progressComment = upsertRunProgressComment({
+    issue,
+    issueReference: input.issueReference,
+    github: input.github,
+    run,
+    runtime: runtime.name,
+    agentId,
+    machineId,
+  });
+
+  if (!progressComment.ok) {
+    localState.appendEvent(run, "progress_comment.failed", {
+      message: progressComment.error,
+    });
+  } else {
+    localState.appendEvent(run, progressComment.action === "updated" ? "progress_comment.updated" : "progress_comment.created", {
+      id: progressComment.comment.id,
+      url: progressComment.comment.url,
+    });
+  }
 
   return {
     ok: true,
@@ -390,7 +411,7 @@ function finishRun(input: {
     },
   });
 
-  const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
+  const commentResult = input.github.createIssueComment(input.issueReference, renderRunResultComment(summary));
 
   if (!commentResult.ok) {
     input.localState.appendEvent(input.run, "comment.failed", {
@@ -518,17 +539,80 @@ function runSummaryFromRuntimeResult(input: {
   };
 }
 
-function renderRunComment(summary: RunSummary): string {
-  const marker = `<!-- ${SESSION_MARKER} ${JSON.stringify({
+function upsertRunProgressComment(input: {
+  issue: GitHubIssue;
+  issueReference: IssueReference;
+  github: GitHubGateway;
+  run: PreparedRun;
+  runtime: RuntimeName;
+  agentId: string;
+  machineId: string;
+}): { ok: true; action: "created" | "updated"; comment: CreatedComment } | { ok: false; error: string } {
+  const body = renderRunProgressComment(input);
+  const repository = formatIssueReference(input.issueReference).split("#")[0] ?? "";
+  const previous = [...input.issue.comments]
+    .reverse()
+    .find((comment) => isRunProgressCommentForAgent(comment.body, input.agentId));
+  const result = previous === undefined
+    ? input.github.createIssueComment(input.issueReference, body)
+    : input.github.updateIssueComment(repository, previous.id, body);
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error.message,
+    };
+  }
+
+  return {
+    ok: true,
+    action: previous === undefined ? "created" : "updated",
+    comment: result.value,
+  };
+}
+
+function renderRunProgressComment(input: {
+  issue: GitHubIssue;
+  run: PreparedRun;
+  runtime: RuntimeName;
+  agentId: string;
+  machineId: string;
+}): string {
+  const marker = `<!-- ${RUN_MARKER} ${JSON.stringify({
+    phase: "progress",
+    runId: input.run.runId,
+    status: "running",
+    runtime: input.runtime,
+    agentId: input.agentId,
+  })} -->`;
+  return [
+    marker,
+    "Grovie run started.",
+    "",
+    "- Run status: running",
+    `- Runtime: ${input.runtime}`,
+    `- Agent: \`${input.agentId}\``,
+    `- Machine: \`${input.machineId}\``,
+    `- Issue: ${formatIssueReference(input.issue.reference)}`,
+    `- Branch: \`${input.run.branchName}\` (local; not pushed)`,
+    `- Run id: \`${input.run.runId}\``,
+    `- Run directory: \`${input.run.runDir}\``,
+  ].join("\n");
+}
+
+function renderRunResultComment(summary: RunSummary): string {
+  const marker = `<!-- ${RUN_MARKER} ${JSON.stringify({
+    phase: "result",
     runId: summary.runId,
     status: summary.status,
     runtime: summary.runtime,
+    agentId: summary.agentId,
   })} -->`;
   const lines = [
     marker,
-    `Grovie session ${summary.status}.`,
+    `Grovie run ${summary.status}.`,
     "",
-    `- Session status: ${summary.status}`,
+    `- Run status: ${summary.status}`,
     `- Runtime: ${summary.runtime}`,
     `- Agent: \`${summary.agentId}\``,
     `- Machine: \`${summary.machineId}\``,
@@ -561,6 +645,21 @@ function renderRunComment(summary: RunSummary): string {
   return lines.join("\n");
 }
 
+function isRunProgressCommentForAgent(body: string, agentId: string): boolean {
+  const marker = body.match(/^<!-- grovie:run (\{.*\}) -->/);
+
+  if (marker === null) {
+    return false;
+  }
+
+  try {
+    const metadata = JSON.parse(marker[1]) as { phase?: unknown; agentId?: unknown };
+    return metadata.phase === "progress" && metadata.agentId === agentId;
+  } catch {
+    return false;
+  }
+}
+
 function runEventType(status: SessionStatus): "run.succeeded" | "run.failed" | "run.canceled" {
   if (status === "succeeded") {
     return "run.succeeded";
@@ -573,7 +672,7 @@ function renderCliRunOutput(summary: RunSummary): string {
   const lines = [
     "grovie run",
     "",
-    `Session status: ${summary.status}`,
+    `Run status: ${summary.status}`,
     `Issue: ${formatIssueReference(summary.issue.reference)}`,
     `Branch: ${summary.branchName}`,
     `Run id: ${summary.runId}`,
@@ -608,7 +707,7 @@ function summarizeError(summary: RunSummary): string {
     return "Runtime failed. See the local run directory for stdout and stderr.";
   }
 
-  return summarizeOutput(summary.error ?? "Session failed.");
+  return summarizeOutput(summary.error ?? "Run failed.");
 }
 
 function summarizeOutput(value: string): string {

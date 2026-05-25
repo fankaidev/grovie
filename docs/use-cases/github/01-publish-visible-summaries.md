@@ -19,3 +19,4 @@
 | UC-GITHUB-01-S03 | P1 | A run with state repo sync configured includes a state repo path or link in the issue summary comment. |
 | UC-GITHUB-01-S04 | P1 | A runtime failure with stdout or stderr keeps raw logs out of the issue comment and points to local or synced state instead. |
 | UC-GITHUB-01-S05 | P1 | A daemon uses local execution locks for coordination and does not create or update advisory claim comments. |
+| UC-GITHUB-01-S06 | P1 | A starting run posts or updates one progress comment per agent on the issue with run id, run status, runtime, agent id, local machine id, branch, and run directory. |
