@@ -2192,9 +2192,6 @@ describe("runDaemonCycle", () => {
     const runs: RunIssueAsyncInput[] = [];
     const config = {
       ...defaultConfig(),
-      runtime: {
-        default: "claude-code" as const,
-      },
       queue: {
         label: "ready",
       },
@@ -2234,9 +2231,6 @@ describe("runDaemonCycle", () => {
       stdout: "ran repo policy issue",
     });
     expect(runs[0]?.config).toMatchObject({
-      runtime: {
-        default: "claude-code",
-      },
       queue: {
         label: "ready",
       },
