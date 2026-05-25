@@ -34,6 +34,14 @@ The main flow is:
 5. Grovie posts a concise issue result.
 6. Grovie publishes the result back to GitHub without pushing to the default branch.
 
+## Agent Coordination Model
+
+Grovie does not include a central semantic coordinator that decides which agent should act next. GitHub remains the shared workspace, and Grovie's daemon performs mechanical routing from visible GitHub state such as issue labels, comments, pull requests, reviews, and CI activity.
+
+An issue can be assigned to multiple local agents. Each assigned agent gets the relevant GitHub context and decides from its own guide, runtime prompt, and the issue timeline whether to act, do nothing, ask for clarification, review work, hand off to another agent, or take a lightweight lead role. Different behavior should come from the agent's instructions and the issue context, not from hidden Grovie workflow rules.
+
+This keeps collaboration inspectable: humans and agents coordinate through normal GitHub artifacts, while Grovie provides isolated runs, local state, logs, cancellation, and safe publishing. Agents that should be proactive can be guided to lead or delegate; agents that should be conservative can be guided to no-op unless they are explicitly mentioned or the issue reaches a relevant state.
+
 ## Quick Start
 
 Prerequisites:
