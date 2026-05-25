@@ -1,7 +1,6 @@
 import { getAssignedAgentIds, isAssignedToLocalMachine } from "./assignment.js";
 import { hasCancelRequest } from "./claim.js";
 import {
-  formatIssueReference,
   parseRepositoryName,
   type GitHubGateway,
   type GitHubIssue,
@@ -12,6 +11,7 @@ import { findPullRequestMergeabilityTrigger, getIssueActivity, type IssueActivit
 import type { RunLocalState } from "./run.js";
 
 export { getIssueActivity } from "./queue/activity.js";
+export { renderQueueInspection, renderSkippedQueueSummary } from "./queue/render.js";
 export type { IssueActivity, IssueActivityTrigger } from "./queue/activity.js";
 
 export type QueueRepositoryInput = {
@@ -404,53 +404,4 @@ function isHandledCursorCovered(
     Date.parse(cursor.handledThrough) >= Date.parse(activity.timestamp) &&
     (cursor.issueFingerprint === undefined || cursor.issueFingerprint === activity.issueFingerprint)
   );
-}
-
-export function renderQueueInspection(results: QueueInspectionResult[], title = "grovie queue list"): string {
-  const lines = [title, ""];
-
-  if (results.every((result) => result.candidates.length === 0)) {
-    lines.push("No assigned issues found.");
-    return lines.join("\n");
-  }
-
-  for (const result of results) {
-    lines.push(`${result.repository} label=${result.label}`);
-
-    if (result.candidates.length === 0) {
-      lines.push("- No assigned issues.");
-      continue;
-    }
-
-    for (const candidate of result.candidates) {
-      const prefix = candidate.status === "runnable" ? `#${candidate.pickOrder ?? "?"}` : "skip";
-      const reason = candidate.status === "skipped" ? ` reason=${candidate.reason}` : "";
-      lines.push(`- ${prefix} ${formatIssueReference(candidate.issueReference)} agent=${candidate.agentId ?? "(none)"} priority=${candidate.priority} activity=${candidate.activity.timestamp}${reason}`);
-      lines.push(`  ${candidate.title}`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
-export function renderSkippedQueueSummary(results: QueueInspectionResult[]): string | undefined {
-  const skipped = results.flatMap((result) =>
-    result.candidates
-      .filter((candidate) => candidate.status === "skipped")
-      .map((candidate) => ({
-        repository: result.repository,
-        candidate,
-      })),
-  );
-
-  if (skipped.length === 0) {
-    return undefined;
-  }
-
-  return [
-    "Skipped assigned issues:",
-    ...skipped.map(({ candidate }) =>
-      `- ${formatIssueReference(candidate.issueReference)} agent=${candidate.agentId ?? "(none)"} reason=${candidate.reason ?? "skipped"}`,
-    ),
-  ].join("\n");
 }
