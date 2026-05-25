@@ -112,7 +112,6 @@ describe("admin console server", () => {
         port,
       },
       paths: pathsForRoot(root),
-      runtimeName: "codex",
     });
     servers.push(started);
 
@@ -123,9 +122,9 @@ describe("admin console server", () => {
       status: 200,
       body: expect.objectContaining({
         ok: true,
-        runtime: expect.objectContaining({
+        runtimes: expect.arrayContaining([expect.objectContaining({
           runtime: "codex",
-        }),
+        })]),
       }),
     });
   });
@@ -142,10 +141,10 @@ describe("admin console server", () => {
       daemon: {
         status: "stopped",
       },
-      runtime: {
+      runtimes: expect.arrayContaining([expect.objectContaining({
         runtime: "codex",
         available: true,
-      },
+      })]),
       agents: [],
     });
   });
@@ -865,7 +864,7 @@ async function startTestServer(
   root = createTmpDir(),
   daemonLifecycleOverrides: Partial<DaemonLifecycle> = {},
   adminWebAssetsDir = join(root, "missing-admin-web"),
-  runtimeAvailabilityChecker?: (runtime: RuntimeName) => ReturnType<AgentRuntime["checkAvailability"]>,
+  runtimeAvailabilityChecker: (runtime: RuntimeName) => ReturnType<AgentRuntime["checkAvailability"]> = fakeRuntimeAvailability,
 ): Promise<StartedAdminConsole> {
   const port = await getAvailablePort();
   const started = await startAdminConsoleServer({
@@ -877,7 +876,6 @@ async function startTestServer(
     server: createAdminConsoleServer({
       paths: pathsForRoot(root),
       daemonLifecycle: fakeDaemonLifecycle(root, daemonLifecycleOverrides),
-      runtime: fakeRuntime(),
       runtimeAvailabilityChecker,
       adminWebAssetsDir,
     }),

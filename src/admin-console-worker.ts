@@ -6,12 +6,10 @@ import {
 } from "./admin-console.js";
 import { LocalDaemonLifecycle } from "./daemon-lifecycle.js";
 import type { LocalStatePaths } from "./local-state.js";
-import { createRuntime, type RuntimeName } from "./runtime.js";
 
 type AdminConsoleWorkerData = {
   config: AdminConsoleResolvedConfig;
   paths: LocalStatePaths;
-  runtimeName: RuntimeName;
 };
 
 const data = workerData as AdminConsoleWorkerData;
@@ -20,7 +18,6 @@ const started = await startAdminConsoleServer({
   server: createAdminConsoleServer({
     paths: data.paths,
     daemonLifecycle: new LocalDaemonLifecycle(),
-    runtime: createRuntime(data.runtimeName),
   }),
 }).catch((error: unknown) => {
   parentPort?.postMessage({

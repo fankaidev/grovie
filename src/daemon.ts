@@ -22,7 +22,7 @@ import { getIssueActivity, inspectQueue, renderSkippedQueueSummary, selectNextRu
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
 import { runIssueAsync } from "./run.js";
 import type { AgentRuntime } from "./runtime.js";
-import { createRuntime } from "./runtime.js";
+import { createRuntime, type RuntimeName } from "./runtime.js";
 import { LocalDaemonLifecycle, type DaemonLifecycle } from "./daemon-lifecycle.js";
 import { planRepositoryEventPolling } from "./repository-events.js";
 
@@ -226,14 +226,12 @@ async function startDaemonAdminConsole(input: MultiRepositoryDaemonInput | Daemo
     throw new Error("Admin console requires local daemon state.");
   }
 
-  const runtime = input.runtime ?? createRuntime(input.config.runtime.default);
   const daemonLifecycle = input.daemonLifecycle ?? new LocalDaemonLifecycle();
 
   if (!input.once) {
     return startAdminConsoleWorker({
       config,
       paths: input.localState.getPaths(),
-      runtimeName: input.config.runtime.default,
     });
   }
 
@@ -242,7 +240,6 @@ async function startDaemonAdminConsole(input: MultiRepositoryDaemonInput | Daemo
     server: createAdminConsoleServer({
       paths: input.localState.getPaths(),
       daemonLifecycle,
-      runtime,
     }),
   });
 }
@@ -322,7 +319,6 @@ async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Prom
       label: repository.label ?? config.queue.label,
       config,
       configPath: loadedConfig?.path ?? repository.configPath ?? input.configPath,
-      runtime: input.runtime ?? createRuntime(config.runtime.default),
       issueNumbers: eventPlan.issueNumbers,
     });
 
@@ -798,15 +794,16 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
       },
     });
 
+    const runtimeName = resolveWorkerRuntime(input, input.workerId);
     const result = await input.issueRunner({
       issueReference: input.issueReference,
       repository: input.repository,
       config: input.config,
       configPath: input.configPath,
-      agent: "codex",
+      agent: runtimeName,
       agentId: input.workerId,
       github: input.github,
-      runtime: input.runtime,
+      runtime: input.runtime ?? createRuntime(runtimeName),
       localState: input.localState,
       runRequest: input.runRequest,
       stateRepo: input.stateRepo,
@@ -858,6 +855,16 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
   } finally {
     releaseExecutionLock(input, executionLockResult?.lock);
   }
+}
+
+function resolveWorkerRuntime(input: Pick<DaemonInput, "localAgents">, agentId: string): RuntimeName {
+  const agent = input.localAgents?.find((candidate) => candidate.agentId === agentId);
+
+  if (agent === undefined) {
+    return "codex";
+  }
+
+  return agent.runtime;
 }
 
 function recordActivity(

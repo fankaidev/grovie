@@ -88,7 +88,7 @@ describe("runIssue", () => {
     ]);
   });
 
-  it("[UC-EXECUTION-06-S02] uses the configured non-Codex default runtime for run handoff and result metadata", () => {
+  it("[UC-EXECUTION-06-S02] uses the selected non-Codex agent runtime for run handoff and result metadata", () => {
     const root = mkdtempSync(join(tmpdir(), "grovie-run-"));
     const binDir = join(root, "bin");
     const piPath = join(binDir, "pi");
@@ -107,13 +107,6 @@ describe("runIssue", () => {
         status: "",
         validationSummary: "No validation output captured.",
       });
-      const config = {
-        ...defaultConfig(),
-        runtime: {
-          default: "pi" as const,
-        },
-      };
-
       const result = runIssue({
         issueReference: {
           owner: "fankaidev",
@@ -121,7 +114,7 @@ describe("runIssue", () => {
           number: 7,
         },
         repository: "fankaidev/grovie",
-        config,
+        config: defaultConfig(),
         configPath: "/project/.grovie.yml",
         agent: "pi",
         github,
@@ -736,9 +729,6 @@ class FakeResultHandler implements ResultHandler {
 function defaultConfig(): GrovieConfig {
   return {
     version: 1,
-    runtime: {
-      default: "codex",
-    },
     queue: {
       label: "grovie",
     },

@@ -15,7 +15,7 @@
 
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-ADMIN-02-S01 | P2 | `GET /api/health` returns daemon status, default runtime availability, and per-agent runtime availability for configured local agents. |
+| UC-ADMIN-02-S01 | P2 | `GET /api/health` returns daemon status, supported runtime availability, and per-agent runtime availability for configured local agents. |
 | UC-ADMIN-02-S02 | P2 | `GET /api/config` returns global config without environment variables or secrets. |
 | UC-ADMIN-02-S03 | P2 | `GET /api/repos` returns watched repositories and labels. |
 | UC-ADMIN-02-S04 | P2 | `GET /api/runs` returns recent local runs with issue, status, branch, log paths, and result links. |

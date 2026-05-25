@@ -3,13 +3,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname, extname, join, normalize, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { getConfiguredAgentHealth, type RuntimeAvailabilityChecker } from "./agent-health.js";
+import { getConfiguredAgentHealth, getRuntimeHealth, type RuntimeAvailabilityChecker } from "./agent-health.js";
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
 import { readDaemonActivity, type DaemonActivityEntry } from "./daemon-activity.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import { resolveLocalIdentity } from "./identity.js";
 import { writeRunCancellation, type LocalStatePaths } from "./local-state.js";
-import type { AgentRuntime } from "./runtime.js";
 import { parseRuntimeStdoutTranscript } from "./runtime-transcript.js";
 import { findLocalRun, listLocalRuns, type LocalRunSummary } from "./status.js";
 import type {
@@ -46,7 +45,6 @@ export type AdminConsoleServerHandle = Pick<Server, "close" | "closeAllConnectio
 export type AdminConsoleContext = {
   paths: LocalStatePaths;
   daemonLifecycle: DaemonLifecycle;
-  runtime: AgentRuntime;
   runtimeAvailabilityChecker?: RuntimeAvailabilityChecker;
   adminWebAssetsDir?: string;
 };
@@ -158,7 +156,7 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
     const body: AdminApiHealthResponse = {
       ok: true,
       daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
-      runtime: context.runtime.checkAvailability(),
+      runtimes: getRuntimeHealth(context.runtimeAvailabilityChecker),
       agents: getConfiguredAgentHealth(globalConfig.config, identity.machineId, context.runtimeAvailabilityChecker),
     };
     writeJson(response, 200, body);
@@ -368,7 +366,6 @@ export function startAdminConsoleServer(input: {
 export function startAdminConsoleWorker(input: {
   config: AdminConsoleResolvedConfig;
   paths: LocalStatePaths;
-  runtimeName: Parameters<typeof import("./runtime.js").createRuntime>[0];
 }): Promise<StartedAdminConsole> {
   if (!input.config.enabled) {
     return Promise.reject(new Error("Admin console is disabled. Set adminConsole.enabled: true in the global config."));
@@ -616,7 +613,7 @@ function renderAdminHome(context: AdminConsoleContext): string {
   const identity = resolveLocalIdentity();
   const health = {
     daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
-    runtime: context.runtime.checkAvailability(),
+    runtimes: getRuntimeHealth(context.runtimeAvailabilityChecker),
     agents: getConfiguredAgentHealth(globalConfig.config, identity.machineId, context.runtimeAvailabilityChecker),
   };
   const runs = listLocalRuns(context.paths.runsDir).slice(0, 20);
@@ -635,8 +632,8 @@ function renderAdminHome(context: AdminConsoleContext): string {
     `<p>State path: ${escapeHtml(readStatePath(health.daemon))}</p>`,
     "</section>",
     "<section>",
-    "<h2>Runtime</h2>",
-    `<p>${escapeHtml(health.runtime.runtime)}: ${escapeHtml(health.runtime.message)}</p>`,
+    "<h2>Runtimes</h2>",
+    renderRuntimeHealthTable(health.runtimes),
     "</section>",
     "<section>",
     "<h2>Agents</h2>",
@@ -655,6 +652,24 @@ function renderAdminHome(context: AdminConsoleContext): string {
     renderRunsTable(runs),
     "</section>",
   ].join("\n"));
+}
+
+function renderRuntimeHealthTable(runtimes: ReturnType<typeof getRuntimeHealth>): string {
+  return [
+    "<table>",
+    "<thead><tr><th>Runtime</th><th>Command</th><th>Status</th><th>Message</th></tr></thead>",
+    "<tbody>",
+    ...runtimes.map((runtime) => [
+      "<tr>",
+      `<td>${escapeHtml(runtime.runtime)}</td>`,
+      `<td>${escapeHtml(runtime.command)}</td>`,
+      `<td>${runtime.available ? "available" : "unavailable"}</td>`,
+      `<td>${escapeHtml(runtime.message)}</td>`,
+      "</tr>",
+    ].join("")),
+    "</tbody>",
+    "</table>",
+  ].join("\n");
 }
 
 function renderAgentHealthTable(agents: ReturnType<typeof getConfiguredAgentHealth>): string {

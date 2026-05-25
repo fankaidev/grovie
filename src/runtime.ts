@@ -13,6 +13,7 @@ export type RuntimeAvailability = {
 };
 
 export type RuntimeName = "codex" | "claude-code" | "pi";
+export const SUPPORTED_RUNTIMES = ["codex", "claude-code", "pi"] as const satisfies RuntimeName[];
 
 export type AgentRuntime = {
   name: RuntimeName;
