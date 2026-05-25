@@ -42,14 +42,14 @@ describe("CLI command registration", () => {
     expect(help).toContain("watch");
   });
 
-  it("accepts pnpm script argument separators", () => {
+  it("[UC-WORKER-06-S01] accepts pnpm script argument separators", () => {
     expect(runCli(["--", "--help"])).toEqual({
       exitCode: 0,
       stdout: renderHelp(),
     });
   });
 
-  it("reports the package version through long and short flags", () => {
+  it("[UC-WORKER-06-S01] reports the package version through long and short flags", () => {
     const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 
     expect(GROVIE_VERSION).toBe(packageVersion.version);
@@ -63,7 +63,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("writes the default policy config", () => {
+  it("[UC-WORKER-02-S04] writes the default policy config", () => {
     const cwd = createTmpDir();
 
     expect(runCli(["init"], { cwd })).toEqual({
@@ -79,7 +79,7 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(cwd, ".grovie.yml"), "utf8")).not.toContain("repository:");
   });
 
-  it("reports invalid config fields through doctor", () => {
+  it("[UC-WORKER-02-S06] reports invalid config fields through doctor", () => {
     const cwd = createTmpDir();
     writeFileSync(join(cwd, ".grovie.yml"), "version: 1\nsafety:\n  allowDefaultBranchPush: true\n", "utf8");
 
@@ -89,7 +89,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("rejects unknown config fields through doctor", () => {
+  it("[UC-WORKER-02-S06] rejects unknown config fields through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
     writeFileSync(join(cwd, ".grovie.yml"), `${readFileSync(join(cwd, ".grovie.yml"), "utf8")}unsupported: true\n`, "utf8");
@@ -135,7 +135,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-01-S04] reports unavailable configured agents through doctor", () => {
+  it("[UC-WORKER-01-S04] [UC-WORKER-01-S06] reports unavailable configured agents through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
 
@@ -260,7 +260,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("reports GitHub authentication errors through doctor", () => {
+  it("[UC-WORKER-01-S06] reports GitHub authentication errors through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
 
@@ -552,28 +552,28 @@ describe("CLI command registration", () => {
     expect(localState.requests).toEqual([]);
   });
 
-  it("requires a run id for runs show", () => {
+  it("[UC-EXECUTION-02-S08] requires a run id for runs show", () => {
     expect(runCli(["runs", "show"])).toEqual({
       exitCode: 1,
       stderr: "Missing run id. Usage: grovie runs show <run-id>",
     });
   });
 
-  it("requires an issue reference for run", () => {
+  it("[UC-EXECUTION-01-S01] requires an issue reference for run", () => {
     expect(runCli(["run"])).toEqual({
       exitCode: 1,
       stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
     });
   });
 
-  it("does not treat option values as issue references", () => {
+  it("[UC-EXECUTION-01-S01] does not treat option values as issue references", () => {
     expect(runCli(["run", "--agent", "codex"])).toEqual({
       exitCode: 1,
       stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
     });
   });
 
-  it("rejects malformed issue references with extra path segments", () => {
+  it("[UC-EXECUTION-01-S01] rejects malformed issue references with extra path segments", () => {
     expect(runCli(["run", "fankaidev/grovie/extra#2"])).toEqual({
       exitCode: 1,
       stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
@@ -600,7 +600,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("rejects unsupported run agents", () => {
+  it("[UC-EXECUTION-01-S01] rejects unsupported run agents", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     runCli(["init"], { cwd });
@@ -611,7 +611,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-EXECUTION-01-S01] requests manual issue execution for an agent id without adding assignment labels", async () => {
+  it("[UC-EXECUTION-01-S01] [UC-WORKER-03-S04] requests manual issue execution for an agent id without adding assignment labels", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     writeInvalidPolicyConfig(cwd);
@@ -1250,7 +1250,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("uses built-in queue defaults for global daemon without reading cwd policy config", async () => {
+  it("[UC-WORKER-02-S03] uses built-in queue defaults for global daemon without reading cwd policy config", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeInvalidPolicyConfig(cwd);
@@ -1458,7 +1458,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-DAEMON-03-S03] passes force stop requests to the daemon lifecycle", () => {
+  it("[UC-WORKER-06-S13] passes force stop requests to the daemon lifecycle", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({
       stop: ({ root, force }) => {
@@ -1581,7 +1581,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("manages watched repositories in the global config", () => {
+  it("[UC-WORKER-02-S01] [UC-WORKER-02-S02] manages watched repositories in the global config", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);

@@ -23,17 +23,17 @@ afterEach(() => {
 });
 
 describe("config helpers", () => {
-  it("parses supported GitHub origin URL formats", () => {
+  it("[UC-EXECUTION-01-S01] parses supported GitHub origin URL formats", () => {
     expect(parseGitHubRemote("git@github.com:fankaidev/grovie.git")).toBe("fankaidev/grovie");
     expect(parseGitHubRemote("https://github.com/fankaidev/grovie.git")).toBe("fankaidev/grovie");
     expect(parseGitHubRemote("ssh://git@github.com/fankaidev/grovie.git")).toBe("fankaidev/grovie");
   });
 
-  it("ignores non-GitHub remotes", () => {
+  it("[UC-EXECUTION-01-S01] ignores non-GitHub remotes", () => {
     expect(parseGitHubRemote("git@example.com:fankaidev/grovie.git")).toBeUndefined();
   });
 
-  it("renders safe defaults", () => {
+  it("[UC-WORKER-02-S04] renders safe defaults", () => {
     const config = renderDefaultConfig();
 
     expect(config).not.toContain("repository:");
@@ -43,7 +43,7 @@ describe("config helpers", () => {
     expect(config).toContain("allowDefaultBranchPush: false");
   });
 
-  it("uses safe defaults when no config file exists", () => {
+  it("[UC-WORKER-02-S04] uses safe defaults when no config file exists", () => {
     const cwd = createTmpDir();
 
     const loaded = loadConfig(cwd);
@@ -93,7 +93,7 @@ describe("config helpers", () => {
     }).toThrow("Invalid fankaidev/grovie:.grovie.yml:");
   });
 
-  it("rejects unsafe and unknown nested config values", () => {
+  it("[UC-WORKER-02-S06] rejects unsafe and unknown nested config values", () => {
     const cwd = createTmpDir();
     writeFileSync(
       join(cwd, ".grovie.yml"),
@@ -122,7 +122,7 @@ describe("config helpers", () => {
     expect(() => loadConfig(cwd)).toThrow("safety: Unrecognized key: \"forcePush\"");
   });
 
-  it("rejects the old repositories allowlist shape", () => {
+  it("[UC-WORKER-02-S06] rejects the old repositories allowlist shape", () => {
     const cwd = createTmpDir();
     writeFileSync(
       join(cwd, ".grovie.yml"),
@@ -221,7 +221,7 @@ describe("config helpers", () => {
     expect(removed.watchedRepositories).toEqual([]);
   });
 
-  it("renders global config as a scheduling list, not an allowlist", () => {
+  it("[UC-WORKER-02-S01] renders global config as a scheduling list, not an allowlist", () => {
     const config = renderGlobalConfig({
       version: 1,
       agents: [],
@@ -277,6 +277,48 @@ describe("config helpers", () => {
         envKeys: ["OPENAI_API_KEY"],
       },
     ]);
+  });
+
+  it("[UC-EXECUTION-06-S04] accepts supported runtime names and rejects retired runtime names", () => {
+    const root = createTmpDir();
+
+    for (const runtime of ["codex", "claude-code", "pi"]) {
+      writeFileSync(
+        join(root, "config.yml"),
+        [
+          "version: 1",
+          "agents:",
+          "  - name: coder",
+          `    runtime: ${runtime}`,
+          "watchedRepositories: []",
+          "adminConsole:",
+          "  enabled: false",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      expect(loadGlobalConfig(root).config.agents[0]?.runtime).toBe(runtime);
+    }
+
+    for (const runtime of ["cc", "opencode", "hermes"]) {
+      writeFileSync(
+        join(root, "config.yml"),
+        [
+          "version: 1",
+          "agents:",
+          "  - name: coder",
+          `    runtime: ${runtime}`,
+          "watchedRepositories: []",
+          "adminConsole:",
+          "  enabled: false",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      expect(() => loadGlobalConfig(root)).toThrow("agents.0.runtime");
+    }
   });
 
   it("[UC-WORKER-02-S05] validates optional global state repository config", () => {

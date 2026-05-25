@@ -2438,7 +2438,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-04-S12] uses repo-local daemon policy for queue label and run config", async () => {
+  it("[UC-WORKER-02-S04] [UC-WORKER-04-S12] uses repo-local daemon policy for queue label and run config", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({

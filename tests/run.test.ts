@@ -93,6 +93,52 @@ describe("runIssue", () => {
     ]);
   });
 
+  it("[UC-GITHUB-01-S03] includes state repo sync paths in the issue summary comment", () => {
+    const root = mkdtempSync(join(tmpdir(), "grovie-run-"));
+    const stateRepoPath = join(root, "state-repo");
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState({ root, fileBacked: true });
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      stateRepo: {
+        enabled: true,
+        repository: "fankaidev/grovie-state",
+        branch: "main",
+        localPath: stateRepoPath,
+        syncIntervalSeconds: 60,
+      },
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(github.comments[0]).toContain("State repo pending:");
+    expect(github.comments[0]).toContain(".grovie-sync-pending.json");
+    expect(github.comments[0]).not.toContain(stateRepoPath);
+    expect(localState.events).toContainEqual(expect.objectContaining({
+      type: "state_repo.pending",
+    }));
+  });
+
   it("[UC-EXECUTION-06-S02] uses the selected non-Codex agent runtime for run handoff and result metadata", () => {
     const root = mkdtempSync(join(tmpdir(), "grovie-run-"));
     const binDir = join(root, "bin");
@@ -476,7 +522,7 @@ describe("runIssue", () => {
     });
   });
 
-  it("[UC-EXECUTION-03-S08] includes trigger context in the local handoff", () => {
+  it("[UC-EXECUTION-03-S09] includes trigger context in the local handoff", () => {
     const github = new FakeGitHub({
       relatedPullRequests: [
         fakeRelatedPullRequest(),
@@ -688,7 +734,7 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 
-  it("rejects issue references that do not match the runner repository before reading from GitHub", () => {
+  it("[UC-EXECUTION-01-S01] rejects issue references that do not match the runner repository before reading from GitHub", () => {
     const github = new FakeGitHub();
 
     const result = runIssue({
