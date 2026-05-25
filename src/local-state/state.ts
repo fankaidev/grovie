@@ -5,8 +5,9 @@ import { SpawnCommandRunner, type CommandRunner } from "../github.js";
 import { getRunCancellationPath, isRunCancellationRequested, writeRunCancellation } from "./cancellation.js";
 import { appendRunEvent, hasRunIdentity, hasTerminalRunEvent, interruptRuntimeProcess, isLivePid, isRecoverableRunMetadata, toErrorMessage } from "./events.js";
 import { readJsonFile, readdirDirectoryNames, readdirRequestFiles, removeFileIfExists, writeJsonFile } from "./files.js";
-import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, sanitizePathPart, sanitizeRepository } from "./ids.js";
+import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, sanitizePathPart } from "./ids.js";
 import { resolvePaths } from "./paths.js";
+import { ensureRepositoryCache, ensureWorktree, getRepositoryCachePath, readRepositoryFile } from "./repository.js";
 import type { DaemonLock, ExecutionLock, HandledCursor, LocalStateOptions, LocalStatePaths, LockResult, PreparedRun, PrepareRunInput, ResumableRun, RunCancellation, RunMetadata, RunRequest } from "./types.js";
 
 export class LocalState {
@@ -353,7 +354,7 @@ export class LocalState {
     const runId = buildRunId(sessionId, buildRunTimestamp(now));
     const branchName = buildBranchName(input.branchPrefix, sessionId);
     const localBranchName = branchName;
-    const repositoryCachePath = this.getRepositoryCachePath(input.repository);
+    const repositoryCachePath = getRepositoryCachePath(this.paths, input.repository);
     const sessionDir = join(this.paths.sessionsDir, sessionId);
     const worktreePath = join(this.paths.worktreesDir, sessionId);
     const runDir = join(this.paths.runsDir, runId);
@@ -425,8 +426,14 @@ export class LocalState {
     });
 
     try {
-      this.ensureRepositoryCache(input.repository, input.defaultBranch);
-      this.ensureWorktree({
+      ensureRepositoryCache({
+        paths: this.paths,
+        runner: this.runner,
+        repository: input.repository,
+        defaultBranch: input.defaultBranch,
+      });
+      ensureWorktree({
+        runner: this.runner,
         repositoryCachePath,
         worktreePath,
         branchName: localBranchName,
@@ -475,30 +482,12 @@ export class LocalState {
 
   readRepositoryFile(input: { repository: string; path: string }): RepositoryFileResult {
     this.ensureBaseDirectories();
-    const { cachePath, ref } = this.ensureRepositoryCacheAtRemoteHead(input.repository);
-    const result = this.runner.run("git", ["-C", cachePath, "show", `${ref}:${input.path}`]);
-    const path = `${input.repository}:${input.path}`;
-
-    if (result.exitCode === 0) {
-      return {
-        exists: true,
-        path,
-        content: result.stdout,
-      };
-    }
-
-    if (
-      result.stderr.includes("exists on disk, but not in") ||
-      result.stderr.includes("Path ") ||
-      result.stderr.includes("does not exist")
-    ) {
-      return {
-        exists: false,
-        path,
-      };
-    }
-
-    throw new Error(result.stderr.trim() || `git show failed with exit code ${result.exitCode}.`);
+    return readRepositoryFile({
+      paths: this.paths,
+      runner: this.runner,
+      repository: input.repository,
+      path: input.path,
+    });
   }
 
   private getRunRequestPath(id: string): { id: string; path: string } {
@@ -518,91 +507,6 @@ export class LocalState {
     };
   }
 
-  private ensureRepositoryCache(repository: string, defaultBranch: string): string {
-    const cachePath = this.getRepositoryCachePath(repository);
-    const remoteUrl = `https://github.com/${repository}.git`;
-
-    if (!existsSync(cachePath)) {
-      const cloneResult = this.runner.run("git", ["clone", "--bare", remoteUrl, cachePath]);
-
-      if (cloneResult.exitCode !== 0) {
-        throw new Error(cloneResult.stderr.trim() || `git clone --bare failed with exit code ${cloneResult.exitCode}.`);
-      }
-    }
-
-    const fetchResult = this.runner.run("git", [
-      "-C",
-      cachePath,
-      "fetch",
-      "origin",
-      `+refs/heads/${defaultBranch}:refs/heads/${defaultBranch}`,
-    ]);
-
-    if (fetchResult.exitCode !== 0) {
-      throw new Error(fetchResult.stderr.trim() || `git fetch failed with exit code ${fetchResult.exitCode}.`);
-    }
-
-    return cachePath;
-  }
-
-  private ensureRepositoryCacheAtRemoteHead(repository: string): { cachePath: string; ref: string } {
-    const cachePath = this.getRepositoryCachePath(repository);
-    const remoteUrl = `https://github.com/${repository}.git`;
-
-    if (!existsSync(cachePath)) {
-      const cloneResult = this.runner.run("git", ["clone", "--bare", remoteUrl, cachePath]);
-
-      if (cloneResult.exitCode !== 0) {
-        throw new Error(cloneResult.stderr.trim() || `git clone --bare failed with exit code ${cloneResult.exitCode}.`);
-      }
-    }
-
-    const ref = this.resolveRepositoryHeadRef(cachePath);
-    const fetchResult = this.runner.run("git", [
-      "-C",
-      cachePath,
-      "fetch",
-      "origin",
-      `+refs/heads/${ref}:refs/heads/${ref}`,
-    ]);
-
-    if (fetchResult.exitCode !== 0) {
-      throw new Error(fetchResult.stderr.trim() || `git fetch failed with exit code ${fetchResult.exitCode}.`);
-    }
-
-    return {
-      cachePath,
-      ref,
-    };
-  }
-
-  private resolveRepositoryHeadRef(repositoryCachePath: string): string {
-    const remoteResult = this.runner.run("git", ["-C", repositoryCachePath, "ls-remote", "--symref", "origin", "HEAD"]);
-
-    if (remoteResult.exitCode === 0) {
-      const headLine = remoteResult.stdout
-        .split("\n")
-        .find((line) => line.startsWith("ref: refs/heads/") && line.endsWith("\tHEAD"));
-      const branch = headLine?.replace(/^ref: refs\/heads\//, "").replace(/\tHEAD$/, "");
-
-      if (branch !== undefined && branch.length > 0) {
-        return branch;
-      }
-    }
-
-    const result = this.runner.run("git", ["-C", repositoryCachePath, "symbolic-ref", "--short", "HEAD"]);
-
-    if (result.exitCode === 0 && result.stdout.trim().length > 0) {
-      return result.stdout.trim();
-    }
-
-    return "main";
-  }
-
-  private getRepositoryCachePath(repository: string): string {
-    return join(this.paths.reposDir, `${sanitizeRepository(repository)}.git`);
-  }
-
   private getExecutionLockPath(repository: string, issueNumber: number, agentId: string): string {
     return join(
       this.paths.locksDir,
@@ -617,35 +521,4 @@ export class LocalState {
     );
   }
 
-  private ensureWorktree(input: {
-    repositoryCachePath: string;
-    worktreePath: string;
-    branchName: string;
-    baseBranch: string;
-  }): void {
-    if (existsSync(input.worktreePath)) {
-      return;
-    }
-
-    const pruneResult = this.runner.run("git", ["-C", input.repositoryCachePath, "worktree", "prune"]);
-
-    if (pruneResult.exitCode !== 0) {
-      throw new Error(pruneResult.stderr.trim() || `git worktree prune failed with exit code ${pruneResult.exitCode}.`);
-    }
-
-    const result = this.runner.run("git", [
-      "-C",
-      input.repositoryCachePath,
-      "worktree",
-      "add",
-      "-B",
-      input.branchName,
-      input.worktreePath,
-      input.baseBranch,
-    ]);
-
-    if (result.exitCode !== 0) {
-      throw new Error(result.stderr.trim() || `git worktree add failed with exit code ${result.exitCode}.`);
-    }
-  }
 }
