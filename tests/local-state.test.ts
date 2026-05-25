@@ -211,7 +211,7 @@ describe("LocalState", () => {
     })).toBeUndefined();
   });
 
-  it("[UC-EXECUTION-04-S01] creates session worktree and run artifacts without touching the checkout", () => {
+  it("[UC-EXECUTION-04-S01] [UC-EXECUTION-04-S05] creates session worktree and run artifacts without touching the checkout", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
     const state = new LocalState({ paths: { root }, runner });

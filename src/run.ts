@@ -110,11 +110,17 @@ type RunSummary = {
   errorSource?: "prepare" | "runtime" | "result";
   startedAt?: string;
   endedAt?: string;
+  stateRepo?: RunStateRepoSummary;
 };
 
 type RunLifecycleComment = {
   id: number;
   url: string;
+};
+
+type RunStateRepoSummary = {
+  status: "synced" | "pending";
+  path: string;
 };
 
 const RUN_MARKER = "grovie:run";
@@ -433,7 +439,7 @@ function finishRun(input: {
     runtime: input.runtimeResult.execution.runtime,
     exitCode: input.runtimeResult.execution.exitCode,
   });
-  bestEffortStateSync({
+  const stateRepo = bestEffortStateSync({
     localState: input.localState,
     stateRepo: input.stateRepo,
     run: input.run,
@@ -452,8 +458,12 @@ function finishRun(input: {
           : undefined,
     },
   });
+  const summaryWithStateRepo = {
+    ...summary,
+    stateRepo,
+  };
 
-  const commentBody = renderRunResultComment(summary);
+  const commentBody = renderRunResultComment(summaryWithStateRepo);
   const repository = formatIssueReference(input.issueReference).split("#")[0] ?? "";
   const commentResult = input.lifecycleComment === undefined
     ? input.github.createIssueComment(input.issueReference, commentBody)
@@ -466,7 +476,7 @@ function finishRun(input: {
 
     return {
       exitCode: 1,
-      stdout: renderCliRunOutput(summary),
+      stdout: renderCliRunOutput(summaryWithStateRepo),
       stderr: `Failed to post result comment: ${commentResult.error.message}`,
       canceled: summary.status === "canceled" ? true : undefined,
     };
@@ -479,7 +489,7 @@ function finishRun(input: {
 
   return {
     exitCode: summary.status === "failed" ? 1 : 0,
-    stdout: renderCliRunOutput({ ...summary, comment: commentResult.value }),
+    stdout: renderCliRunOutput({ ...summaryWithStateRepo, comment: commentResult.value }),
     stderr: summary.error,
     canceled: summary.status === "canceled" ? true : undefined,
     handledThrough: summary.result?.kind === "issue-comment" ? summary.result.comment.createdAt : undefined,
@@ -745,6 +755,10 @@ function renderRunResultComment(summary: RunSummary): string {
     lines.push(`- Issue comment: ${summary.result.comment.url}`);
   }
 
+  if (summary.stateRepo !== undefined) {
+    lines.push(`- State repo ${summary.stateRepo.status}: ${summary.stateRepo.path}`);
+  }
+
   return lines.join("\n");
 }
 
@@ -840,9 +854,9 @@ function bestEffortStateSync(input: {
   run: PreparedRun;
   agentId: string;
   summary?: Record<string, unknown>;
-}): void {
+}): RunStateRepoSummary | undefined {
   if (input.stateRepo === undefined) {
-    return;
+    return undefined;
   }
 
   const machineId = resolveSummaryMachineId(input.agentId);
@@ -864,4 +878,18 @@ function bestEffortStateSync(input: {
       pendingPath: result.pendingPath,
       message: result.message,
     });
+
+  if (result.ok) {
+    return result.path === undefined
+      ? undefined
+      : {
+        status: "synced",
+        path: result.path,
+      };
+  }
+
+  return {
+    status: "pending",
+    path: result.pendingPath,
+  };
 }

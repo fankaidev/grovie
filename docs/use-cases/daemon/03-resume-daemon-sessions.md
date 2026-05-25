@@ -19,4 +19,3 @@
 | UC-DAEMON-03-S03 | P0 | Daemon start recovers active-looking runs left behind by a force stop or crash. |
 | UC-DAEMON-03-S04 | P0 | User-canceled runs are not auto-resumed. |
 | UC-DAEMON-03-S05 | P0 | Failed runs are not auto-resumed without an explicit retry or rerun request. |
-| UC-DAEMON-03-S06 | P1 | Multiple interrupted sessions resume up to the configured daemon concurrency limit once concurrency is enabled. |
