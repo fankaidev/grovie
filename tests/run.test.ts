@@ -132,7 +132,8 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(0);
     expect(github.comments[0]).toContain("State repo pending:");
-    expect(github.comments[0]).toContain(join(stateRepoPath, ".grovie-sync-pending.json"));
+    expect(github.comments[0]).toContain(".grovie-sync-pending.json");
+    expect(github.comments[0]).not.toContain(stateRepoPath);
     expect(localState.events).toContainEqual(expect.objectContaining({
       type: "state_repo.pending",
     }));

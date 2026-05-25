@@ -120,7 +120,7 @@ type RunLifecycleComment = {
 
 type RunStateRepoSummary = {
   status: "synced" | "pending";
-  path: string;
+  target: string;
 };
 
 const RUN_MARKER = "grovie:run";
@@ -756,7 +756,7 @@ function renderRunResultComment(summary: RunSummary): string {
   }
 
   if (summary.stateRepo !== undefined) {
-    lines.push(`- State repo ${summary.stateRepo.status}: ${summary.stateRepo.path}`);
+    lines.push(`- State repo ${summary.stateRepo.status}: ${summary.stateRepo.target}`);
   }
 
   return lines.join("\n");
@@ -884,12 +884,16 @@ function bestEffortStateSync(input: {
       ? undefined
       : {
         status: "synced",
-        path: result.path,
+        target: renderStateRepoRunSummaryLink(input.stateRepo, input.run.runId),
       };
   }
 
   return {
     status: "pending",
-    path: result.pendingPath,
+    target: ".grovie-sync-pending.json",
   };
+}
+
+function renderStateRepoRunSummaryLink(config: StateRepoConfig, runId: string): string {
+  return `https://github.com/${config.repository}/blob/${encodeURIComponent(config.branch)}/runs/${encodeURIComponent(runId)}/summary.json`;
 }
