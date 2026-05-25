@@ -6,6 +6,7 @@ import { getRunCancellationPath, isRunCancellationRequested, writeRunCancellatio
 import { appendRunEvent, hasRunIdentity, hasTerminalRunEvent, interruptRuntimeProcess, isLivePid, isRecoverableRunMetadata, toErrorMessage } from "./events.js";
 import { readJsonFile, readdirDirectoryNames, readdirRequestFiles, removeFileIfExists, writeJsonFile } from "./files.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, sanitizePathPart } from "./ids.js";
+import { acquireDaemonLock, acquireExecutionLock, getExecutionLockPath, hasExecutionLock, isDaemonRunning, releaseDaemonLock, releaseExecutionLock } from "./locks.js";
 import { resolvePaths } from "./paths.js";
 import { ensureRepositoryCache, ensureWorktree, getRepositoryCachePath, readRepositoryFile } from "./repository.js";
 import type { DaemonLock, ExecutionLock, HandledCursor, LocalStateOptions, LocalStatePaths, LockResult, PreparedRun, PrepareRunInput, ResumableRun, RunCancellation, RunMetadata, RunRequest } from "./types.js";
@@ -34,40 +35,15 @@ export class LocalState {
   }
   acquireDaemonLock(machineId: string, now = new Date()): LockResult<DaemonLock> {
     this.ensureBaseDirectories();
-    const path = join(this.paths.locksDir, `daemon-${sanitizePathPart(machineId)}.json`);
-    const existing = readJsonFile<Partial<DaemonLock>>(path);
-    const recoveredStale = existing !== undefined && !isLivePid(existing.pid);
-
-    if (existing !== undefined && !recoveredStale) {
-      return {
-        ok: false,
-        message: `Grovie daemon already appears to be running for machine ${machineId} with pid ${existing.pid}.`,
-      };
-    }
-
-    const lock = {
-      machineId,
-      pid: process.pid,
-      acquiredAt: now.toISOString(),
-      path,
-    };
-
-    writeJsonFile(path, lock);
-
-    return {
-      ok: true,
-      lock,
-      recoveredStale,
-    };
+    return acquireDaemonLock(this.paths, machineId, now);
   }
 
   releaseDaemonLock(lock: DaemonLock): void {
-    removeFileIfExists(lock.path);
+    releaseDaemonLock(lock);
   }
 
   isDaemonRunning(machineId: string): boolean {
-    const existing = readJsonFile<Partial<DaemonLock>>(join(this.paths.locksDir, `daemon-${sanitizePathPart(machineId)}.json`));
-    return existing !== undefined && isLivePid(existing.pid);
+    return isDaemonRunning(this.paths, machineId);
   }
 
   acquireExecutionLock(input: {
@@ -77,38 +53,15 @@ export class LocalState {
     now?: Date;
   }): LockResult<ExecutionLock> {
     this.ensureBaseDirectories();
-    const path = this.getExecutionLockPath(input.repository, input.issueNumber, input.agentId);
-    const existing = readJsonFile<Partial<ExecutionLock>>(path);
-
-    if (existing !== undefined) {
-      return {
-        ok: false,
-        message: `Grovie execution already appears active for ${input.repository}#${input.issueNumber} and ${input.agentId}.`,
-      };
-    }
-
-    const lock = {
-      repository: input.repository,
-      issueNumber: input.issueNumber,
-      agentId: input.agentId,
-      acquiredAt: (input.now ?? new Date()).toISOString(),
-      path,
-    };
-
-    writeJsonFile(path, lock);
-
-    return {
-      ok: true,
-      lock,
-    };
+    return acquireExecutionLock(this.paths, input);
   }
 
   hasExecutionLock(input: { repository: string; issueNumber: number; agentId: string }): boolean {
-    return existsSync(this.getExecutionLockPath(input.repository, input.issueNumber, input.agentId));
+    return hasExecutionLock(this.paths, input);
   }
 
   releaseExecutionLock(lock: ExecutionLock): void {
-    removeFileIfExists(lock.path);
+    releaseExecutionLock(lock);
   }
 
   interruptActiveRuns(input: { now?: Date; reason: string }): ResumableRun[] {
@@ -200,7 +153,7 @@ export class LocalState {
         issueNumber,
         agentId,
         acquiredAt: "",
-        path: this.getExecutionLockPath(repository, issueNumber, agentId),
+        path: getExecutionLockPath(this.paths, repository, issueNumber, agentId),
       });
 
       return {
@@ -505,13 +458,6 @@ export class LocalState {
       id: candidate,
       path,
     };
-  }
-
-  private getExecutionLockPath(repository: string, issueNumber: number, agentId: string): string {
-    return join(
-      this.paths.locksDir,
-      `execution-${sanitizePathPart(repository)}-issue-${issueNumber}-${sanitizePathPart(agentId)}.json`,
-    );
   }
 
   private getHandledCursorPath(repository: string, issueNumber: number, agentId: string): string {
