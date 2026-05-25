@@ -331,7 +331,8 @@ export class LocalState {
 
     writeJsonFile(metadataPath, {
       ...metadata,
-      resumeEligible: true,
+      status: metadata.status === "resuming" ? "interrupted" : metadata.status,
+      resumeEligible: false,
       sessionResumingAt: (input.now ?? new Date()).toISOString(),
     });
     appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "session.resuming", {
