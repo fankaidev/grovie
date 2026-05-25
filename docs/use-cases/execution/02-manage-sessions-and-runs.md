@@ -7,8 +7,7 @@
 | ID | Rule |
 |----|------|
 | R1 | Session identity is keyed by `(issue, agent)`. |
-| R2 | Run identity is deterministic and readable, with no random suffix. |
-| R3 | The handled cursor is local and scoped to `(issue, agent)`. |
+| R2 | The handled cursor is local and scoped to `(issue, agent)`. |
 
 ## Scenarios
 

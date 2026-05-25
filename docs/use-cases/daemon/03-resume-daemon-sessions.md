@@ -8,7 +8,6 @@
 |----|------|
 | R1 | A Grovie run records one execution attempt; daemon recovery creates a new run in the same session instead of rewriting the old run. |
 | R2 | Interrupted runs are distinct from failed and user-canceled runs. |
-| R3 | Recovery work is considered before polling GitHub for new queue work. |
 
 ## Scenarios
 

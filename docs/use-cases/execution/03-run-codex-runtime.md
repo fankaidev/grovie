@@ -6,12 +6,10 @@
 
 | ID | Rule |
 |----|------|
-| R1 | The MVP supports the `codex` runtime. |
-| R2 | Trusted Grovie context is separated from untrusted GitHub issue content. |
-| R3 | Local stdout and stderr logs are raw execution logs. |
-| R4 | Current Codex runs use `danger-full-access` sandboxing until configurable agent runtime safety settings are implemented. |
-| R5 | Configured local agent instructions are trusted local context and are included in the runtime handoff separately from GitHub issue content. |
-| R6 | Runtime child processes receive only a small baseline environment plus variables explicitly named by the configured agent `envKeys` allowlist. |
+| R1 | Trusted Grovie context is separated from untrusted GitHub issue content. |
+| R2 | Local stdout and stderr logs are raw execution logs. |
+| R3 | Configured local agent instructions are trusted local context and are included in the runtime handoff separately from GitHub issue content. |
+| R4 | Runtime child processes receive only a small baseline environment plus variables explicitly named by the configured agent `envKeys` allowlist. |
 
 ## Scenarios
 

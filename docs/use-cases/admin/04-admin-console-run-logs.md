@@ -6,12 +6,10 @@
 
 | ID | Rule |
 |----|------|
-| R1 | Run log APIs read local run log files and do not require the original daemon process to still be alive. |
+| R1 | Run logs remain locally inspectable after the original daemon process exits. |
 | R2 | stdout and stderr remain separate streams. |
 | R3 | Log responses must not expose environment variable values added by Grovie itself. |
-| R4 | Runtime stdout transcript parsing is exposed through an admin API behind a runtime-aware parser interface. |
-| R5 | Raw stdout remains available when a readable transcript is shown or when transcript parsing is unavailable. |
-| R6 | Log response, transcript, and Server-Sent Events payload metadata use the shared admin API contract types. |
+| R4 | Raw stdout remains available when a readable transcript is shown or when transcript parsing is unavailable. |
 
 ## Scenarios
 

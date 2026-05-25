@@ -8,8 +8,6 @@
 |----|------|
 | R1 | Admin APIs are available only through the opt-in local admin console server. |
 | R2 | Admin APIs must not expose environment variable values or secret values. |
-| R3 | Run APIs read local run history from `~/.grovie/runs`. |
-| R4 | Admin API JSON request and response shapes are exported from one shared TypeScript contract module used by the server and React admin web client. |
 
 ## Scenarios
 
