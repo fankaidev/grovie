@@ -64,7 +64,7 @@ export function startAdminConsoleWorker(input: {
 }
 
 function resolveAdminConsoleWorkerOptions(): { url: URL; execArgv: string[] } {
-  const builtWorkerUrl = new URL("../admin-console-worker.js", import.meta.url);
+  const builtWorkerUrl = new URL("./admin-console-worker.js", import.meta.url);
 
   if (existsSync(fileURLToPath(builtWorkerUrl))) {
     return {
