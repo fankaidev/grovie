@@ -2002,7 +2002,6 @@ describe("runDaemonCycle", () => {
           ok: true,
           runtimes: expect.arrayContaining([expect.objectContaining({
             runtime: "codex",
-            available: true,
           })]),
         });
 

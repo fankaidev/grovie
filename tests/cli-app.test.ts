@@ -109,7 +109,13 @@ describe("CLI command registration", () => {
     const machineId = resolveMachineId(hostname());
     configureLocalAgent(localState);
 
-    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState })).toEqual({
+    expect(runCli(["doctor"], {
+      cwd,
+      github: fakeGitHubGateway(),
+      runtime: fakeRuntime(),
+      runtimeAvailabilityChecker: fakeRuntimeAvailability,
+      localState,
+    })).toEqual({
       exitCode: 0,
       stdout: [
         "grovie doctor",
@@ -120,7 +126,7 @@ describe("CLI command registration", () => {
         "Runtimes:",
         "- codex command=codex: available (codex-cli 0.133.0)",
         "- claude-code command=claude: available (2.1.142 (Claude Code))",
-        "- pi command=pi: spawnSync pi ENOENT",
+        "- pi command=pi: pi command not found",
         "Configured agents:",
         `- coder@${machineId} (codex, command=codex): available (codex-cli 0.133.0)`,
         "Queue label: grovie",
@@ -226,10 +232,14 @@ describe("CLI command registration", () => {
         cwd,
         github: fakeGitHubGateway(),
         localState: new FakeLocalState(globalRoot),
-        runtime: fakeRuntime({
-          available: false,
-          message: "codex command not found",
-        }),
+        runtimeAvailabilityChecker: (runtime) => runtime === "codex"
+          ? {
+              runtime,
+              command: "codex",
+              available: false,
+              message: "codex command not found",
+            }
+          : fakeRuntimeAvailability(runtime),
       }),
     ).toEqual({
       exitCode: 0,
@@ -242,7 +252,7 @@ describe("CLI command registration", () => {
         "Runtimes:",
         "- codex command=codex: codex command not found",
         "- claude-code command=claude: available (2.1.142 (Claude Code))",
-        "- pi command=pi: spawnSync pi ENOENT",
+        "- pi command=pi: pi command not found",
         "Configured agents: none",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",

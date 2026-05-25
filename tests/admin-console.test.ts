@@ -864,7 +864,7 @@ async function startTestServer(
   root = createTmpDir(),
   daemonLifecycleOverrides: Partial<DaemonLifecycle> = {},
   adminWebAssetsDir = join(root, "missing-admin-web"),
-  runtimeAvailabilityChecker?: (runtime: RuntimeName) => ReturnType<AgentRuntime["checkAvailability"]>,
+  runtimeAvailabilityChecker: (runtime: RuntimeName) => ReturnType<AgentRuntime["checkAvailability"]> = fakeRuntimeAvailability,
 ): Promise<StartedAdminConsole> {
   const port = await getAvailablePort();
   const started = await startAdminConsoleServer({
