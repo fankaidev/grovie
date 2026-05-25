@@ -511,8 +511,21 @@ const commandDefinitions = [
               label: config.queue.label,
             },
           ];
+        const queueRepositories = repositories.map((repository) => {
+          const repositoryConfig = loadRepositoryConfig(repository.repository, context.localState);
+          const trustedAuthors = resolveQueueTrustedAuthors(repositoryConfig.config, context.github);
+
+          if (!trustedAuthors.ok) {
+            throw new Error(trustedAuthors.message);
+          }
+
+          return {
+            ...repository,
+            trustedAuthors: trustedAuthors.value,
+          };
+        });
         const result = inspectQueue({
-          repositories,
+          repositories: queueRepositories,
           github: context.github,
           machineId: identity.machineId,
           configuredAgentIds: localAgents.map((agent) => agent.agentId),
@@ -1226,6 +1239,31 @@ function renderConfigPath(loaded: LoadedConfig): string {
 function renderGlobalConfigSource(path: string, watchedRepositoryCount: number): string {
   const repositoryText = watchedRepositoryCount === 1 ? "1 watched repository" : `${watchedRepositoryCount} watched repositories`;
   return `${path} (${repositoryText}).`;
+}
+
+function resolveQueueTrustedAuthors(config: LoadedConfig["config"], github: GitHubGateway): { ok: true; value: string[] } | { ok: false; message: string } {
+  const configured = config.trust?.trustedAuthors.filter((author) => author.trim().length > 0) ?? [];
+
+  if (configured.length > 0) {
+    return {
+      ok: true,
+      value: configured,
+    };
+  }
+
+  const authenticated = github.getAuthenticatedUser();
+
+  if (!authenticated.ok) {
+    return {
+      ok: false,
+      message: `Could not resolve default trusted issue creator from gh login: ${authenticated.error.message}`,
+    };
+  }
+
+  return {
+    ok: true,
+    value: [authenticated.value.login],
+  };
 }
 
 function enqueueDaemonRunRequest(input: {

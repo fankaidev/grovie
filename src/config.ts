@@ -38,6 +38,9 @@ export const configSchema = z.strictObject({
   comments: z.strictObject({
     mode: z.literal("concise"),
   }),
+  trust: z.strictObject({
+    trustedAuthors: z.array(z.string().min(1, "must not be empty")).default([]),
+  }).optional(),
   safety: z.strictObject({
     allowDefaultBranchPush: z.literal(false),
   }),
@@ -367,6 +370,10 @@ pullRequests:
 
 comments:
   mode: concise
+
+trust:
+  # If empty or omitted, daemon queue runs trust only the authenticated gh user.
+  trustedAuthors: []
 
 safety:
   # This must stay false. Grovie should never push directly to the default branch.

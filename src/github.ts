@@ -111,6 +111,7 @@ export type GitHubIssue = {
   reference: IssueReference;
   title: string;
   body: string;
+  author: string;
   state: string;
   updatedAt: string;
   labels: string[];
@@ -254,6 +255,7 @@ export class GhGitHubGateway implements GitHubGateway {
         reference,
         title: issueResult.value.title,
         body: issueResult.value.body ?? "",
+        author: issueResult.value.user?.login ?? "unknown",
         state: issueResult.value.state,
         updatedAt: issueResult.value.updated_at,
         labels: issueResult.value.labels.map((label) => label.name),
@@ -820,6 +822,9 @@ type GitHubRepositoryResponse = {
 type GitHubIssueResponse = {
   title: string;
   body: string | null;
+  user: {
+    login: string;
+  } | null;
   state: string;
   updated_at: string;
   labels: GitHubLabel[];

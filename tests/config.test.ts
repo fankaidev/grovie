@@ -39,6 +39,7 @@ describe("config helpers", () => {
     expect(config).not.toContain("repository:");
     expect(config).not.toContain("runtime:");
     expect(config).toContain("label: grovie");
+    expect(config).toContain("trustedAuthors: []");
     expect(config).toContain("allowDefaultBranchPush: false");
   });
 
@@ -54,6 +55,17 @@ describe("config helpers", () => {
         label: "grovie",
       },
     });
+  });
+
+  it("[UC-WORKER-04-S17] loads repo-local trusted issue authors", () => {
+    const cwd = createTmpDir();
+    writeFileSync(
+      join(cwd, ".grovie.yml"),
+      renderDefaultConfig().replace("trustedAuthors: []", "trustedAuthors:\n    - fankaidev\n    - trusted-user"),
+      "utf8",
+    );
+
+    expect(loadConfig(cwd).config.trust?.trustedAuthors).toEqual(["fankaidev", "trusted-user"]);
   });
 
   it("[UC-WORKER-04-S12] loads repo-local policy config through a repository file reader", () => {

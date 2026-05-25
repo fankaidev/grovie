@@ -14,6 +14,7 @@ import type { RunLocalState } from "./run.js";
 export type QueueRepositoryInput = {
   repository: string;
   label: string;
+  trustedAuthors?: string[];
 };
 
 export type QueueCandidateStatus = "runnable" | "skipped";
@@ -62,6 +63,7 @@ export type QueueInspectionInput = {
   repositories: QueueRepositoryInput[];
   github: GitHubGateway;
   machineId: string;
+  trustedAuthors?: string[];
   configuredAgentIds?: string[];
   localState?: RunLocalState;
   issueNumbers?: number[];
@@ -95,6 +97,7 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
         label: repository.label,
         issue,
         machineId: input.machineId,
+        trustedAuthors: repository.trustedAuthors ?? input.trustedAuthors,
         configuredAgentIds: input.configuredAgentIds,
         localState: input.localState,
       });
@@ -255,6 +258,7 @@ function evaluateCheapIssueSkips(input: {
   label: string;
   issue: GitHubIssue;
   machineId: string;
+  trustedAuthors?: string[];
   configuredAgentIds?: string[];
   localState?: RunLocalState;
 }): IssueSkipCheck {
@@ -266,6 +270,13 @@ function evaluateCheapIssueSkips(input: {
     return {
       skipped: true,
       candidates: [],
+    };
+  }
+
+  if (!isTrustedIssueAuthor(input.issue.author, input.trustedAuthors)) {
+    return {
+      skipped: true,
+      candidates: assignedAgentIds.map((agentId) => skippedCandidate(input, priority, activity, agentId, `untrusted issue creator ${input.issue.author}`)),
     };
   }
 
@@ -324,6 +335,15 @@ function evaluateCheapIssueSkips(input: {
     skipped: false,
     agentIds: unlockedAgentIds,
   };
+}
+
+function isTrustedIssueAuthor(author: string, trustedAuthors: string[] | undefined): boolean {
+  if (trustedAuthors === undefined) {
+    return true;
+  }
+
+  const normalizedAuthor = author.toLowerCase();
+  return trustedAuthors.some((trustedAuthor) => trustedAuthor.toLowerCase() === normalizedAuthor);
 }
 
 function evaluateActivityCandidates(input: {

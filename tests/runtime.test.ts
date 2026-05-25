@@ -639,6 +639,7 @@ function fakeIssue(): GitHubIssue {
     },
     title: "Add runtime",
     body: "Implement the Codex adapter.",
+    author: "fankaidev",
     state: "open",
     updatedAt: "2026-05-22T00:00:00Z",
     labels: ["mvp", "type:task"],
