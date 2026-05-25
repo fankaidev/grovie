@@ -1,10 +1,26 @@
 {
-  "name": "grovie",
+  "name": "@fankaidev/grovie",
   "version": "0.1.0",
-  "private": true,
+  "description": "GitHub-native local runner for multi-agent coding workflows.",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "grovie": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fankaidev/grovie.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fankaidev/grovie/issues"
+  },
+  "homepage": "https://github.com/fankaidev/grovie#readme",
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "tsx src/cli.ts",
@@ -14,7 +30,8 @@
     "copy:admin-web": "node scripts/copy-admin-web-build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && pnpm --dir admin-web typecheck",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "prepublishOnly": "pnpm check"
   },
   "engines": {
     "node": ">=20"
