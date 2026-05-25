@@ -4,9 +4,9 @@
 [![npm version](https://img.shields.io/npm/v/%40fankaidev%2Fgrovie.svg)](https://www.npmjs.com/package/@fankaidev/grovie)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Grovie lets you run coding agents from GitHub issues on your own machine.
+Grovie is a local-first, GitHub-native multi-agent platform for coordinating coding agents across real repository work.
 
-Label an issue, let a local daemon pick it up, and get back a branch, pull request, logs, and reviewable GitHub comments without running a hosted agent platform. GitHub stays the control plane for issues, labels, comments, branches, pull requests, reviews, and CI; your local machine stays the executor for agents, worktrees, credentials, and logs.
+It keeps execution on your machines while GitHub remains the shared workflow, audit trail, and review surface. Agents run locally with your tools, credentials, prompts, and runtime permissions; coordination happens through the GitHub artifacts your team already uses.
 
 ```sh
 npm install --global @fankaidev/grovie
@@ -20,8 +20,8 @@ grovie run owner/repo#123 --agent codex
 
 - No hosted service to sign up for, operate, or trust with your source checkout.
 - No new task database, dashboard, queue, account system, or central coordinator.
-- GitHub remains the shared workspace your team already uses.
-- Agents run with your local tools, credentials, prompts, and runtime permissions.
+- GitHub remains the shared workflow, audit trail, and review surface.
+- Agents run on your machines with your local tools, credentials, prompts, and runtime permissions.
 - Work happens in isolated local worktrees under `~/.grovie/`.
 - Results come back as ordinary GitHub branches, pull requests, comments, reviews, and CI checks.
 - Local run state, logs, and worktrees stay inspectable on disk.
@@ -29,9 +29,9 @@ grovie run owner/repo#123 --agent codex
 
 ## Who It Is For
 
-Grovie is for developers and small teams who want coding agents to work through normal GitHub issues and pull requests while keeping execution, credentials, source checkouts, and raw logs on their own machines.
+Grovie is for developers and small teams who want multiple coding agents to collaborate on real repository work while keeping execution, credentials, source checkouts, and raw logs on their own machines.
 
-It is especially useful when you want local agents to handle queued issue work, produce reviewable pull requests, and leave an auditable trail in GitHub without adopting a hosted agent platform.
+It is especially useful when you want local agents to share a durable workflow, produce reviewable pull requests, and leave an auditable trail in GitHub without adopting a hosted agent platform.
 
 ## Quick Start
 
