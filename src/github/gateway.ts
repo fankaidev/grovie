@@ -40,13 +40,18 @@ import type {
   GitHubRepositoryResponse,
   GitHubUserResponse,
 } from "./responses.js";
+import { GhApiClient } from "./api-client.js";
 import { SpawnCommandRunner } from "./runner.js";
 
 export class GhGitHubGateway implements GitHubGateway {
-  constructor(private readonly runner: CommandRunner = new SpawnCommandRunner()) {}
+  private readonly api: GhApiClient;
+
+  constructor(private readonly runner: CommandRunner = new SpawnCommandRunner()) {
+    this.api = new GhApiClient(runner);
+  }
 
   getAuthenticatedUser(): Result<GitHubUser> {
-    const result = this.apiJson<GitHubUserResponse>("user");
+    const result = this.api.json<GitHubUserResponse>("user");
 
     if (!result.ok) {
       return result;
@@ -67,7 +72,7 @@ export class GhGitHubGateway implements GitHubGateway {
       return parsedRepository;
     }
 
-    const result = this.apiJson<GitHubIssueListItemResponse[][]>(
+    const result = this.api.json<GitHubIssueListItemResponse[][]>(
       `repos/${repository}/issues?state=open&labels=${encodeURIComponent(label)}`,
       {
         paginate: true,
@@ -98,19 +103,19 @@ export class GhGitHubGateway implements GitHubGateway {
 
   readIssue(reference: IssueReference): Result<GitHubIssue> {
     const repository = formatRepository(reference);
-    const issueResult = this.apiJson<GitHubIssueResponse>(`repos/${repository}/issues/${reference.number}`);
+    const issueResult = this.api.json<GitHubIssueResponse>(`repos/${repository}/issues/${reference.number}`);
 
     if (!issueResult.ok) {
       return issueResult;
     }
 
-    const repoResult = this.apiJson<GitHubRepositoryResponse>(`repos/${repository}`);
+    const repoResult = this.api.json<GitHubRepositoryResponse>(`repos/${repository}`);
 
     if (!repoResult.ok) {
       return repoResult;
     }
 
-    const commentsResult = this.apiJson<GitHubCommentResponse[][]>(
+    const commentsResult = this.api.json<GitHubCommentResponse[][]>(
       `repos/${repository}/issues/${reference.number}/comments`,
       {
         paginate: true,
@@ -140,7 +145,7 @@ export class GhGitHubGateway implements GitHubGateway {
 
   addLabels(reference: IssueReference, labels: string[]): Result<void> {
     const repository = formatRepository(reference);
-    const result = this.apiJson<unknown>(`repos/${repository}/issues/${reference.number}/labels`, {
+    const result = this.api.json<unknown>(`repos/${repository}/issues/${reference.number}/labels`, {
       method: "POST",
       body: {
         labels,
@@ -159,7 +164,7 @@ export class GhGitHubGateway implements GitHubGateway {
 
   removeLabel(reference: IssueReference, label: string): Result<void> {
     const repository = formatRepository(reference);
-    const result = this.apiJson<unknown>(
+    const result = this.api.json<unknown>(
       `repos/${repository}/issues/${reference.number}/labels/${encodeURIComponent(label)}`,
       {
         method: "DELETE",
@@ -178,7 +183,7 @@ export class GhGitHubGateway implements GitHubGateway {
 
   createIssueComment(reference: IssueReference, body: string): Result<CreatedComment> {
     const repository = formatRepository(reference);
-    const result = this.apiJson<GitHubCommentMutationResponse>(`repos/${repository}/issues/${reference.number}/comments`, {
+    const result = this.api.json<GitHubCommentMutationResponse>(`repos/${repository}/issues/${reference.number}/comments`, {
       method: "POST",
       body: {
         body,
@@ -196,7 +201,7 @@ export class GhGitHubGateway implements GitHubGateway {
   }
 
   updateIssueComment(repository: string, commentId: number, body: string): Result<CreatedComment> {
-    const result = this.apiJson<GitHubCommentMutationResponse>(`repos/${repository}/issues/comments/${commentId}`, {
+    const result = this.api.json<GitHubCommentMutationResponse>(`repos/${repository}/issues/comments/${commentId}`, {
       method: "PATCH",
       body: {
         body,
@@ -214,7 +219,7 @@ export class GhGitHubGateway implements GitHubGateway {
   }
 
   createPullRequest(input: CreatePullRequestInput): Result<CreatedPullRequest> {
-    const result = this.apiJson<GitHubPullRequestResponse>(`repos/${input.repository}/pulls`, {
+    const result = this.api.json<GitHubPullRequestResponse>(`repos/${input.repository}/pulls`, {
       method: "POST",
       body: {
         title: input.title,
@@ -248,7 +253,7 @@ export class GhGitHubGateway implements GitHubGateway {
       };
     }
 
-    const orgs = this.apiJson<Array<{ login: string }>[]>("user/orgs", {
+    const orgs = this.api.json<Array<{ login: string }>[]>("user/orgs", {
       paginate: true,
       slurp: true,
     });
@@ -264,7 +269,7 @@ export class GhGitHubGateway implements GitHubGateway {
   }
 
   readRepository(repository: string): Result<CreatedRepository> {
-    const result = this.apiJson<GitHubRepositoryResponse>(`repos/${repository}`);
+    const result = this.api.json<GitHubRepositoryResponse>(`repos/${repository}`);
 
     if (!result.ok) {
       return result;
@@ -299,7 +304,7 @@ export class GhGitHubGateway implements GitHubGateway {
     const path = parsed.value.owner === authenticated.value.login
       ? "user/repos"
       : `orgs/${parsed.value.owner}/repos`;
-    const result = this.apiJson<GitHubRepositoryResponse>(path, {
+    const result = this.api.json<GitHubRepositoryResponse>(path, {
       method: "POST",
       body: {
         name: parsed.value.repo,
@@ -324,7 +329,7 @@ export class GhGitHubGateway implements GitHubGateway {
 
   readRelatedPullRequests(reference: IssueReference): Result<GitHubRelatedPullRequest[]> {
     const repository = formatRepository(reference);
-    const result = this.apiJson<GitHubPullRequestListItemResponse[][]>(
+    const result = this.api.json<GitHubPullRequestListItemResponse[][]>(
       `repos/${repository}/pulls?state=all&per_page=100`,
       {
         paginate: true,
@@ -342,13 +347,13 @@ export class GhGitHubGateway implements GitHubGateway {
     const contexts: GitHubRelatedPullRequest[] = [];
 
     for (const pullRequest of related) {
-      const detailsResult = this.apiJson<GitHubPullRequestDetailsResponse>(`repos/${repository}/pulls/${pullRequest.number}`);
+      const detailsResult = this.api.json<GitHubPullRequestDetailsResponse>(`repos/${repository}/pulls/${pullRequest.number}`);
 
       if (!detailsResult.ok) {
         return detailsResult;
       }
 
-      const commentsResult = this.apiJson<GitHubCommentResponse[][]>(
+      const commentsResult = this.api.json<GitHubCommentResponse[][]>(
         `repos/${repository}/issues/${pullRequest.number}/comments`,
         {
           paginate: true,
@@ -360,7 +365,7 @@ export class GhGitHubGateway implements GitHubGateway {
         return commentsResult;
       }
 
-      const reviewCommentsResult = this.apiJson<GitHubCommentResponse[][]>(
+      const reviewCommentsResult = this.api.json<GitHubCommentResponse[][]>(
         `repos/${repository}/pulls/${pullRequest.number}/comments`,
         {
           paginate: true,
@@ -372,7 +377,7 @@ export class GhGitHubGateway implements GitHubGateway {
         return reviewCommentsResult;
       }
 
-      const reviewsResult = this.apiJson<GitHubPullRequestReviewResponse[][]>(
+      const reviewsResult = this.api.json<GitHubPullRequestReviewResponse[][]>(
         `repos/${repository}/pulls/${pullRequest.number}/reviews`,
         {
           paginate: true,
@@ -384,7 +389,7 @@ export class GhGitHubGateway implements GitHubGateway {
         return reviewsResult;
       }
 
-      const checksResult = this.apiJson<GitHubCheckRunsResponse>(
+      const checksResult = this.api.json<GitHubCheckRunsResponse>(
         `repos/${repository}/commits/${pullRequest.head.sha}/check-runs`,
       );
 
@@ -435,7 +440,7 @@ export class GhGitHubGateway implements GitHubGateway {
   }
 
   listRepositoryEvents(repository: string): Result<GitHubRepositoryEvent[]> {
-    const result = this.apiJson<GitHubRepositoryEventResponse[]>(`repos/${repository}/events?per_page=100`);
+    const result = this.api.json<GitHubRepositoryEventResponse[]>(`repos/${repository}/events?per_page=100`);
 
     if (!result.ok) {
       return result;
@@ -528,76 +533,4 @@ export class GhGitHubGateway implements GitHubGateway {
     }
   }
 
-  private apiJson<T>(
-    path: string,
-    options: {
-      method?: "GET" | "POST" | "PATCH" | "DELETE";
-      body?: unknown;
-      paginate?: boolean;
-      slurp?: boolean;
-    } = {},
-  ): Result<T> {
-    const args = ["api"];
-
-    if (options.method !== undefined) {
-      args.push("-X", options.method);
-    }
-
-    if (options.paginate === true) {
-      args.push("--paginate");
-    }
-
-    if (options.slurp === true) {
-      args.push("--slurp");
-    }
-
-    args.push(path);
-
-    const input = options.body === undefined ? undefined : `${JSON.stringify(options.body)}\n`;
-
-    if (input !== undefined) {
-      args.push("--input", "-");
-    }
-
-    const result = this.runner.run("gh", args, input);
-
-    if (result.exitCode !== 0) {
-      return {
-        ok: false,
-        error: {
-          code: "gh_failed",
-          message: result.stderr.trim() || `gh ${args.join(" ")} failed with exit code ${result.exitCode}.`,
-          command: `gh ${args.join(" ")}`,
-          exitCode: result.exitCode,
-          stderr: result.stderr,
-        },
-      };
-    }
-
-    if (result.stdout.trim().length === 0) {
-      return {
-        ok: true,
-        value: undefined as T,
-      };
-    }
-
-    try {
-      return {
-        ok: true,
-        value: JSON.parse(result.stdout) as T,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-
-      return {
-        ok: false,
-        error: {
-          code: "invalid_json",
-          message: `gh ${args.join(" ")} returned invalid JSON: ${message}`,
-          command: `gh ${args.join(" ")}`,
-          stderr: result.stdout,
-        },
-      };
-    }
-  }
 }
