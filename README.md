@@ -50,7 +50,15 @@ Prerequisites:
 - GitHub CLI authenticated with `gh auth login`
 - A local agent runtime such as Codex CLI, Claude Code, or Pi
 
-Install the current source checkout:
+Install Grovie:
+
+```sh
+npm install --global @fankaidev/grovie
+grovie --version
+grovie --help
+```
+
+Install the current source checkout for development:
 
 These source install commands require Node.js 20 or newer and pnpm 10.26.1.
 
