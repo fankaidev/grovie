@@ -3,12 +3,13 @@ import { join } from "node:path";
 import type { RepositoryFileResult } from "../config.js";
 import { SpawnCommandRunner, type CommandRunner } from "../github.js";
 import { getRunCancellationPath, isRunCancellationRequested, writeRunCancellation } from "./cancellation.js";
-import { appendRunEvent, hasRunIdentity, hasTerminalRunEvent, interruptRuntimeProcess, isLivePid, isRecoverableRunMetadata, toErrorMessage } from "./events.js";
-import { readJsonFile, readdirDirectoryNames, writeJsonFile } from "./files.js";
+import { appendRunEvent, toErrorMessage } from "./events.js";
+import { readJsonFile, writeJsonFile } from "./files.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, sanitizePathPart } from "./ids.js";
-import { acquireDaemonLock, acquireExecutionLock, getExecutionLockPath, hasExecutionLock, isDaemonRunning, releaseDaemonLock, releaseExecutionLock } from "./locks.js";
+import { acquireDaemonLock, acquireExecutionLock, hasExecutionLock, isDaemonRunning, releaseDaemonLock, releaseExecutionLock } from "./locks.js";
 import { resolvePaths } from "./paths.js";
 import { enqueueRunRequest, takeRunRequest } from "./requests.js";
+import { interruptActiveRuns, markRunRejected, markSessionResuming, takeResumableRun } from "./resume.js";
 import { ensureRepositoryCache, ensureWorktree, getRepositoryCachePath, readRepositoryFile } from "./repository.js";
 import type { DaemonLock, ExecutionLock, HandledCursor, LocalStateOptions, LocalStatePaths, LockResult, PreparedRun, PrepareRunInput, ResumableRun, RunCancellation, RunMetadata, RunRequest } from "./types.js";
 
@@ -67,149 +68,20 @@ export class LocalState {
 
   interruptActiveRuns(input: { now?: Date; reason: string }): ResumableRun[] {
     this.ensureBaseDirectories();
-    const interrupted: ResumableRun[] = [];
-
-    for (const runDirName of readdirDirectoryNames(this.paths.runsDir)) {
-      const runDir = join(this.paths.runsDir, runDirName);
-      const metadataPath = join(runDir, "metadata.json");
-      const metadata = readJsonFile<RunMetadata>(metadataPath);
-
-      if (
-        metadata === undefined
-        || (metadata.status !== "interrupted" && metadata.status !== "resuming" && hasTerminalRunEvent(join(runDir, "events.jsonl")))
-        || !isRecoverableRunMetadata(metadata, "active-looking")
-      ) {
-        continue;
-      }
-
-      interruptRuntimeProcess(metadata.runtimePid);
-      const runId = metadata.runId ?? runDirName;
-      const interruptedAt = (input.now ?? new Date()).toISOString();
-      writeJsonFile(metadataPath, {
-        ...metadata,
-        status: "interrupted",
-        resumeEligible: true,
-        interruptedAt,
-        interruptReason: input.reason,
-      });
-      appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "run.interrupted", {
-        reason: input.reason,
-        resumeEligible: true,
-      });
-      interrupted.push({
-        runId,
-        repository: metadata.repository,
-        issueNumber: metadata.issueNumber,
-        agentId: metadata.agentId,
-        status: "interrupted",
-        runDir,
-        worktreePath: metadata.worktreePath,
-      });
-    }
-
-    return interrupted;
+    return interruptActiveRuns(this.paths, input);
   }
 
   takeResumableRun(input: { repository: string; now?: Date }): ResumableRun | undefined {
     this.ensureBaseDirectories();
-
-    for (const runDirName of readdirDirectoryNames(this.paths.runsDir)) {
-      const runDir = join(this.paths.runsDir, runDirName);
-      const metadataPath = join(runDir, "metadata.json");
-      const eventsPath = join(runDir, "events.jsonl");
-      const metadata = readJsonFile<RunMetadata>(metadataPath);
-
-      if (
-        metadata === undefined
-        || metadata.repository !== input.repository
-        || (metadata.status !== "interrupted" && metadata.status !== "resuming" && hasTerminalRunEvent(eventsPath))
-      ) {
-        continue;
-      }
-
-      if (!hasRunIdentity(metadata)) {
-        continue;
-      }
-
-      const status = isRecoverableRunMetadata(metadata, "interrupted")
-        ? "interrupted"
-        : isRecoverableRunMetadata(metadata, "active-looking")
-          ? "active-looking"
-          : undefined;
-
-      if (status === undefined || isRunCancellationRequested(this.paths, metadata.runId ?? runDirName)) {
-        continue;
-      }
-
-      if (isLivePid(metadata.runtimePid)) {
-        continue;
-      }
-
-      const repository = metadata.repository;
-      const issueNumber = metadata.issueNumber;
-      const agentId = metadata.agentId;
-      const runId = metadata.runId ?? runDirName;
-      this.releaseExecutionLock({
-        repository,
-        issueNumber,
-        agentId,
-        acquiredAt: "",
-        path: getExecutionLockPath(this.paths, repository, issueNumber, agentId),
-      });
-
-      return {
-        runId,
-        repository,
-        issueNumber,
-        agentId,
-        status,
-        runDir,
-        worktreePath: metadata.worktreePath,
-      };
-    }
-
-    return undefined;
+    return takeResumableRun(this.paths, input);
   }
 
   markSessionResuming(input: { sourceRunId: string; now?: Date; reason: string }): void {
-    const runDir = join(this.paths.runsDir, sanitizePathPart(input.sourceRunId));
-    const metadataPath = join(runDir, "metadata.json");
-    const metadata = readJsonFile<RunMetadata>(metadataPath);
-
-    if (metadata === undefined) {
-      return;
-    }
-
-    writeJsonFile(metadataPath, {
-      ...metadata,
-      status: metadata.status === "resuming" ? "interrupted" : metadata.status,
-      resumeEligible: false,
-      sessionResumingAt: (input.now ?? new Date()).toISOString(),
-    });
-    appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "session.resuming", {
-      reason: input.reason,
-    });
+    markSessionResuming(this.paths, input);
   }
 
   markRunRejected(input: { runId: string; now?: Date; reason: string }): void {
-    const runDir = join(this.paths.runsDir, sanitizePathPart(input.runId));
-    const metadataPath = join(runDir, "metadata.json");
-    const metadata = readJsonFile<RunMetadata>(metadataPath);
-
-    if (metadata === undefined) {
-      return;
-    }
-
-    writeJsonFile(metadataPath, {
-      ...metadata,
-      status: "rejected",
-      resumeEligible: false,
-      rejectedAt: (input.now ?? new Date()).toISOString(),
-      rejectReason: input.reason,
-    });
-    appendRunEvent({ eventsPath: join(runDir, "events.jsonl") }, "run.rejected", {
-      reason: input.reason,
-    });
+    markRunRejected(this.paths, input);
   }
 
   enqueueRunRequest(input: {
