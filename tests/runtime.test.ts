@@ -359,7 +359,7 @@ describe("additional local runtimes", () => {
       ok: true,
       execution: {
         runtime: "claude-code",
-        command: ["claude", "--print"],
+        command: ["claude", "--permission-mode", "bypassPermissions", "--print"],
       },
     });
     expect(readFileSync(run.stdoutPath, "utf8")).toBe("done\n");
@@ -367,7 +367,7 @@ describe("additional local runtimes", () => {
     expect(readFileSync(run.eventsPath, "utf8")).toContain('"runtime":"claude-code"');
     expect(runner.calls[0]).toMatchObject({
       command: "claude",
-      args: ["--print"],
+      args: ["--permission-mode", "bypassPermissions", "--print"],
       options: {
         cwd: run.worktreePath,
       },
@@ -412,7 +412,7 @@ describe("additional local runtimes", () => {
     });
     expect(runner.calls[0]).toMatchObject({
       command: "claude",
-      args: ["--resume", "claude-session-1", "--print"],
+      args: ["--permission-mode", "bypassPermissions", "--resume", "claude-session-1", "--print"],
     });
     expect(readFileSync(join(run.runDir, "metadata.json"), "utf8")).toContain("claude-session-1");
   });

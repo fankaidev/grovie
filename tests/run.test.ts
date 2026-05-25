@@ -256,8 +256,8 @@ describe("runIssue", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Result action: request-human");
     expect(result.stdout).toContain("Reason: The task needs a product decision before implementation.");
-    expect(github.comments[1]).toContain("- Result action: request-human");
-    expect(github.comments[1]).toContain("- Reason: The task needs a product decision before implementation.");
+    expect(github.comments[0]).toContain("- Result action: request-human");
+    expect(github.comments[0]).toContain("- Reason: The task needs a product decision before implementation.");
   });
 
   it("[UC-GITHUB-01-S02] includes pull request output when result handling creates one", () => {

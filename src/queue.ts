@@ -432,7 +432,12 @@ function isGrovieActivityComment(body: string): boolean {
 }
 
 function isAfterGrovieCommentUpdateWindow(issueUpdatedAt: string, latestGrovieActivity: string): boolean {
-  return Date.parse(issueUpdatedAt) > Date.parse(latestGrovieActivity) + GITHUB_COMMENT_UPDATE_SKEW_MS;
+  const issueTimestamp = Date.parse(issueUpdatedAt);
+  const grovieTimestamp = Date.parse(latestGrovieActivity);
+
+  return Number.isNaN(issueTimestamp) ||
+    Number.isNaN(grovieTimestamp) ||
+    issueTimestamp - grovieTimestamp > GITHUB_COMMENT_UPDATE_SKEW_MS;
 }
 
 function getIssueFingerprint(issue: GitHubIssue, relatedPullRequests: GitHubRelatedPullRequest[]): string {

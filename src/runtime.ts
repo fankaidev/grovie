@@ -276,8 +276,8 @@ function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
       runtime,
       command: "claude",
       availabilityArgs: ["--version"],
-      startCommand: () => ["claude", "--print"],
-      resumeCommand: (sessionId) => ["claude", "--resume", sessionId, "--print"],
+      startCommand: () => ["claude", "--permission-mode", "bypassPermissions", "--print"],
+      resumeCommand: (sessionId) => ["claude", "--permission-mode", "bypassPermissions", "--resume", sessionId, "--print"],
     };
   }
 

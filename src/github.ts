@@ -128,6 +128,7 @@ export type CreatedComment = {
   id: number;
   body: string;
   url: string;
+  createdAt?: string;
 };
 
 export type CreatedPullRequest = {
@@ -845,6 +846,7 @@ type GitHubCommentMutationResponse = {
   id: number;
   body: string;
   html_url: string;
+  created_at?: string;
 };
 
 type GitHubPullRequestResponse = {
@@ -948,6 +950,7 @@ function toCreatedComment(comment: GitHubCommentMutationResponse): CreatedCommen
     id: comment.id,
     body: comment.body,
     url: comment.html_url,
+    createdAt: comment.created_at,
   };
 }
 

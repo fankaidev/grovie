@@ -47,6 +47,7 @@ export type RunIssueResult = {
   stdout?: string;
   stderr?: string;
   canceled?: boolean;
+  handledThrough?: string;
 };
 
 export type RunIssueAsyncInput = RunIssueInput & {
@@ -477,6 +478,7 @@ function finishRun(input: {
     stdout: renderCliRunOutput({ ...summary, comment: commentResult.value }),
     stderr: summary.error,
     canceled: summary.status === "canceled" ? true : undefined,
+    handledThrough: summary.result?.kind === "issue-comment" ? summary.result.comment.createdAt : undefined,
   };
 }
 
