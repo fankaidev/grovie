@@ -116,7 +116,6 @@ pre,
   color: var(--warning);
 }
 
-.tile-grid,
 .summary-grid,
 .logs-grid,
 .split-layout {
@@ -124,12 +123,8 @@ pre,
   gap: 1rem;
 }
 
-.tile-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .summary-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .logs-grid,
@@ -137,42 +132,12 @@ pre,
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.tile,
 .panel {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: var(--card);
 }
 
-.tile {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-}
-
-.tile-icon {
-  display: flex;
-  width: 2.25rem;
-  height: 2.25rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.375rem;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-weight: 650;
-}
-
-.tile-icon.tone-success {
-  background: var(--success);
-}
-
-.tile-icon.tone-danger {
-  background: var(--danger);
-}
-
-.tile p,
-.tile strong,
 .panel h2,
 .panel p,
 .description-list,
@@ -180,7 +145,6 @@ pre,
   margin: 0;
 }
 
-.tile p,
 .panel p,
 .description-list dt,
 .event-list span,
@@ -524,7 +488,6 @@ pre,
 }
 
 @media (max-width: 900px) {
-  .tile-grid,
   .summary-grid,
   .logs-grid,
   .split-layout {

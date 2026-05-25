@@ -114,9 +114,7 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
   const daemon = props.data.health.daemon;
   const daemonState = "state" in daemon ? daemon.state : undefined;
   const runtimes = props.data.health.runtimes;
-  const unavailableRuntimeCount = runtimes.filter((runtime) => !runtime.available).length;
   const agents = props.data.health.agents;
-  const unavailableAgentCount = agents.filter((agent) => !agent.availability.available).length;
   const runs = props.data.runs.slice(0, 20);
   const activity = props.data.activity.slice(0, 20);
 
@@ -129,12 +127,6 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
         </div>
         <span className={`status-badge status-${daemon.status}`}>{daemon.status}</span>
       </header>
-
-      <section className="tile-grid" aria-label="Admin console status">
-        <StatusTile icon="D" label="Daemon" value={renderDaemonSummary(daemon)} tone={daemon.status === "running" ? "success" : "neutral"} />
-        <StatusTile icon="R" label="Runtimes" value={`${runtimes.length} supported${unavailableRuntimeCount === 0 ? "" : `, ${unavailableRuntimeCount} unavailable`}`} tone={unavailableRuntimeCount === 0 ? "success" : "danger"} />
-        <StatusTile icon="A" label="Agents" value={`${agents.length} configured${unavailableAgentCount === 0 ? "" : `, ${unavailableAgentCount} unavailable`}`} tone={unavailableAgentCount === 0 ? "success" : "danger"} />
-      </section>
 
       <section className="summary-grid">
         <InfoPanel title="Daemon">
@@ -278,8 +270,8 @@ function RecentActivityPanel(props: { activity: AdminHomeData["activity"] }): Re
                 <td>{entry.timestamp}</td>
                 <td><code>{entry.type}</code></td>
                 <td>{entry.repository ?? "(none)"}</td>
-                <td>{entry.issueNumber === undefined ? "(none)" : `#${entry.issueNumber}`}</td>
-                <td>{entry.agentId ?? "(none)"}</td>
+                <td>{entry.issueNumber === undefined ? "none" : `#${entry.issueNumber}`}</td>
+                <td>{entry.agentId ?? "none"}</td>
                 <td>{entry.message}</td>
               </tr>
             ))}
@@ -633,18 +625,6 @@ export function RunDetailContent(props: {
         </InfoPanel>
       </section>
     </main>
-  );
-}
-
-function StatusTile(props: { icon: string; label: string; value: string; tone?: "neutral" | "success" | "danger" }): ReactNode {
-  return (
-    <div className="tile">
-      <span className={`tile-icon tone-${props.tone ?? "neutral"}`}>{props.icon}</span>
-      <div>
-        <p>{props.label}</p>
-        <strong>{props.value}</strong>
-      </div>
-    </div>
   );
 }
 
