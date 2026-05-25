@@ -762,6 +762,9 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
     "- If the task asks only for a GitHub issue comment, write the exact comment body to `.grovie/issue-comment.md` instead of using `gh` or other GitHub tools.",
     "- Leave logs and artifacts on disk for Grovie to inspect.",
     "",
+    "Configured Agent Instructions:",
+    renderAgentInstructions(input.task),
+    "",
     "Issue:",
     `# ${input.issue.title}`,
     "",
@@ -779,6 +782,16 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
     "Task JSON:",
     fencedJson(input.task),
   ].join("\n");
+}
+
+function renderAgentInstructions(task: unknown): string {
+  if (task === null || typeof task !== "object") {
+    return "(none)";
+  }
+
+  const instructions = (task as { agentInstructions?: unknown }).agentInstructions;
+
+  return typeof instructions === "string" && instructions.trim().length > 0 ? instructions : "(none)";
 }
 
 function renderComments(comments: GitHubIssue["comments"]): string {

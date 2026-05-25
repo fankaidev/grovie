@@ -22,7 +22,7 @@ import { getIssueActivity, inspectQueue, renderSkippedQueueSummary, selectNextRu
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "./run.js";
 import { runIssueAsync } from "./run.js";
 import type { AgentRuntime } from "./runtime.js";
-import { createRuntime, type RuntimeName } from "./runtime.js";
+import { createRuntime } from "./runtime.js";
 import { LocalDaemonLifecycle, type DaemonLifecycle } from "./daemon-lifecycle.js";
 import { planRepositoryEventPolling } from "./repository-events.js";
 
@@ -579,6 +579,10 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       issueReference: candidate.issueReference,
       workerId: candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId,
       issueActivity: candidate.activity,
+      triggerContext: {
+        source: "daemon",
+        activity: candidate.activity,
+      },
       now,
       issueRunner,
     });
@@ -706,6 +710,7 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
   issueReference: IssueReference;
   workerId: string;
   issueActivity: IssueActivity;
+  triggerContext?: RunIssueAsyncInput["triggerContext"];
   runRequest?: RunIssueAsyncInput["runRequest"];
   now: () => Date;
   issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
@@ -794,7 +799,8 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
       },
     });
 
-    const runtimeName = resolveWorkerRuntime(input, input.workerId);
+    const agent = resolveWorkerAgent(input, input.workerId);
+    const runtimeName = agent?.runtime ?? "codex";
     const result = await input.issueRunner({
       issueReference: input.issueReference,
       repository: input.repository,
@@ -802,10 +808,12 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
       configPath: input.configPath,
       agent: runtimeName,
       agentId: input.workerId,
+      agentInstructions: agent?.instructions,
       github: input.github,
       runtime: input.runtime ?? createRuntime(runtimeName),
       localState: input.localState,
       runRequest: input.runRequest,
+      triggerContext: input.triggerContext,
       stateRepo: input.stateRepo,
       monitor: {
         heartbeatIntervalMs: input.stateRepo?.syncIntervalSeconds === undefined
@@ -860,14 +868,8 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
   }
 }
 
-function resolveWorkerRuntime(input: Pick<DaemonInput, "localAgents">, agentId: string): RuntimeName {
-  const agent = input.localAgents?.find((candidate) => candidate.agentId === agentId);
-
-  if (agent === undefined) {
-    return "codex";
-  }
-
-  return agent.runtime;
+function resolveWorkerAgent(input: Pick<DaemonInput, "localAgents">, agentId: string): AgentMetadata | undefined {
+  return input.localAgents?.find((candidate) => candidate.agentId === agentId);
 }
 
 function recordActivity(

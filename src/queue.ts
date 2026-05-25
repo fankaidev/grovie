@@ -428,7 +428,7 @@ export function getIssueActivity(issue: GitHubIssue, relatedPullRequests: GitHub
 }
 
 function isGrovieActivityComment(body: string): boolean {
-  return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:session ");
+  return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:run ") || body.includes("<!-- grovie:session ");
 }
 
 function isAfterGrovieCommentUpdateWindow(issueUpdatedAt: string, latestGrovieActivity: string): boolean {

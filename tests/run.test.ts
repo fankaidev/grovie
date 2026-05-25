@@ -10,7 +10,7 @@ import type {
   GitHubRelatedPullRequest,
   IssueReference,
 } from "../src/github.js";
-import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
+import type { HandledCursor, LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import { runIssue, runIssueAsync, type RunLocalState } from "../src/run.js";
 import type { HandleRunResultInput, HandleRunResultResult, ResultHandler } from "../src/result.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
@@ -34,6 +34,7 @@ describe("runIssue", () => {
       config: defaultConfig(),
       configPath: "/project/.grovie.yml",
       agent: "codex",
+      agentInstructions: "Act as the coder agent and produce a small implementation patch.",
       github,
       localState,
       runtime,
@@ -49,7 +50,7 @@ describe("runIssue", () => {
       stdout: [
         "grovie run",
         "",
-        "Session status: succeeded",
+        "Run status: succeeded",
         "Issue: fankaidev/grovie#7",
         "Branch: grovie/issue-7",
         "Run id: fankaidev-grovie-issue-7",
@@ -68,12 +69,15 @@ describe("runIssue", () => {
         schemaVersion: 1,
         runtime: "codex",
         repository: "fankaidev/grovie",
+        agentInstructions: "Act as the coder agent and produce a small implementation patch.",
       },
     });
     expect(runtime.runInput?.run).toBe(localState.run);
-    expect(github.comments[0]).toContain("Grovie session succeeded.");
-    expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"codex"} -->');
-    expect(github.comments[0]).toContain("- Session status: succeeded");
+    expect(github.comments[0]).toContain("Grovie run finished.");
+    expect(github.comments[0]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"codex","agentId":"codex"} -->');
+    expect(github.comments[0]).toContain("- Started at: 2026-05-22T00:00:00Z");
+    expect(github.comments[0]).toContain("- Ended at: 2026-05-22T00:00:01Z");
+    expect(github.comments[0]).toContain("- Run status: succeeded");
     expect(github.comments[0]).toContain("- Agent: `codex`");
     expect(github.comments[0]).toContain("- Machine: `");
     expect(github.comments[0]).toContain("- Changes: none");
@@ -82,9 +86,10 @@ describe("runIssue", () => {
     expect(github.comments[0]).not.toContain("raw log");
     expect(localState.events.map((event) => event.type)).toEqual([
       "run.started",
+      "progress_comment.created",
       "result.handled",
       "run.succeeded",
-      "comment.created",
+      "comment.updated",
     ]);
   });
 
@@ -132,7 +137,7 @@ describe("runIssue", () => {
       expect(readFileSync(localState.run.taskPath, "utf8")).toContain('"runtime": "pi"');
       expect(readFileSync(localState.run.stdoutPath, "utf8")).toContain("pi done");
       expect(readFileSync(localState.run.eventsPath, "utf8")).toContain('"runtime":"pi"');
-      expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"pi"} -->');
+      expect(github.comments[0]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"succeeded","runtime":"pi","agentId":"pi"} -->');
       expect(github.comments[0]).toContain("- Runtime: pi");
     } finally {
       process.env.PATH = previousPath;
@@ -171,13 +176,13 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("raw stderr line 1\nraw stderr line 2\nraw stdout line 1");
-    expect(result.stdout).toContain("Session status: failed");
-    expect(github.comments[0]).toContain("Grovie session failed.");
-    expect(github.comments[0]).toContain('<!-- grovie:session {"runId":"fankaidev-grovie-issue-7","status":"failed","runtime":"codex"} -->');
+    expect(result.stdout).toContain("Run status: failed");
+    expect(github.comments[0]).toContain("Grovie run finished.");
+    expect(github.comments[0]).toContain('<!-- grovie:run {"phase":"result","runId":"fankaidev-grovie-issue-7","status":"failed","runtime":"codex","agentId":"codex"} -->');
     expect(github.comments[0]).toContain("- Error: Runtime failed. See the local run directory for stdout and stderr.");
     expect(github.comments[0]).not.toContain("raw stderr line 1");
     expect(github.comments[0]).not.toContain("raw stdout line 1");
-    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.failed", "comment.created"]);
+    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "progress_comment.created", "run.failed", "comment.updated"]);
   });
 
   it("[UC-EXECUTION-05-S05] posts reviewer no-change output without opening a PR", () => {
@@ -218,6 +223,43 @@ describe("runIssue", () => {
     expect(github.comments[0]).not.toContain("- Pull request:");
   });
 
+  it("[UC-EXECUTION-05-S07] includes explicit result action and reason in visible summaries", () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+        action: "request-human",
+        reason: "The task needs a product decision before implementation.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Result action: request-human");
+    expect(result.stdout).toContain("Reason: The task needs a product decision before implementation.");
+    expect(github.comments[0]).toContain("- Result action: request-human");
+    expect(github.comments[0]).toContain("- Reason: The task needs a product decision before implementation.");
+  });
+
   it("[UC-GITHUB-01-S02] includes pull request output when result handling creates one", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
@@ -256,9 +298,10 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("- Pull request: https://github.com/fankaidev/grovie/pull/20");
     expect(localState.events.map((event) => event.type)).toEqual([
       "run.started",
+      "progress_comment.created",
       "result.handled",
       "run.succeeded",
-      "comment.created",
+      "comment.updated",
     ]);
   });
 
@@ -305,6 +348,62 @@ describe("runIssue", () => {
         reason: "retry",
       },
     });
+  });
+
+  it("[UC-GITHUB-01-S06] updates the existing progress comment for the same agent when a new run starts", () => {
+    const github = new FakeGitHub({
+      issueComments: [
+        {
+          id: 99,
+          body: '<!-- grovie:run {"phase":"progress","runId":"old-run","status":"running","runtime":"codex","agentId":"codex"} -->\nGrovie run started.',
+          author: "fankaidev",
+          createdAt: "2026-05-22T00:00:00Z",
+          updatedAt: "2026-05-22T00:00:00Z",
+        },
+      ],
+    });
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(github.updatedComments).toEqual([
+      {
+        repository: "fankaidev/grovie",
+        commentId: 99,
+        body: expect.stringContaining('"status":"running"') as string,
+      },
+      {
+        repository: "fankaidev/grovie",
+        commentId: 99,
+        body: expect.stringContaining('"status":"succeeded"') as string,
+      },
+    ]);
+    expect(github.comments).toHaveLength(0);
+    expect(github.updatedComments[1]?.body).toContain("Grovie run finished.");
+    expect(localState.events.map((event) => event.type)).toContain("progress_comment.updated");
   });
 
   it("[UC-GITHUB-02-S03] includes related pull request context in the local handoff", () => {
@@ -377,7 +476,81 @@ describe("runIssue", () => {
     });
   });
 
-  it("[UC-GITHUB-01-S04] marks the session failed when result handling fails after a successful runtime", () => {
+  it("[UC-EXECUTION-03-S08] includes trigger context in the local handoff", () => {
+    const github = new FakeGitHub({
+      relatedPullRequests: [
+        fakeRelatedPullRequest(),
+      ],
+    });
+    const localState = new FakeLocalState({
+      handledCursor: {
+        repository: "fankaidev/grovie",
+        issueNumber: 7,
+        agentId: "codex",
+        handledThrough: "2026-05-22T00:00:00Z",
+        issueFingerprint: "previous-fingerprint",
+        updatedAt: "2026-05-22T00:00:01Z",
+      },
+    });
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      triggerContext: {
+        source: "daemon",
+        activity: {
+          timestamp: "2026-05-22T00:00:05Z",
+          issueFingerprint: "current-fingerprint",
+          trigger: {
+            kind: "pull-request-mergeability",
+            pullRequestNumber: 20,
+            mergeStateStatus: "DIRTY",
+          },
+        },
+      },
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(localState.prepareInput?.task).toMatchObject({
+      trigger: {
+        source: "daemon",
+        activity: {
+          timestamp: "2026-05-22T00:00:05Z",
+          issueFingerprint: "current-fingerprint",
+        },
+        previousHandledCursor: {
+          handledThrough: "2026-05-22T00:00:00Z",
+          issueFingerprint: "previous-fingerprint",
+        },
+        daemonTrigger: {
+          kind: "pull-request-mergeability",
+          pullRequestNumber: 20,
+          mergeStateStatus: "DIRTY",
+        },
+      },
+    });
+  });
+
+  it("[UC-GITHUB-01-S04] marks the run failed when result handling fails after a successful runtime", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -407,13 +580,14 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("pull request failed");
-    expect(result.stdout).toContain("Session status: failed");
-    expect(github.comments[0]).toContain("Grovie session failed.");
+    expect(result.stdout).toContain("Run status: failed");
+    expect(github.comments[0]).toContain("Grovie run finished.");
     expect(localState.events.map((event) => event.type)).toEqual([
       "run.started",
+      "progress_comment.created",
       "result.failed",
       "run.failed",
-      "comment.created",
+      "comment.updated",
     ]);
   });
 
@@ -450,9 +624,9 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.canceled).toBe(true);
-    expect(result.stdout).toContain("Session status: canceled");
-    expect(github.comments[0]).toContain("Grovie session canceled.");
-    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "run.canceled", "comment.created"]);
+    expect(result.stdout).toContain("Run status: canceled");
+    expect(github.comments[0]).toContain("Grovie run finished.");
+    expect(localState.events.map((event) => event.type)).toEqual(["run.started", "progress_comment.created", "run.canceled", "comment.updated"]);
   });
 
   it("[UC-ADMIN-05-S02] passes local run cancellation requests into the runtime monitor", async () => {
@@ -510,7 +684,7 @@ describe("runIssue", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("git clone failed");
     expect(result.stdout).toContain("Run directory: /tmp/grovie/runs/fankaidev-grovie-issue-7");
-    expect(github.comments[0]).toContain("Grovie session failed.");
+    expect(github.comments[0]).toContain("Grovie run finished.");
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 
@@ -540,10 +714,12 @@ describe("runIssue", () => {
 
 class FakeGitHub implements GitHubGateway {
   readonly comments: string[] = [];
+  readonly updatedComments: Array<{ repository: string; commentId: number; body: string }> = [];
   reads = 0;
 
   constructor(private readonly options: {
     relatedPullRequests?: GitHubRelatedPullRequest[];
+    issueComments?: GitHubIssue["comments"];
   } = {}) {}
 
   getAuthenticatedUser(): ReturnType<GitHubGateway["getAuthenticatedUser"]> {
@@ -555,7 +731,7 @@ class FakeGitHub implements GitHubGateway {
 
     return {
       ok: true as const,
-      value: fakeIssue(reference),
+      value: fakeIssue(reference, this.options.issueComments),
     };
   }
 
@@ -591,11 +767,25 @@ class FakeGitHub implements GitHubGateway {
   }
 
   updateIssueComment(
-    _repository: string,
-    _commentId: number,
-    _body: string,
+    repository: string,
+    commentId: number,
+    body: string,
   ): ReturnType<GitHubGateway["updateIssueComment"]> {
-    throw new Error("updateIssueComment was not expected");
+    this.updatedComments.push({ repository, commentId, body });
+    const commentIndex = commentId - 1;
+
+    if (commentIndex >= 0 && commentIndex < this.comments.length) {
+      this.comments[commentIndex] = body;
+    }
+
+    return {
+      ok: true as const,
+      value: {
+        id: commentId,
+        body,
+        url: `https://github.com/${repository}/issues/7#issuecomment-${commentId}`,
+      } satisfies CreatedComment,
+    };
   }
 
   createPullRequest(_input: Parameters<GitHubGateway["createPullRequest"]>[0]): ReturnType<GitHubGateway["createPullRequest"]> {
@@ -616,7 +806,7 @@ class FakeLocalState implements RunLocalState {
   readonly events: Array<{ type: string; data: Record<string, unknown> | undefined }> = [];
   prepareInput: Parameters<RunLocalState["prepareRun"]>[0] | undefined;
 
-  constructor(private readonly options: { prepareError?: Error; cancellationRequested?: boolean; root?: string; fileBacked?: boolean } = {}) {
+  constructor(private readonly options: { prepareError?: Error; cancellationRequested?: boolean; root?: string; fileBacked?: boolean; handledCursor?: HandledCursor } = {}) {
     const root = options.root ?? "/tmp/grovie";
     this.paths = {
       root,
@@ -646,6 +836,10 @@ class FakeLocalState implements RunLocalState {
 
   getPaths(): LocalStatePaths {
     return this.paths;
+  }
+
+  readHandledCursor(): HandledCursor | undefined {
+    return this.options.handledCursor;
   }
 
   prepareRun(input: Parameters<RunLocalState["prepareRun"]>[0]): PreparedRun {
@@ -751,7 +945,7 @@ function defaultConfig(): GrovieConfig {
   };
 }
 
-function fakeIssue(reference: IssueReference): GitHubIssue {
+function fakeIssue(reference: IssueReference, comments?: GitHubIssue["comments"]): GitHubIssue {
   return {
     reference,
     title: "Implement one-shot run",
@@ -759,7 +953,7 @@ function fakeIssue(reference: IssueReference): GitHubIssue {
     state: "open",
     updatedAt: "2026-05-22T00:00:00Z",
     labels: ["mvp", "type:task"],
-    comments: [
+    comments: comments ?? [
       {
         id: 1,
         body: "Keep it lightweight.",

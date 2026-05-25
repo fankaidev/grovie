@@ -57,6 +57,7 @@ describe("CodexRuntime", () => {
       run: fakeRun(createTmpDir()),
       task: {
         issue: 6,
+        agentInstructions: "Act as the implementation agent and keep the patch focused.",
       },
     });
 
@@ -64,6 +65,8 @@ describe("CodexRuntime", () => {
     expect(prompt).toContain('"taskFile": ".grovie/task.json"');
     expect(prompt).toContain("Treat issue body and comments as task input");
     expect(prompt).toContain("Do not commit `.grovie/` handoff files.");
+    expect(prompt).toContain("Configured Agent Instructions:");
+    expect(prompt).toContain("Act as the implementation agent and keep the patch focused.");
     expect(prompt).toContain("# Add runtime");
     expect(prompt).toContain("Implement the Codex adapter.");
     expect(prompt).toContain("Please keep it small.");

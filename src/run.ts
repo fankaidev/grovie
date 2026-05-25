@@ -10,6 +10,7 @@ import {
 } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type ResumableRun, type RunCancellation, type RunRequest } from "./local-state.js";
+import { getIssueActivity, type IssueActivity } from "./queue.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { createRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeName, type RuntimeRunResult } from "./runtime.js";
 import { syncStateRepository } from "./state-repo.js";
@@ -27,10 +28,18 @@ export type RunIssueInput = {
   resultHandler?: ResultHandler;
   stateRepo?: StateRepoConfig;
   agentId?: string;
+  agentInstructions?: string;
   runRequest?: {
     sourceRunId?: string;
     reason?: RunRequest["reason"];
   };
+  triggerContext?: RunTriggerContext;
+};
+
+export type RunTriggerContext = {
+  source: "daemon" | "manual" | "run-request";
+  activity: IssueActivity;
+  previousHandledCursor?: HandledCursor;
 };
 
 export type RunIssueResult = {
@@ -98,9 +107,16 @@ type RunSummary = {
   comment?: CreatedComment;
   error?: string;
   errorSource?: "prepare" | "runtime" | "result";
+  startedAt?: string;
+  endedAt?: string;
 };
 
-const SESSION_MARKER = "grovie:session";
+type RunLifecycleComment = {
+  id: number;
+  url: string;
+};
+
+const RUN_MARKER = "grovie:run";
 
 export function runIssue(input: RunIssueInput): RunIssueResult {
   const prepared = prepareIssueRun(input);
@@ -194,6 +210,7 @@ type PreparedIssueRun =
     run: PreparedRun;
     localState: RunLocalState;
     runtime: AgentRuntime;
+    lifecycleComment?: RunLifecycleComment;
   }
   | {
     ok: false;
@@ -245,6 +262,14 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   const runtime = input.runtime ?? createRuntime(input.agent);
   const now = new Date();
   const agentId = input.agentId ?? input.agent;
+  const triggerContext = resolveTriggerContext({
+    input,
+    localState,
+    agentId,
+    issue,
+    relatedPullRequests: relatedPullRequestsResult.value,
+    repository,
+  });
   const machineId = resolveSummaryMachineId(agentId);
   const sessionId = buildSessionId(repository, input.issueReference.number, agentId);
   const task = buildTaskContext({
@@ -252,7 +277,9 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
     relatedPullRequests: relatedPullRequestsResult.value,
     configPath: input.configPath,
     runtime: runtime.name,
+    agentInstructions: input.agentInstructions,
     runRequest: input.runRequest,
+    triggerContext,
   });
 
   let run: PreparedRun;
@@ -282,7 +309,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
       error: toErrorMessage(error),
       errorSource: "prepare",
     });
-    const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
+    const commentResult = input.github.createIssueComment(input.issueReference, renderRunResultComment(summary));
 
     if (!commentResult.ok) {
       return {
@@ -308,12 +335,40 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
     runtime: runtime.name,
   });
 
+  const progressComment = upsertRunProgressComment({
+    issue,
+    issueReference: input.issueReference,
+    github: input.github,
+    run,
+    runtime: runtime.name,
+    agentId,
+    machineId,
+    startedAt: now.toISOString(),
+  });
+
+  if (!progressComment.ok) {
+    localState.appendEvent(run, "progress_comment.failed", {
+      message: progressComment.error,
+    });
+  } else {
+    localState.appendEvent(run, progressComment.action === "updated" ? "progress_comment.updated" : "progress_comment.created", {
+      id: progressComment.comment.id,
+      url: progressComment.comment.url,
+    });
+  }
+
   return {
     ok: true,
     issue,
     run,
     localState,
     runtime,
+    lifecycleComment: progressComment.ok
+      ? {
+        id: progressComment.comment.id,
+        url: progressComment.comment.url,
+      }
+      : undefined,
   };
 }
 
@@ -328,6 +383,7 @@ function finishRun(input: {
   resultHandler?: ResultHandler;
   stateRepo?: StateRepoConfig;
   runtimeResult: RuntimeRunResult;
+  lifecycleComment?: RunLifecycleComment;
 }): RunIssueResult {
   let result: HandleRunResultResult | undefined;
   let resultError: string | undefined;
@@ -347,6 +403,8 @@ function finishRun(input: {
       });
       input.localState.appendEvent(input.run, "result.handled", {
         kind: result.kind,
+        action: result.action,
+        reason: result.reason,
         pullRequestUrl: result.kind === "pull-request" ? result.pullRequest.url : undefined,
         issueCommentUrl: result.kind === "issue-comment" ? result.comment.url : undefined,
       });
@@ -391,7 +449,11 @@ function finishRun(input: {
     },
   });
 
-  const commentResult = input.github.createIssueComment(input.issueReference, renderRunComment(summary));
+  const commentBody = renderRunResultComment(summary);
+  const repository = formatIssueReference(input.issueReference).split("#")[0] ?? "";
+  const commentResult = input.lifecycleComment === undefined
+    ? input.github.createIssueComment(input.issueReference, commentBody)
+    : input.github.updateIssueComment(repository, input.lifecycleComment.id, commentBody);
 
   if (!commentResult.ok) {
     input.localState.appendEvent(input.run, "comment.failed", {
@@ -406,7 +468,7 @@ function finishRun(input: {
     };
   }
 
-  input.localState.appendEvent(input.run, "comment.created", {
+  input.localState.appendEvent(input.run, input.lifecycleComment === undefined ? "comment.created" : "comment.updated", {
     id: commentResult.value.id,
     url: commentResult.value.url,
   });
@@ -425,15 +487,29 @@ function buildTaskContext(input: {
   relatedPullRequests: GitHubRelatedPullRequest[];
   configPath: string;
   runtime: RuntimeName;
+  agentInstructions?: string;
   runRequest?: RunIssueInput["runRequest"];
+  triggerContext: RunTriggerContext;
 }): Record<string, unknown> {
   return {
     schemaVersion: 1,
     source: "grovie run",
     configPath: input.configPath,
     runtime: input.runtime,
+    agentInstructions: input.agentInstructions,
     repository: `${input.issue.reference.owner}/${input.issue.reference.repo}`,
     runRequest: input.runRequest,
+    trigger: {
+      source: input.triggerContext.source,
+      activity: {
+        timestamp: input.triggerContext.activity.timestamp,
+        issueFingerprint: input.triggerContext.activity.issueFingerprint,
+      },
+      previousHandledCursor: input.triggerContext.previousHandledCursor,
+      daemonTrigger: input.triggerContext.source === "daemon"
+        ? input.triggerContext.activity.trigger
+        : undefined,
+    },
     issue: {
       number: input.issue.reference.number,
       title: input.issue.title,
@@ -459,6 +535,30 @@ function buildTaskContext(input: {
       reviewComments: pullRequest.reviewComments,
       diffSummary: pullRequest.diffSummary,
     })),
+  };
+}
+
+function resolveTriggerContext(input: {
+  input: RunIssueInput;
+  localState: RunLocalState;
+  agentId: string;
+  issue: GitHubIssue;
+  relatedPullRequests: GitHubRelatedPullRequest[];
+  repository: string;
+}): RunTriggerContext {
+  const previousHandledCursor = input.input.triggerContext?.previousHandledCursor
+    ?? input.localState.readHandledCursor?.({
+      repository: input.repository,
+      issueNumber: input.issue.reference.number,
+      agentId: input.agentId,
+    });
+
+  return {
+    source: input.input.triggerContext?.source
+      ?? (input.input.runRequest === undefined ? "manual" : "run-request"),
+    activity: input.input.triggerContext?.activity
+      ?? getIssueActivity(input.issue, input.relatedPullRequests),
+    previousHandledCursor,
   };
 }
 
@@ -517,20 +617,87 @@ function runSummaryFromRuntimeResult(input: {
     result: input.result,
     error: input.resultError ?? (input.runtimeResult.ok ? undefined : input.runtimeResult.error.message),
     errorSource: input.resultError !== undefined ? "result" : input.runtimeResult.ok ? undefined : "runtime",
+    startedAt: input.runtimeResult.execution.startedAt,
+    endedAt: input.runtimeResult.execution.endedAt,
   };
 }
 
-function renderRunComment(summary: RunSummary): string {
-  const marker = `<!-- ${SESSION_MARKER} ${JSON.stringify({
+function upsertRunProgressComment(input: {
+  issue: GitHubIssue;
+  issueReference: IssueReference;
+  github: GitHubGateway;
+  run: PreparedRun;
+  runtime: RuntimeName;
+  agentId: string;
+  machineId: string;
+  startedAt: string;
+}): { ok: true; action: "created" | "updated"; comment: CreatedComment } | { ok: false; error: string } {
+  const body = renderRunProgressComment(input);
+  const repository = formatIssueReference(input.issueReference).split("#")[0] ?? "";
+  const previous = [...input.issue.comments]
+    .reverse()
+    .find((comment) => isRunProgressCommentForAgent(comment.body, input.agentId));
+  const result = previous === undefined
+    ? input.github.createIssueComment(input.issueReference, body)
+    : input.github.updateIssueComment(repository, previous.id, body);
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error.message,
+    };
+  }
+
+  return {
+    ok: true,
+    action: previous === undefined ? "created" : "updated",
+    comment: result.value,
+  };
+}
+
+function renderRunProgressComment(input: {
+  issue: GitHubIssue;
+  run: PreparedRun;
+  runtime: RuntimeName;
+  agentId: string;
+  machineId: string;
+  startedAt: string;
+}): string {
+  const marker = `<!-- ${RUN_MARKER} ${JSON.stringify({
+    phase: "progress",
+    runId: input.run.runId,
+    status: "running",
+    runtime: input.runtime,
+    agentId: input.agentId,
+  })} -->`;
+  return [
+    marker,
+    "Grovie run started.",
+    "",
+    "- Run status: running",
+    `- Runtime: ${input.runtime}`,
+    `- Agent: \`${input.agentId}\``,
+    `- Machine: \`${input.machineId}\``,
+    `- Issue: ${formatIssueReference(input.issue.reference)}`,
+    `- Branch: \`${input.run.branchName}\` (local; not pushed)`,
+    `- Run id: \`${input.run.runId}\``,
+    `- Run directory: \`${input.run.runDir}\``,
+    `- Started at: ${input.startedAt}`,
+  ].join("\n");
+}
+
+function renderRunResultComment(summary: RunSummary): string {
+  const marker = `<!-- ${RUN_MARKER} ${JSON.stringify({
+    phase: "result",
     runId: summary.runId,
     status: summary.status,
     runtime: summary.runtime,
+    agentId: summary.agentId,
   })} -->`;
   const lines = [
     marker,
-    `Grovie session ${summary.status}.`,
+    "Grovie run finished.",
     "",
-    `- Session status: ${summary.status}`,
     `- Runtime: ${summary.runtime}`,
     `- Agent: \`${summary.agentId}\``,
     `- Machine: \`${summary.machineId}\``,
@@ -538,10 +705,24 @@ function renderRunComment(summary: RunSummary): string {
     `- Branch: \`${summary.branchName}\` (local; not pushed)`,
     `- Run id: \`${summary.runId}\``,
     `- Run directory: \`${summary.runDir}\``,
+    `- Started at: ${summary.startedAt ?? "(unknown)"}`,
+    "",
+    "Result:",
+    "",
+    `- Run status: ${summary.status}`,
+    `- Ended at: ${summary.endedAt ?? "(unknown)"}`,
   ];
 
   if (summary.error !== undefined) {
     lines.push(`- Error: ${summarizeError(summary)}`);
+  }
+
+  if (summary.result?.action !== undefined) {
+    lines.push(`- Result action: ${summary.result.action}`);
+  }
+
+  if (summary.result?.reason !== undefined) {
+    lines.push(`- Reason: ${summary.result.reason}`);
   }
 
   if (summary.result?.kind === "no-changes") {
@@ -563,6 +744,21 @@ function renderRunComment(summary: RunSummary): string {
   return lines.join("\n");
 }
 
+function isRunProgressCommentForAgent(body: string, agentId: string): boolean {
+  const marker = body.match(/^<!-- grovie:run (\{.*\}) -->/);
+
+  if (marker === null) {
+    return false;
+  }
+
+  try {
+    const metadata = JSON.parse(marker[1]) as { phase?: unknown; agentId?: unknown };
+    return metadata.phase === "progress" && metadata.agentId === agentId;
+  } catch {
+    return false;
+  }
+}
+
 function runEventType(status: SessionStatus): "run.succeeded" | "run.failed" | "run.canceled" {
   if (status === "succeeded") {
     return "run.succeeded";
@@ -575,7 +771,7 @@ function renderCliRunOutput(summary: RunSummary): string {
   const lines = [
     "grovie run",
     "",
-    `Session status: ${summary.status}`,
+    `Run status: ${summary.status}`,
     `Issue: ${formatIssueReference(summary.issue.reference)}`,
     `Branch: ${summary.branchName}`,
     `Run id: ${summary.runId}`,
@@ -584,6 +780,14 @@ function renderCliRunOutput(summary: RunSummary): string {
 
   if (summary.comment !== undefined) {
     lines.push(`Comment: ${summary.comment.url}`);
+  }
+
+  if (summary.result?.action !== undefined) {
+    lines.push(`Result action: ${summary.result.action}`);
+  }
+
+  if (summary.result?.reason !== undefined) {
+    lines.push(`Reason: ${summary.result.reason}`);
   }
 
   if (summary.result?.kind === "no-changes") {
@@ -610,7 +814,7 @@ function summarizeError(summary: RunSummary): string {
     return "Runtime failed. See the local run directory for stdout and stderr.";
   }
 
-  return summarizeOutput(summary.error ?? "Session failed.");
+  return summarizeOutput(summary.error ?? "Run failed.");
 }
 
 function summarizeOutput(value: string): string {

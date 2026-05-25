@@ -1135,6 +1135,46 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
+  it("[UC-EXECUTION-03-S08] passes configured agent instructions into the runtime handoff", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:reviewer@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localAgents: [
+        {
+          ...configuredCodexAgent("reviewer", machineId),
+          instructions: "Review the linked pull request and leave only review feedback.",
+        },
+      ],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "reviewer ran",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]).toMatchObject({
+      agent: "codex",
+      agentId: `reviewer@${machineId}`,
+      agentInstructions: "Review the linked pull request and leave only review feedback.",
+    });
+  });
+
   it("[UC-WORKER-04-S01] refuses to start when a live daemon lock exists", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const existingLock = localState.acquireDaemonLock(resolveMachineId(hostname()), NOW);
@@ -1403,6 +1443,17 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(2);
     expect(runs[1]?.issueReference.number).toBe(8);
     expect(runs[1]?.agentId).toBe(`default@${machineId}`);
+    expect(runs[1]?.triggerContext).toMatchObject({
+      source: "daemon",
+      activity: {
+        timestamp: "2026-05-22T00:00:02.000Z",
+        trigger: {
+          kind: "pull-request-mergeability",
+          pullRequestNumber: 20,
+          mergeStateStatus: "DIRTY",
+        },
+      },
+    });
     expect(readFileSync(join(localState.getPaths().root, "daemon", "activity.jsonl"), "utf8"))
       .toContain("pull request #20 merge state DIRTY requires branch update work");
   });
@@ -1625,7 +1676,7 @@ describe("runDaemonCycle", () => {
     expect(secondResult.processed).toBe(false);
   });
 
-  it("[UC-EXECUTION-02-S04] ignores issue updated timestamps caused only by Grovie session comments", async () => {
+  it("[UC-GITHUB-01-S06] ignores issue updated timestamps caused only by Grovie activity comments", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -1637,15 +1688,28 @@ describe("runDaemonCycle", () => {
     });
     const github = new FakeGitHub([
       fakeIssue({
-        updatedAt: "2026-05-22T00:00:04.000Z",
+        updatedAt: "2026-05-22T00:00:05.000Z",
+        labels: ["grovie", `agent:default@${machineId}`],
         comments: [
           fakeComment({
-            body: "user activity",
+            id: 10,
+            body: "User request.",
             updatedAt: "2026-05-22T00:00:01.000Z",
           }),
           fakeComment({
-            body: '<!-- grovie:session {"runId":"run-1","status":"succeeded","runtime":"codex"} -->\nGrovie session succeeded.',
+            id: 11,
+            body: '<!-- grovie:run {"phase":"progress","runId":"run-1","status":"running","runtime":"codex","agentId":"default@machine"} -->\nGrovie run started.',
             updatedAt: "2026-05-22T00:00:03.000Z",
+          }),
+          fakeComment({
+            id: 12,
+            body: '<!-- grovie:run {"phase":"result","runId":"run-1","status":"succeeded","runtime":"codex","agentId":"default@machine"} -->\nGrovie run succeeded.',
+            updatedAt: "2026-05-22T00:00:04.000Z",
+          }),
+          fakeComment({
+            id: 13,
+            body: '<!-- grovie:session {"runId":"run-1","status":"succeeded","runtime":"codex"} -->\nGrovie session succeeded.',
+            updatedAt: "2026-05-22T00:00:04.500Z",
           }),
         ],
       }),
@@ -1661,7 +1725,7 @@ describe("runDaemonCycle", () => {
       localState,
       now: () => NOW,
       issueRunner: () => {
-        throw new Error("Grovie session comment activity should not trigger a rerun");
+        throw new Error("Grovie activity comments should not trigger a rerun");
       },
     });
 
