@@ -845,6 +845,43 @@ describe("CLI command registration", () => {
     expect(result.stdout?.indexOf("fankaidev/grovie#9")).toBeLessThan(result.stdout?.indexOf("fankaidev/grovie#8") ?? 0);
   });
 
+  it("[UC-WORKER-04-S17] shows untrusted issue creators as skipped in queue inspection", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    const machineId = resolveMachineId(hostname());
+    configureLocalAgent(localState);
+
+    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: () => ({
+          ok: true,
+          value: [
+            {
+              reference: fakeReference(8),
+              title: "External request",
+              labels: ["grovie", `agent:coder@${machineId}`],
+            },
+          ],
+        }),
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            author: "external-user",
+            title: "External request",
+            labels: ["grovie", `agent:coder@${machineId}`],
+          },
+        }),
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("- skip fankaidev/grovie#8");
+    expect(result.stdout).toContain("reason=untrusted issue creator external-user");
+  });
+
   it("[UC-WORKER-05-S02] inspects an explicit repository without global watched repositories", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());

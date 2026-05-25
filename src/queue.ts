@@ -14,6 +14,7 @@ import type { RunLocalState } from "./run.js";
 export type QueueRepositoryInput = {
   repository: string;
   label: string;
+  trustedAuthors?: string[];
 };
 
 export type QueueCandidateStatus = "runnable" | "skipped";
@@ -96,7 +97,7 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
         label: repository.label,
         issue,
         machineId: input.machineId,
-        trustedAuthors: input.trustedAuthors,
+        trustedAuthors: repository.trustedAuthors ?? input.trustedAuthors,
         configuredAgentIds: input.configuredAgentIds,
         localState: input.localState,
       });

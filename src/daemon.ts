@@ -548,11 +548,11 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       {
         repository: input.repository,
         label: input.label,
+        trustedAuthors: trustedAuthors.value,
       },
     ],
     github: input.github,
     machineId: identity.machineId,
-    trustedAuthors: trustedAuthors.value,
     configuredAgentIds: input.localAgents?.map((agent) => agent.agentId),
     localState: input.localState,
     issueNumbers: input.issueNumbers,
