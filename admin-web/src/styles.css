@@ -237,6 +237,47 @@ pre,
   font-size: 0.75rem;
 }
 
+.run-group-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.run-group {
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.875rem;
+  background: #fbfcfd;
+}
+
+.run-group summary {
+  cursor: pointer;
+}
+
+.run-group-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.run-group-summary p,
+.run-group-meta {
+  margin: 0.35rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.run-group-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.run-group-table {
+  margin-top: 0.75rem;
+}
+
 .description-list {
   display: grid;
   gap: 0.75rem;
@@ -437,14 +478,24 @@ pre,
 }
 
 .link-list,
+.inline-link-list,
 .event-list {
   padding-left: 1.25rem;
 }
 
+.inline-link-list {
+  margin: 0;
+}
+
 .link-list li,
+.inline-link-list li,
 .event-list li {
   margin-top: 0.5rem;
   overflow-wrap: anywhere;
+}
+
+.inline-link-list li:first-child {
+  margin-top: 0;
 }
 
 .event-list div {

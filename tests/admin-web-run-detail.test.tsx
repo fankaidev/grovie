@@ -116,7 +116,7 @@ describe("admin web home route", () => {
     ]);
   });
 
-  it("[UC-ADMIN-03-S01] [UC-ADMIN-03-S04] renders daemon, runtime, useful paths, watched repositories, activity, and recent runs", () => {
+  it("[UC-ADMIN-03-S01] [UC-ADMIN-03-S04] [UC-ADMIN-03-S06] renders daemon, runtime, useful paths, watched repositories, activity, and grouped recent runs", () => {
     const html = renderToStaticMarkup(
       <AdminHomeContent
         data={{
@@ -160,6 +160,18 @@ describe("admin web home route", () => {
             runtime: "codex",
             branchName: "grovie/issue-126",
             startedAt: "2026-05-24T13:02:00.000Z",
+            endedAt: "2026-05-24T13:05:00.000Z",
+            status: "succeeded",
+            resultLinks: ["https://github.com/fankaidev/grovie/pull/140"],
+          }, {
+            ...baseRun("run-126-retry"),
+            repository: "fankaidev/grovie",
+            issueNumber: 126,
+            agentId: "coco@kai-mini",
+            runtime: "codex",
+            branchName: "grovie/issue-126",
+            startedAt: "2026-05-24T13:06:00.000Z",
+            status: "running",
           }],
         }}
       />,
@@ -175,8 +187,13 @@ describe("admin web home route", () => {
     expect(html).toContain("Starting fankaidev/grovie#126");
     expect(html).toContain("#126");
     expect(html).toContain("coco@kai-mini");
+    expect(html).toContain("2 total");
+    expect(html).toContain("1 running");
+    expect(html).toContain("1 succeeded");
     expect(html).toContain("run-126");
+    expect(html).toContain("run-126-retry");
     expect(html).toContain("/runs/run-126");
+    expect(html).toContain("PR #140");
   });
 });
 

@@ -49,6 +49,20 @@ type RunDetailState =
 type TranscriptBlock =
   | { kind: "assistant"; entry: Extract<RuntimeTranscriptEntry, { kind: "assistant_message" }> }
   | { kind: "activity"; entries: RuntimeTranscriptEntry[] };
+
+type RunGroup = {
+  key: string;
+  issueLabel: string;
+  agentLabel: string;
+  latestRun: LocalRunSummary;
+  runs: LocalRunSummary[];
+  counts: Record<string, number>;
+  activeCount: number;
+  latestTime: string;
+};
+
+const ACTIVE_RUN_STATUSES = new Set(["preparing", "prepared", "running", "interrupting", "resuming", "stale"]);
+
 export function App(): ReactNode {
   const route = useMemo(() => readRoute(window.location.pathname), []);
 
@@ -151,95 +165,232 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
         </InfoPanel>
       </section>
 
-      <section className="split-layout">
-        <InfoPanel title="Watched Repositories">
-          {props.data.repositories.length === 0 ? (
-            <p className="muted-copy">No watched repositories configured.</p>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Repository</th>
-                  <th>Label</th>
-                </tr>
-              </thead>
-              <tbody>
-                {props.data.repositories.map((repository) => (
-                  <tr key={`${repository.repository}-${repository.label ?? ""}`}>
-                    <td>{repository.repository}</td>
-                    <td>{repository.label ?? "(default)"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </InfoPanel>
-        <InfoPanel title="Recent Activity">
-          {activity.length === 0 ? (
-            <p className="muted-copy">No daemon activity recorded.</p>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Type</th>
-                  <th>Repository</th>
-                  <th>Issue</th>
-                  <th>Agent</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activity.map((entry, index) => (
-                  <tr key={`${entry.timestamp}-${entry.type}-${index}`}>
-                    <td>{entry.timestamp}</td>
-                    <td><code>{entry.type}</code></td>
-                    <td>{entry.repository ?? "(none)"}</td>
-                    <td>{entry.issueNumber === undefined ? "(none)" : `#${entry.issueNumber}`}</td>
-                    <td>{entry.agentId ?? "(none)"}</td>
-                    <td>{entry.message}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </InfoPanel>
-      </section>
-
-      <InfoPanel title="Recent Runs">
-        {runs.length === 0 ? (
-          <p className="muted-copy">No local runs found.</p>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Run</th>
-                <th>Issue</th>
-                <th>Status</th>
-                <th>Agent</th>
-                <th>Runtime</th>
-                <th>Branch</th>
-                <th>Started</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => (
-                <tr key={run.runId}>
-                  <td><a href={`/runs/${encodeURIComponent(run.runId)}`}>{run.runId}</a></td>
-                  <td>{renderIssueReference(run)}</td>
-                  <td><span className={`status-badge compact status-${run.status}`}>{run.status}</span></td>
-                  <td>{run.agentId ?? "(unknown)"}</td>
-                  <td>{run.runtime ?? "(unknown)"}</td>
-                  <td>{run.branchName ?? "(unknown)"}</td>
-                  <td>{run.startedAt ?? "(unknown)"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </InfoPanel>
+      <WatchedRepositoriesPanel repositories={props.data.repositories} />
+      <RecentRunsPanel runs={runs} />
+      <RecentActivityPanel activity={activity} />
     </main>
   );
+}
+
+function WatchedRepositoriesPanel(props: { repositories: AdminHomeData["repositories"] }): ReactNode {
+  return (
+    <InfoPanel title="Watched Repositories">
+      {props.repositories.length === 0 ? (
+        <p className="muted-copy">No watched repositories configured.</p>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Repository</th>
+              <th>Label</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.repositories.map((repository) => (
+              <tr key={`${repository.repository}-${repository.label ?? ""}`}>
+                <td>{repository.repository}</td>
+                <td>{repository.label ?? "(default)"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </InfoPanel>
+  );
+}
+
+function RecentActivityPanel(props: { activity: AdminHomeData["activity"] }): ReactNode {
+  return (
+    <InfoPanel title="Recent Activity">
+      {props.activity.length === 0 ? (
+        <p className="muted-copy">No daemon activity recorded.</p>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Repository</th>
+              <th>Issue</th>
+              <th>Agent</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.activity.map((entry, index) => (
+              <tr key={`${entry.timestamp}-${entry.type}-${index}`}>
+                <td>{entry.timestamp}</td>
+                <td><code>{entry.type}</code></td>
+                <td>{entry.repository ?? "(none)"}</td>
+                <td>{entry.issueNumber === undefined ? "(none)" : `#${entry.issueNumber}`}</td>
+                <td>{entry.agentId ?? "(none)"}</td>
+                <td>{entry.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </InfoPanel>
+  );
+}
+
+function RecentRunsPanel(props: { runs: LocalRunSummary[] }): ReactNode {
+  const groups = groupRunsByIssueAndAgent(props.runs);
+
+  return (
+    <InfoPanel title="Recent Runs">
+      {groups.length === 0 ? (
+        <p className="muted-copy">No local runs found.</p>
+      ) : (
+        <div className="run-group-list">
+          {groups.map((group) => (
+            <details key={group.key} className="run-group">
+              <summary>
+                <div className="run-group-summary">
+                  <div>
+                    <strong>{group.issueLabel}</strong>
+                    <p>{group.agentLabel} · {group.latestRun.runtime ?? "(unknown runtime)"}</p>
+                  </div>
+                  <span className={`status-badge compact status-${group.latestRun.status}`}>{group.latestRun.status}</span>
+                </div>
+                <div className="run-group-meta">
+                  <span>{renderRunGroupCounts(group)}</span>
+                  <span>Branch: {group.latestRun.branchName ?? "(unknown)"}</span>
+                  <span>Latest: {group.latestTime}</span>
+                  <span>{renderRunReason(group.latestRun)}</span>
+                </div>
+              </summary>
+              <table className="data-table run-group-table">
+                <thead>
+                  <tr>
+                    <th>Run</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                    <th>Started</th>
+                    <th>Ended</th>
+                    <th>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.runs.map((run) => (
+                    <tr key={run.runId}>
+                      <td><a href={`/runs/${encodeURIComponent(run.runId)}`}>{run.runId}</a></td>
+                      <td><span className={`status-badge compact status-${run.status}`}>{run.status}</span></td>
+                      <td>{renderRunReason(run)}</td>
+                      <td>{run.startedAt ?? "(unknown)"}</td>
+                      <td>{run.endedAt ?? "(not ended)"}</td>
+                      <td>{renderRunResultLinks(run)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          ))}
+        </div>
+      )}
+    </InfoPanel>
+  );
+}
+
+function groupRunsByIssueAndAgent(runs: LocalRunSummary[]): RunGroup[] {
+  const groups = new Map<string, LocalRunSummary[]>();
+
+  for (const run of runs) {
+    const key = [
+      run.repository ?? "(unknown repository)",
+      run.issueNumber === undefined ? run.runId : String(run.issueNumber),
+      run.agentId ?? "(unknown agent)",
+    ].join("|");
+    groups.set(key, [...(groups.get(key) ?? []), run]);
+  }
+
+  return [...groups.entries()].map(([key, groupRuns]) => {
+    const sortedRuns = [...groupRuns].sort(compareRunsByLatestTime);
+    const latestRun = sortedRuns[0]!;
+    const counts = countRunStatuses(sortedRuns);
+    const activeCount = sortedRuns.filter((run) => isActiveRunStatus(run.status)).length;
+
+    return {
+      key,
+      issueLabel: renderIssueReference(latestRun),
+      agentLabel: latestRun.agentId ?? "(unknown agent)",
+      latestRun,
+      runs: sortedRuns,
+      counts,
+      activeCount,
+      latestTime: runSortTime(latestRun) ?? "(unknown)",
+    };
+  }).sort((left, right) => {
+    if (left.activeCount !== right.activeCount) {
+      return right.activeCount - left.activeCount;
+    }
+
+    return compareTimeStrings(right.latestTime, left.latestTime);
+  });
+}
+
+function compareRunsByLatestTime(left: LocalRunSummary, right: LocalRunSummary): number {
+  return compareTimeStrings(runSortTime(right), runSortTime(left));
+}
+
+function runSortTime(run: LocalRunSummary): string | undefined {
+  return run.lastEventTime ?? run.endedAt ?? run.startedAt ?? run.createdAt;
+}
+
+function compareTimeStrings(left: string | undefined, right: string | undefined): number {
+  return (left ?? "").localeCompare(right ?? "");
+}
+
+function countRunStatuses(runs: LocalRunSummary[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  for (const run of runs) {
+    counts[run.status] = (counts[run.status] ?? 0) + 1;
+  }
+
+  return counts;
+}
+
+function renderRunGroupCounts(group: RunGroup): string {
+  const statusParts = ["running", "succeeded", "failed", "canceled"]
+    .map((status) => `${group.counts[status] ?? 0} ${status}`)
+    .filter((part) => !part.startsWith("0 "));
+
+  return [`${group.runs.length} total`, ...statusParts].join(" · ");
+}
+
+function renderRunResultLinks(run: LocalRunSummary): ReactNode {
+  if (run.resultLinks.length === 0) {
+    return "(none)";
+  }
+
+  return (
+    <ul className="inline-link-list">
+      {run.resultLinks.map((link, index) => (
+        <li key={link}>
+          <a href={link}>{renderResultLinkLabel(link, index)}</a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function renderResultLinkLabel(link: string, index: number): string {
+  const pullRequestMatch = /\/pull\/(?<number>\d+)(?:$|[/?#])/.exec(link);
+
+  if (pullRequestMatch?.groups?.number !== undefined) {
+    return `PR #${pullRequestMatch.groups.number}`;
+  }
+
+  if (link.includes("/issues/") && link.includes("#issuecomment-")) {
+    return "comment";
+  }
+
+  return `link ${index + 1}`;
+}
+
+function isActiveRunStatus(status: LocalRunSummary["status"]): boolean {
+  return ACTIVE_RUN_STATUSES.has(status);
 }
 
 function RunDetailPage(props: { runId: string }): ReactNode {
