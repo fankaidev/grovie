@@ -10,6 +10,7 @@
 | R2 | Trusted Grovie context is separated from untrusted GitHub issue content. |
 | R3 | Local stdout and stderr logs are raw execution logs. |
 | R4 | Current Codex runs use `danger-full-access` sandboxing until configurable agent runtime safety settings are implemented. |
+| R5 | Configured local agent instructions are trusted local context and are included in the runtime handoff separately from GitHub issue content. |
 
 ## Scenarios
 
@@ -22,3 +23,4 @@
 | UC-EXECUTION-03-S05 | P0 | A canceled run terminates the active Codex process and records a canceled run result. |
 | UC-EXECUTION-03-S06 | P1 | A Codex process failure records exit status, stdout path, stderr path, and failure summary in run metadata. |
 | UC-EXECUTION-03-S07 | P0 | Codex runs persist the concrete Codex runtime session id and resume runs use that id instead of an ambiguous latest session. |
+| UC-EXECUTION-03-S08 | P1 | A run for a configured local agent includes that agent's custom instructions in the generated prompt and task handoff. |

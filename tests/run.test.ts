@@ -34,6 +34,7 @@ describe("runIssue", () => {
       config: defaultConfig(),
       configPath: "/project/.grovie.yml",
       agent: "codex",
+      agentInstructions: "Act as the coder agent and produce a small implementation patch.",
       github,
       localState,
       runtime,
@@ -68,6 +69,7 @@ describe("runIssue", () => {
         schemaVersion: 1,
         runtime: "codex",
         repository: "fankaidev/grovie",
+        agentInstructions: "Act as the coder agent and produce a small implementation patch.",
       },
     });
     expect(runtime.runInput?.run).toBe(localState.run);
