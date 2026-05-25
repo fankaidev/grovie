@@ -103,6 +103,11 @@ describe("admin web home route", () => {
             repository: "fankaidev/grovie",
             issueNumber: 126,
             agentId: "coco@kai-mini",
+          }, {
+            timestamp: "2026-05-24T13:00:00.000Z",
+            type: "daemon.started",
+            message: "Daemon started.",
+            repository: "fankaidev/grovie",
           }],
         });
       }
@@ -138,7 +143,10 @@ describe("admin web home route", () => {
         path: "/state/config.yml",
       },
       repositories: [{ repository: "fankaidev/grovie", label: "grovie" }],
-      activity: [{ type: "run.started" }],
+      activity: expect.arrayContaining([
+        expect.objectContaining({ type: "run.started" }),
+        expect.objectContaining({ type: "daemon.started" }),
+      ]),
       runs: [{ runId: "run-126" }],
     });
     expect(data.health.runtimes).toEqual(expect.arrayContaining([expect.objectContaining({ runtime: "codex", available: true })]));
@@ -224,6 +232,11 @@ describe("admin web home route", () => {
             repository: "fankaidev/grovie",
             issueNumber: 126,
             agentId: "coco@kai-mini",
+          }, {
+            timestamp: "2026-05-24T13:00:00.000Z",
+            type: "daemon.started",
+            message: "Daemon started.",
+            repository: "fankaidev/grovie",
           }],
           runs: [{
             ...baseRun("run-126"),
@@ -250,9 +263,9 @@ describe("admin web home route", () => {
       />,
     );
 
-    expect(html).toContain("running pid 321");
-    expect(html).toContain("2 supported, 1 unavailable");
-    expect(html).toContain("2 configured, 1 unavailable");
+    expect(html).toContain("PID");
+    expect(html).toContain("321");
+    expect(html).not.toContain("Admin console status");
     expect(html).toContain("codex@kai-mini");
     expect(html).toContain("command");
     expect(html).toContain("pi");
@@ -263,6 +276,10 @@ describe("admin web home route", () => {
     expect(html).toContain("grovie");
     expect(html).toContain("run.started");
     expect(html).toContain("Starting fankaidev/grovie#126");
+    expect(html).toContain("daemon.started");
+    expect(html).toContain("Daemon started.");
+    expect(html).toContain("<td>none</td>");
+    expect(html).not.toContain("<td>(none)</td><td>(none)</td>");
     expect(html).toContain("#126");
     expect(html).toContain("coco@kai-mini");
     expect(html).toContain("2 total");
