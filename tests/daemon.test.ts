@@ -1540,6 +1540,41 @@ describe("runDaemonCycle", () => {
     })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
   });
 
+  it("[UC-EXECUTION-05-S06] advances the handled cursor through issue comments created by the same agent", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const github = new FakeGitHub([
+      fakeIssue({
+        comments: [
+          fakeComment({
+            updatedAt: "2026-05-22T00:00:02.000Z",
+          }),
+        ],
+      }),
+    ]);
+
+    await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: () => ({
+        exitCode: 0,
+        handledThrough: "2026-05-22T00:00:05.000Z",
+      }),
+    });
+
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    })?.handledThrough).toBe("2026-05-22T00:00:05.000Z");
+  });
+
   it("[UC-EXECUTION-02-S04] [UC-WORKER-04-S04] ignores Grovie claim comments when checking the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });

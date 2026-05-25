@@ -825,7 +825,10 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
     });
 
     const postRunPullRequestActivityTimestamp = readPostRunPullRequestActivityTimestamp(input);
-    const handledThrough = maxTimestamp(input.issueActivity.timestamp, postRunPullRequestActivityTimestamp);
+    const handledThrough = maxTimestamp(
+      maxTimestamp(input.issueActivity.timestamp, result.handledThrough),
+      postRunPullRequestActivityTimestamp,
+    );
 
     input.localState?.writeHandledCursor?.({
       repository: input.repository,
