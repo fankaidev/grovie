@@ -579,6 +579,10 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       issueReference: candidate.issueReference,
       workerId: candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId,
       issueActivity: candidate.activity,
+      triggerContext: {
+        source: "daemon",
+        activity: candidate.activity,
+      },
       now,
       issueRunner,
     });
@@ -706,6 +710,7 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
   issueReference: IssueReference;
   workerId: string;
   issueActivity: IssueActivity;
+  triggerContext?: RunIssueAsyncInput["triggerContext"];
   runRequest?: RunIssueAsyncInput["runRequest"];
   now: () => Date;
   issueRunner: (input: RunIssueAsyncInput) => RunIssueResult | Promise<RunIssueResult>;
@@ -806,6 +811,7 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
       runtime: input.runtime ?? createRuntime(runtimeName),
       localState: input.localState,
       runRequest: input.runRequest,
+      triggerContext: input.triggerContext,
       stateRepo: input.stateRepo,
       monitor: {
         heartbeatIntervalMs: input.stateRepo?.syncIntervalSeconds === undefined
