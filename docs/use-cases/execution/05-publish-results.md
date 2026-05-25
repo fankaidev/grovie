@@ -1,6 +1,6 @@
-# UC-EXECUTION-05: Publish Code Changes Safely
+# UC-EXECUTION-05: Publish Agent Results Safely
 
-> Grovie turns agent worktree changes into GitHub-visible output without pushing directly to the default branch.
+> Grovie turns an agent's local result artifacts and worktree changes into GitHub-visible output without pushing directly to the default branch.
 
 ## Rules
 
@@ -8,6 +8,7 @@
 |----|------|
 | R1 | Grovie never force-pushes over an existing remote branch. |
 | R2 | Grovie refuses to push the default branch. |
+| R3 | `.grovie/result.json` may explicitly classify an agent result as `no-op`, `comment`, `code-change`, `review`, `request-human`, or `handoff`; when it is absent, Grovie preserves the existing filesystem-based behavior. |
 
 ## Scenarios
 
@@ -19,3 +20,7 @@
 | UC-EXECUTION-05-S04 | P0 | A run whose computed result branch is the default branch is rejected before any push. |
 | UC-EXECUTION-05-S05 | P1 | A reviewer run with no intended code changes posts concise review output without modifying the coder branch or opening a PR. |
 | UC-EXECUTION-05-S06 | P0 | A comment-only run writes `.grovie/issue-comment.md`, and Grovie publishes that body as an issue comment without requiring runtime GitHub auth. |
+| UC-EXECUTION-05-S07 | P0 | A run writes `.grovie/result.json` with action `no-op`, `request-human`, `handoff`, or `review`, and Grovie reports the action and short reason in the GitHub-visible run summary without opening a PR. |
+| UC-EXECUTION-05-S08 | P0 | A run writes `.grovie/result.json` with action `comment`, and Grovie publishes `comment.body` or the compatible `.grovie/issue-comment.md` body as an issue comment. |
+| UC-EXECUTION-05-S09 | P0 | A run writes `.grovie/result.json` with action `code-change` and worktree changes, and Grovie opens the normal PR while including the short reason in the PR body and run summary. |
+| UC-EXECUTION-05-S10 | P1 | A run writes a structured result action that conflicts with worktree changes, and Grovie rejects the result instead of silently publishing the wrong output. |

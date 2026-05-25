@@ -149,6 +149,149 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
+  it("[UC-EXECUTION-05-S07] honors an explicit no-op result with a human-readable reason", () => {
+    const run = fakeRunWithResult({
+      schemaVersion: 1,
+      action: "no-op",
+      reason: "The requested behavior already exists.",
+    });
+    const runner = new FakeRunner([
+      {
+        stdout: "",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    expect(
+      handler.handle({
+        run,
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/project/.grovie.yml",
+        repository: "fankaidev/grovie",
+        runtime: "codex",
+        execution: fakeExecution(),
+      }),
+    ).toEqual({
+      kind: "no-changes",
+      status: "",
+      validationSummary: "No validation output captured.",
+      action: "no-op",
+      reason: "The requested behavior already exists.",
+    });
+    expect(github.comments).toHaveLength(0);
+    expect(github.pullRequests).toHaveLength(0);
+  });
+
+  it("[UC-EXECUTION-05-S08] publishes a comment action from result.json", () => {
+    const run = fakeRunWithResult({
+      schemaVersion: 1,
+      action: "comment",
+      reason: "The issue needs a maintainer decision.",
+      comment: {
+        body: "Please confirm which runtime should own this behavior.",
+      },
+    });
+    const runner = new FakeRunner([
+      {
+        stdout: "",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    expect(
+      handler.handle({
+        run,
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/project/.grovie.yml",
+        repository: "fankaidev/grovie",
+        runtime: "codex",
+        execution: fakeExecution(),
+      }),
+    ).toEqual({
+      kind: "issue-comment",
+      status: "",
+      validationSummary: "No validation output captured.",
+      comment: {
+        id: 1,
+        body: "Please confirm which runtime should own this behavior.",
+        url: "https://github.com/fankaidev/grovie/issues/9#issuecomment-1",
+      },
+      action: "comment",
+      reason: "The issue needs a maintainer decision.",
+    });
+    expect(github.comments).toEqual(["Please confirm which runtime should own this behavior."]);
+    expect(github.pullRequests).toHaveLength(0);
+  });
+
+  it("[UC-EXECUTION-05-S09] includes an explicit code-change reason in the pull request body", () => {
+    const run = fakeRunWithResult({
+      schemaVersion: 1,
+      action: "code-change",
+      reason: "Implemented the requested result protocol.",
+    });
+    const runner = new FakeRunner([
+      {
+        stdout: " M src/result.ts\n",
+      },
+      {},
+      {},
+      {},
+      {},
+      {
+        stdout: "abc123\n",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    const result = handler.handle({
+      run,
+      issue: fakeIssue(),
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      repository: "fankaidev/grovie",
+      runtime: "codex",
+      execution: fakeExecution(),
+    });
+
+    expect(result).toMatchObject({
+      kind: "pull-request",
+      action: "code-change",
+      reason: "Implemented the requested result protocol.",
+    });
+    expect(github.pullRequests[0]?.body).toContain("- Reason: Implemented the requested result protocol.");
+  });
+
+  it("[UC-EXECUTION-05-S10] rejects non-code-change result actions when worktree changes exist", () => {
+    const run = fakeRunWithResult({
+      schemaVersion: 1,
+      action: "request-human",
+      reason: "The issue needs product input.",
+    });
+    const runner = new FakeRunner([
+      {
+        stdout: " M src/result.ts\n",
+      },
+    ]);
+    const handler = new GitResultHandler(new FakeGitHub(), runner);
+
+    expect(() =>
+      handler.handle({
+        run,
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/project/.grovie.yml",
+        repository: "fankaidev/grovie",
+        runtime: "codex",
+        execution: fakeExecution(),
+      }),
+    ).toThrow("Agent result action request-human cannot be combined with worktree changes. Use action code-change or remove the changes.");
+  });
+
   it("[UC-EXECUTION-05-S03] reports deterministic branch push conflicts without opening a PR", () => {
     const runner = new FakeRunner([
       {
@@ -348,6 +491,18 @@ function fakeRun(): PreparedRun {
 }
 
 function fakeRunWithIssueComment(comment: string): PreparedRun {
+  return fakeFileBackedRun((run) => {
+    writeFileSync(join(run.worktreePath, ".grovie", "issue-comment.md"), `${comment}\n`, "utf8");
+  });
+}
+
+function fakeRunWithResult(result: Record<string, unknown>): PreparedRun {
+  return fakeFileBackedRun((run) => {
+    writeFileSync(join(run.worktreePath, ".grovie", "result.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  });
+}
+
+function fakeFileBackedRun(writeArtifacts: (run: PreparedRun) => void): PreparedRun {
   const root = mkdtempSync(join(tmpdir(), "grovie-result-"));
   const run = {
     ...fakeRun(),
@@ -358,7 +513,7 @@ function fakeRunWithIssueComment(comment: string): PreparedRun {
   };
 
   mkdirSync(join(run.worktreePath, ".grovie"), { recursive: true });
-  writeFileSync(join(run.worktreePath, ".grovie", "issue-comment.md"), `${comment}\n`, "utf8");
+  writeArtifacts(run);
   return run;
 }
 
