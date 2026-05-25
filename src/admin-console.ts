@@ -21,6 +21,7 @@ import type {
   AdminApiRepositoriesResponse,
   AdminApiRunDetailResponse,
   AdminApiRunEventsResponse,
+  AdminApiRunFileResponse,
   AdminApiRunLogResponse,
   AdminApiRunLogStreamEvent,
   AdminApiRunLogTranscriptResponse,
@@ -139,6 +140,13 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
         return;
       }
 
+      const sessionPageMatch = /^\/sessions\/(?<sessionId>[^/]+)$/.exec(url.pathname);
+
+      if (sessionPageMatch?.groups?.sessionId !== undefined) {
+        writeHtml(response, 200, renderAdminHome(context));
+        return;
+      }
+
     }
 
     const body: AdminApiErrorResponse = {
@@ -241,6 +249,52 @@ function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessag
       stream: runLogMatch.groups.stream,
       path: log.path,
       content: log.content,
+    };
+    writeJson(response, 200, body);
+    return;
+  }
+
+  const runPromptMatch = /^\/api\/runs\/(?<runId>[^/]+)\/prompt$/.exec(url.pathname);
+
+  if (runPromptMatch?.groups?.runId !== undefined) {
+    const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runPromptMatch.groups.runId));
+
+    if (run === undefined) {
+      const body: AdminApiErrorResponse = {
+        error: "not_found",
+        message: "Run not found.",
+      };
+      writeJson(response, 404, body);
+      return;
+    }
+
+    const body: AdminApiRunFileResponse = {
+      runId: run.runId,
+      path: run.promptPath,
+      content: readLocalTextFile(run.promptPath),
+    };
+    writeJson(response, 200, body);
+    return;
+  }
+
+  const runTaskMatch = /^\/api\/runs\/(?<runId>[^/]+)\/task$/.exec(url.pathname);
+
+  if (runTaskMatch?.groups?.runId !== undefined) {
+    const run = findLocalRun(context.paths.runsDir, decodeURIComponent(runTaskMatch.groups.runId));
+
+    if (run === undefined) {
+      const body: AdminApiErrorResponse = {
+        error: "not_found",
+        message: "Run not found.",
+      };
+      writeJson(response, 404, body);
+      return;
+    }
+
+    const body: AdminApiRunFileResponse = {
+      runId: run.runId,
+      path: run.taskPath,
+      content: readLocalTextFile(run.taskPath),
     };
     writeJson(response, 200, body);
     return;
@@ -869,17 +923,18 @@ function renderLogPreview(run: LocalRunSummary, stream: "stdout" | "stderr"): st
 function readRunLog(run: LocalRunSummary, stream: AdminLogStream): { path: string; content: string } {
   const path = stream === "stdout" ? run.stdoutPath : run.stderrPath;
 
-  if (!existsSync(path)) {
-    return {
-      path,
-      content: "",
-    };
-  }
-
   return {
     path,
-    content: readFileSync(path, "utf8"),
+    content: readLocalTextFile(path),
   };
+}
+
+function readLocalTextFile(path: string): string {
+  if (!existsSync(path)) {
+    return "";
+  }
+
+  return readFileSync(path, "utf8");
 }
 
 function isLogStream(value: string | undefined): value is "stdout" | "stderr" {

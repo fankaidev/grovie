@@ -53,6 +53,12 @@ export type AdminApiRunDetailResponse = {
   run: LocalRunSummary;
 };
 
+export type AdminApiRunFileResponse = {
+  runId: string;
+  path: string;
+  content: string;
+};
+
 export type AdminApiRunEventsResponse = {
   runId: string;
   events: RunEvent[];

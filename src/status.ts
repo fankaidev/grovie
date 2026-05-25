@@ -37,6 +37,12 @@ export type LocalRunSummary = {
     sourceRunId?: string;
     reason?: string;
   };
+  runtimeSessionRef?: {
+    runtime: string;
+    sessionId: string;
+    createdAt?: string;
+    updatedAt?: string;
+  };
   resultLinks: string[];
   events: RunEvent[];
 };
@@ -55,6 +61,12 @@ type RunMetadata = {
   runRequest?: {
     sourceRunId?: string;
     reason?: string;
+  };
+  runtimeSessionRef?: {
+    runtime?: string;
+    sessionId?: string;
+    createdAt?: string;
+    updatedAt?: string;
   };
 };
 
@@ -248,8 +260,22 @@ function readLocalRun(runDir: string, directoryRunId: string, now: Date, staleAf
     lastEventType: lastEvent?.type,
     createdAt: metadata.createdAt,
     runRequest: metadata.runRequest,
+    runtimeSessionRef: normalizeRuntimeSessionRef(metadata.runtimeSessionRef),
     resultLinks: findResultLinks(events),
     events,
+  };
+}
+
+function normalizeRuntimeSessionRef(value: RunMetadata["runtimeSessionRef"]): LocalRunSummary["runtimeSessionRef"] {
+  if (value === undefined || typeof value.runtime !== "string" || typeof value.sessionId !== "string") {
+    return undefined;
+  }
+
+  return {
+    runtime: value.runtime,
+    sessionId: value.sessionId,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
   };
 }
 

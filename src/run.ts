@@ -28,6 +28,7 @@ export type RunIssueInput = {
   resultHandler?: ResultHandler;
   stateRepo?: StateRepoConfig;
   agentId?: string;
+  agentInstructions?: string;
   runRequest?: {
     sourceRunId?: string;
     reason?: RunRequest["reason"];
@@ -267,6 +268,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
     relatedPullRequests: relatedPullRequestsResult.value,
     configPath: input.configPath,
     runtime: runtime.name,
+    agentInstructions: input.agentInstructions,
     runRequest: input.runRequest,
     triggerContext,
   });
@@ -461,6 +463,7 @@ function buildTaskContext(input: {
   relatedPullRequests: GitHubRelatedPullRequest[];
   configPath: string;
   runtime: RuntimeName;
+  agentInstructions?: string;
   runRequest?: RunIssueInput["runRequest"];
   triggerContext: RunTriggerContext;
 }): Record<string, unknown> {
@@ -469,6 +472,7 @@ function buildTaskContext(input: {
     source: "grovie run",
     configPath: input.configPath,
     runtime: input.runtime,
+    agentInstructions: input.agentInstructions,
     repository: `${input.issue.reference.owner}/${input.issue.reference.repo}`,
     runRequest: input.runRequest,
     trigger: {
