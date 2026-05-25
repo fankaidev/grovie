@@ -9,6 +9,7 @@ import type {
   AdminApiErrorResponse,
   AdminApiRunDetailResponse,
   AdminApiRunEventsResponse,
+  AdminApiRunFileResponse,
   AdminApiRunsResponse,
   AdminApiRunLogResponse,
   AdminApiRunLogTranscriptResponse,
@@ -44,7 +45,18 @@ type RunDetailState =
     stdout: AdminApiRunLogResponse;
     stderr: AdminApiRunLogResponse;
     stdoutTranscript: AdminApiRunLogTranscriptResponse;
+    prompt: AdminApiRunFileResponse;
+    task: AdminApiRunFileResponse;
   };
+
+type SessionDetailState =
+  | { status: "loading" }
+  | { status: "not-found"; message: string }
+  | { status: "error"; message: string }
+  | { status: "ready"; session: SessionSummary };
+
+type HandoffTab = "prompt" | "task" | "stdout" | "stderr" | "events";
+type RunDetailReadyState = Extract<RunDetailState, { status: "ready" }>;
 
 type TranscriptBlock =
   | { kind: "assistant"; entry: Extract<RuntimeTranscriptEntry, { kind: "assistant_message" }> }
@@ -52,6 +64,7 @@ type TranscriptBlock =
 
 type RunGroup = {
   key: string;
+  sessionId: string;
   issueLabel: string;
   agentLabel: string;
   latestRun: LocalRunSummary;
@@ -61,6 +74,8 @@ type RunGroup = {
   latestTime: string;
 };
 
+type SessionSummary = RunGroup;
+
 const ACTIVE_RUN_STATUSES = new Set(["preparing", "prepared", "running", "interrupting", "stale"]);
 
 export function App(): ReactNode {
@@ -68,6 +83,10 @@ export function App(): ReactNode {
 
   if (route.name === "run-detail") {
     return <RunDetailPage runId={route.runId} />;
+  }
+
+  if (route.name === "session-detail") {
+    return <SessionDetailPage sessionId={route.sessionId} />;
   }
 
   return <AdminHome />;
@@ -283,23 +302,47 @@ function RecentActivityPanel(props: { activity: AdminHomeData["activity"] }): Re
 }
 
 function RecentRunsPanel(props: { runs: LocalRunSummary[] }): ReactNode {
+  const [agentFilter, setAgentFilter] = useState("all");
   const groups = groupRunsByIssueAndAgent(props.runs);
+  const agents = Array.from(new Set(groups.map((group) => group.agentLabel))).sort();
+  const filteredGroups = agentFilter === "all" ? groups : groups.filter((group) => group.agentLabel === agentFilter);
 
   return (
-    <InfoPanel title="Recent Runs">
+    <InfoPanel title="Recent Sessions">
       {groups.length === 0 ? (
         <p className="muted-copy">No local runs found.</p>
       ) : (
-        <div className="run-group-list">
-          {groups.map((group) => (
+        <>
+          <div className="filter-bar">
+            <span>Agent</span>
+            <div className="filter-tags" aria-label="Agent filter">
+              <button type="button" className={agentFilter === "all" ? "active" : undefined} onClick={() => setAgentFilter("all")}>
+                All agents
+              </button>
+              {agents.map((agent) => (
+                <button key={agent} type="button" className={agentFilter === agent ? "active" : undefined} onClick={() => setAgentFilter(agent)}>
+                  {agent}
+                </button>
+              ))}
+            </div>
+            <span>{filteredGroups.length} of {groups.length} sessions</span>
+          </div>
+          {filteredGroups.length === 0 ? (
+            <p className="muted-copy">No sessions match this agent.</p>
+          ) : (
+            <div className="run-group-list">
+              {filteredGroups.map((group) => (
             <details key={group.key} className="run-group">
               <summary>
                 <div className="run-group-summary">
                   <div>
-                    <strong>{group.issueLabel}</strong>
+                    <strong><a href={`/sessions/${encodeURIComponent(group.sessionId)}`}>{group.issueLabel}</a></strong>
                     <p>{group.agentLabel} · {group.latestRun.runtime ?? "(unknown runtime)"}</p>
                   </div>
-                  <span className={`status-badge compact status-${group.latestRun.status}`}>{group.latestRun.status}</span>
+                  <div className="summary-actions">
+                    <span className={`status-badge compact status-${group.latestRun.status}`}>{group.latestRun.status}</span>
+                    <span className="summary-chevron" aria-hidden="true" />
+                  </div>
                 </div>
                 <div className="run-group-meta">
                   <span>{renderRunGroupCounts(group)}</span>
@@ -333,8 +376,10 @@ function RecentRunsPanel(props: { runs: LocalRunSummary[] }): ReactNode {
                 </tbody>
               </table>
             </details>
-          ))}
-        </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </InfoPanel>
   );
@@ -344,11 +389,7 @@ function groupRunsByIssueAndAgent(runs: LocalRunSummary[]): RunGroup[] {
   const groups = new Map<string, LocalRunSummary[]>();
 
   for (const run of runs) {
-    const key = [
-      run.repository ?? "(unknown repository)",
-      run.issueNumber === undefined ? run.runId : String(run.issueNumber),
-      run.agentId ?? "(unknown agent)",
-    ].join("|");
+    const key = sessionIdForRun(run);
     groups.set(key, [...(groups.get(key) ?? []), run]);
   }
 
@@ -360,6 +401,7 @@ function groupRunsByIssueAndAgent(runs: LocalRunSummary[]): RunGroup[] {
 
     return {
       key,
+      sessionId: key,
       issueLabel: renderIssueReference(latestRun),
       agentLabel: latestRun.agentId ?? "(unknown agent)",
       latestRun,
@@ -375,6 +417,14 @@ function groupRunsByIssueAndAgent(runs: LocalRunSummary[]): RunGroup[] {
 
     return compareTimeStrings(right.latestTime, left.latestTime);
   });
+}
+
+function sessionIdForRun(run: LocalRunSummary): string {
+  if (run.branchName?.startsWith("grovie/") === true) {
+    return run.branchName.slice("grovie/".length);
+  }
+
+  return run.runId.replace(/-\d{8}T\d{6}Z$/, "");
 }
 
 function compareRunsByLatestTime(left: LocalRunSummary, right: LocalRunSummary): number {
@@ -405,6 +455,32 @@ function renderRunGroupCounts(group: RunGroup): string {
     .filter((part) => !part.startsWith("0 "));
 
   return [`${group.runs.length} total`, ...statusParts].join(" · ");
+}
+
+function renderAgentSessionCommand(run: LocalRunSummary): string {
+  const sessionId = run.runtimeSessionRef?.sessionId;
+
+  if (sessionId === undefined) {
+    return "No runtime session recorded for the latest run.";
+  }
+
+  if (run.runtime === "codex") {
+    return `cd ${shellQuote(run.worktreePath ?? ".")} && codex --ask-for-approval never resume ${shellQuote(sessionId)}`;
+  }
+
+  if (run.runtime === "claude-code") {
+    return `cd ${shellQuote(run.worktreePath ?? ".")} && claude --resume ${shellQuote(sessionId)}`;
+  }
+
+  if (run.runtime === "pi") {
+    return `cd ${shellQuote(run.worktreePath ?? ".")} && pi resume ${shellQuote(sessionId)} -`;
+  }
+
+  return `${run.runtime ?? "agent"} session ${sessionId}`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function renderRunResultLinks(run: LocalRunSummary): ReactNode {
@@ -439,6 +515,146 @@ function renderResultLinkLabel(link: string, index: number): string {
 
 function isActiveRunStatus(status: LocalRunSummary["status"]): boolean {
   return ACTIVE_RUN_STATUSES.has(status);
+}
+
+function SessionDetailPage(props: { sessionId: string }): ReactNode {
+  const [state, setState] = useState<SessionDetailState>({ status: "loading" });
+
+  useEffect(() => {
+    let canceled = false;
+
+    loadSessionDetail(props.sessionId)
+      .then((nextState) => {
+        if (!canceled) {
+          setState(nextState);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          setState({
+            status: "error",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [props.sessionId]);
+
+  if (state.status === "loading") {
+    return <CenteredNotice title="Loading session" message={`Fetching ${props.sessionId}.`} />;
+  }
+
+  if (state.status === "not-found") {
+    return <CenteredNotice title="Session not found" message={state.message} />;
+  }
+
+  if (state.status === "error") {
+    return <CenteredNotice title="Session detail unavailable" message={state.message} />;
+  }
+
+  return (
+    <main className="page-shell run-page">
+      <header className="page-header">
+        <div>
+          <p className="eyebrow"><a href="/">Grovie</a> / Session detail</p>
+          <h1>{state.session.sessionId}</h1>
+        </div>
+      </header>
+
+      <section className="summary-grid">
+        <InfoPanel title="Identity">
+          <DescriptionList
+            items={[
+              ["Issue", state.session.issueLabel],
+              ["Agent", state.session.agentLabel],
+              ["Runtime", state.session.latestRun.runtime ?? "(unknown)"],
+              ["Runs", String(state.session.runs.length)],
+              ["Latest", state.session.latestTime],
+            ]}
+          />
+        </InfoPanel>
+        <InfoPanel title="Execution">
+          <DescriptionList
+            mono
+            items={[
+              ["Branch", state.session.latestRun.branchName ?? "(unknown)"],
+              ["Worktree", state.session.latestRun.worktreePath ?? "(unknown)"],
+              ["Run directory", state.session.latestRun.runDir],
+              ["Agent session", renderAgentSessionCommand(state.session.latestRun)],
+            ]}
+          />
+        </InfoPanel>
+      </section>
+
+      <section className="run-stack">
+        {state.session.runs.map((run, index) => (
+          <SessionRunDetails key={run.runId} run={run} defaultOpen={index === 0 || isActiveRunStatus(run.status)} />
+        ))}
+      </section>
+    </main>
+  );
+}
+
+function SessionRunDetails(props: { run: LocalRunSummary; defaultOpen: boolean }): ReactNode {
+  return (
+    <details className="run-detail-card" open={props.defaultOpen}>
+      <summary>
+        <div className="run-detail-summary">
+          <div>
+            <strong>{props.run.runId}</strong>
+            <p>{renderRunReason(props.run)} · started {props.run.startedAt ?? "(unknown)"}</p>
+          </div>
+          <div className="summary-actions">
+            <span className={`status-badge compact status-${props.run.status}`}>{props.run.status}</span>
+            <span className="summary-chevron" aria-hidden="true" />
+          </div>
+        </div>
+      </summary>
+      <SessionRunBody runId={props.run.runId} />
+    </details>
+  );
+}
+
+function SessionRunBody(props: { runId: string }): ReactNode {
+  const [state, setState] = useState<RunDetailState>({ status: "loading" });
+  const [tab, setTab] = useState<HandoffTab>("prompt");
+
+  useEffect(() => {
+    let canceled = false;
+
+    loadRunDetail(props.runId)
+      .then((nextState) => {
+        if (!canceled) {
+          setState(nextState);
+          setTab("prompt");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          setState({
+            status: "error",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [props.runId]);
+
+  if (state.status === "loading") {
+    return <p className="muted-copy">Loading run detail.</p>;
+  }
+
+  if (state.status !== "ready") {
+    return <p className="muted-copy">{state.message}</p>;
+  }
+
+  return <RunHandoffPanel state={state} tab={tab} onTabChange={setTab} />;
 }
 
 function RunDetailPage(props: { runId: string }): ReactNode {
@@ -524,12 +740,13 @@ export function RunDetailContent(props: {
 }): ReactNode {
   const run = props.state.run;
   const canCancel = isCancelableRun(run.status);
+  const [tab, setTab] = useState<HandoffTab>("prompt");
 
   return (
     <main className="page-shell run-page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Run detail</p>
+          <p className="eyebrow"><a href="/">Grovie</a> / Run detail</p>
           <h1>{run.runId}</h1>
         </div>
         <span className={`status-badge status-${run.status}`}>{run.status}</span>
@@ -587,6 +804,8 @@ export function RunDetailContent(props: {
         />
       </InfoPanel>
 
+      <RunHandoffPanel state={props.state} tab={tab} onTabChange={setTab} />
+
       <section className="logs-grid">
         <LogPanel runId={run.runId} log={props.state.stdout} transcript={props.state.stdoutTranscript.transcript} />
         <LogPanel runId={run.runId} log={props.state.stderr} />
@@ -626,6 +845,73 @@ export function RunDetailContent(props: {
       </section>
     </main>
   );
+}
+
+function RunHandoffPanel(props: {
+  state: RunDetailReadyState;
+  tab: HandoffTab;
+  onTabChange: (tab: HandoffTab) => void;
+}): ReactNode {
+  const tabs: Array<[HandoffTab, string]> = [
+    ["prompt", "Prompt"],
+    ["task", "Task JSON"],
+    ["stdout", "Stdout"],
+    ["stderr", "Stderr"],
+    ["events", "Events"],
+  ];
+
+  return (
+    <div className="run-handoff">
+      <div className="tab-list">
+        {tabs.map(([tab, label]) => (
+          <button
+            key={tab}
+            type="button"
+            className={props.tab === tab ? "active" : undefined}
+            onClick={() => props.onTabChange(tab)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {props.tab === "prompt" ? <FileBlock path={props.state.prompt.path} content={props.state.prompt.content} /> : null}
+      {props.tab === "task" ? <FileBlock path={props.state.task.path} content={formatJsonText(props.state.task.content)} /> : null}
+      {props.tab === "stdout" ? (
+        <div className="embedded-log-panel">
+          <LogPanel runId={props.state.run.runId} log={props.state.stdout} transcript={props.state.stdoutTranscript.transcript} />
+        </div>
+      ) : null}
+      {props.tab === "stderr" ? (
+        <div className="embedded-log-panel">
+          <LogPanel runId={props.state.run.runId} log={props.state.stderr} />
+        </div>
+      ) : null}
+      {props.tab === "events" ? (
+        <pre className="file-output">
+          <code>{JSON.stringify(props.state.events, null, 2)}</code>
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
+function FileBlock(props: { path: string; content: string; dark?: boolean }): ReactNode {
+  return (
+    <>
+      <p className="log-path">{props.path}</p>
+      <pre className={props.dark === true ? "file-output dark" : "file-output"}>
+        <code>{props.content.length === 0 ? "(empty)" : props.content}</code>
+      </pre>
+    </>
+  );
+}
+
+function formatJsonText(content: string): string {
+  try {
+    return JSON.stringify(JSON.parse(content) as unknown, null, 2);
+  } catch {
+    return content;
+  }
 }
 
 function InfoPanel(props: { title: string; children: ReactNode }): ReactNode {
@@ -867,11 +1153,13 @@ export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch
     };
   }
 
-  const [eventsPayload, stdoutPayload, stderrPayload, stdoutTranscriptPayload] = await Promise.all([
+  const [eventsPayload, stdoutPayload, stderrPayload, stdoutTranscriptPayload, promptPayload, taskPayload] = await Promise.all([
     fetchJson<AdminApiRunEventsResponse>(`/api/runs/${encodedRunId}/events`, fetcher),
     fetchJson<AdminApiRunLogResponse>(`/api/runs/${encodedRunId}/logs/stdout`, fetcher),
     fetchJson<AdminApiRunLogResponse>(`/api/runs/${encodedRunId}/logs/stderr`, fetcher),
     fetchJson<AdminApiRunLogTranscriptResponse>(`/api/runs/${encodedRunId}/logs/stdout/transcript`, fetcher),
+    fetchJson<AdminApiRunFileResponse>(`/api/runs/${encodedRunId}/prompt`, fetcher),
+    fetchJson<AdminApiRunFileResponse>(`/api/runs/${encodedRunId}/task`, fetcher),
   ]);
 
   return {
@@ -881,6 +1169,25 @@ export async function loadRunDetail(runId: string, fetcher: typeof fetch = fetch
     stdout: stdoutPayload,
     stderr: stderrPayload,
     stdoutTranscript: stdoutTranscriptPayload,
+    prompt: promptPayload,
+    task: taskPayload,
+  };
+}
+
+export async function loadSessionDetail(sessionId: string, fetcher: typeof fetch = fetch): Promise<SessionDetailState> {
+  const runsPayload = await fetchJson<AdminApiRunsResponse>("/api/runs", fetcher);
+  const session = groupRunsByIssueAndAgent(runsPayload.runs).find((group) => group.sessionId === sessionId);
+
+  if (session === undefined) {
+    return {
+      status: "not-found",
+      message: "Session not found.",
+    };
+  }
+
+  return {
+    status: "ready",
+    session,
   };
 }
 
@@ -930,13 +1237,22 @@ function apiMessage(value: unknown, fallback: string): string {
     : fallback;
 }
 
-export function readRoute(pathname: string): { name: "home" } | { name: "run-detail"; runId: string; } {
+export function readRoute(pathname: string): { name: "home" } | { name: "run-detail"; runId: string } | { name: "session-detail"; sessionId: string } {
   const match = /^\/runs\/(?<runId>[^/]+)$/.exec(pathname);
 
   if (match?.groups?.runId !== undefined) {
     return {
       name: "run-detail",
       runId: decodeURIComponent(match.groups.runId),
+    };
+  }
+
+  const sessionMatch = /^\/sessions\/(?<sessionId>[^/]+)$/.exec(pathname);
+
+  if (sessionMatch?.groups?.sessionId !== undefined) {
+    return {
+      name: "session-detail",
+      sessionId: decodeURIComponent(sessionMatch.groups.sessionId),
     };
   }
 
