@@ -21,3 +21,4 @@
 | UC-ADMIN-03-S03 | P2 | The React `/runs/:runId` route shows a clear not-found state for missing local runs. |
 | UC-ADMIN-03-S04 | P1 | The React `GET /` route shows recent daemon activity entries with timestamp, type, repository, issue, agent, and message. |
 | UC-ADMIN-03-S05 | P1 | When the admin web production build exists, `GET /`, hashed static asset paths, and SPA routes such as `/runs/:runId` are served from `dist/admin-web` while `/api/*` routes keep returning API responses. |
+| UC-ADMIN-03-S06 | P1 | The React `GET /` route shows watched repositories, grouped recent runs, and recent activity as full-width sections from top to bottom, with recent runs grouped by issue and agent. |
