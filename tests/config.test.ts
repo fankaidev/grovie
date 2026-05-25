@@ -75,7 +75,7 @@ describe("config helpers", () => {
         readRepositoryFile: ({ repository, path }) => ({
           exists: true,
           path: `${repository}:${path}`,
-          content: `${renderDefaultConfig()}runtime:\n  default: unknown\n`,
+          content: `${renderDefaultConfig()}unsupported: true\n`,
         }),
       });
     }).toThrow("Invalid fankaidev/grovie:.grovie.yml:");
