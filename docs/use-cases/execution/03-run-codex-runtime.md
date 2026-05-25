@@ -24,3 +24,4 @@
 | UC-EXECUTION-03-S06 | P1 | A Codex process failure records exit status, stdout path, stderr path, and failure summary in run metadata. |
 | UC-EXECUTION-03-S07 | P0 | Codex runs persist the concrete Codex runtime session id and resume runs use that id instead of an ambiguous latest session. |
 | UC-EXECUTION-03-S08 | P1 | A run for a configured local agent includes that agent's custom instructions in the generated prompt and task handoff. |
+| UC-EXECUTION-03-S09 | P1 | A run handoff includes trigger context with source, activity timestamp, activity fingerprint, previous handled cursor when available, and daemon trigger metadata when applicable. |

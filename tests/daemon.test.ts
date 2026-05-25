@@ -1443,6 +1443,17 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(2);
     expect(runs[1]?.issueReference.number).toBe(8);
     expect(runs[1]?.agentId).toBe(`default@${machineId}`);
+    expect(runs[1]?.triggerContext).toMatchObject({
+      source: "daemon",
+      activity: {
+        timestamp: "2026-05-22T00:00:02.000Z",
+        trigger: {
+          kind: "pull-request-mergeability",
+          pullRequestNumber: 20,
+          mergeStateStatus: "DIRTY",
+        },
+      },
+    });
     expect(readFileSync(join(localState.getPaths().root, "daemon", "activity.jsonl"), "utf8"))
       .toContain("pull request #20 merge state DIRTY requires branch update work");
   });

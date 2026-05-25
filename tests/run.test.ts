@@ -10,7 +10,7 @@ import type {
   GitHubRelatedPullRequest,
   IssueReference,
 } from "../src/github.js";
-import type { LocalStatePaths, PreparedRun } from "../src/local-state.js";
+import type { HandledCursor, LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import { runIssue, runIssueAsync, type RunLocalState } from "../src/run.js";
 import type { HandleRunResultInput, HandleRunResultResult, ResultHandler } from "../src/result.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
@@ -435,6 +435,80 @@ describe("runIssue", () => {
     });
   });
 
+  it("[UC-EXECUTION-03-S08] includes trigger context in the local handoff", () => {
+    const github = new FakeGitHub({
+      relatedPullRequests: [
+        fakeRelatedPullRequest(),
+      ],
+    });
+    const localState = new FakeLocalState({
+      handledCursor: {
+        repository: "fankaidev/grovie",
+        issueNumber: 7,
+        agentId: "codex",
+        handledThrough: "2026-05-22T00:00:00Z",
+        issueFingerprint: "previous-fingerprint",
+        updatedAt: "2026-05-22T00:00:01Z",
+      },
+    });
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      triggerContext: {
+        source: "daemon",
+        activity: {
+          timestamp: "2026-05-22T00:00:05Z",
+          issueFingerprint: "current-fingerprint",
+          trigger: {
+            kind: "pull-request-mergeability",
+            pullRequestNumber: 20,
+            mergeStateStatus: "DIRTY",
+          },
+        },
+      },
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(localState.prepareInput?.task).toMatchObject({
+      trigger: {
+        source: "daemon",
+        activity: {
+          timestamp: "2026-05-22T00:00:05Z",
+          issueFingerprint: "current-fingerprint",
+        },
+        previousHandledCursor: {
+          handledThrough: "2026-05-22T00:00:00Z",
+          issueFingerprint: "previous-fingerprint",
+        },
+        daemonTrigger: {
+          kind: "pull-request-mergeability",
+          pullRequestNumber: 20,
+          mergeStateStatus: "DIRTY",
+        },
+      },
+    });
+  });
+
   it("[UC-GITHUB-01-S04] marks the run failed when result handling fails after a successful runtime", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
@@ -686,7 +760,7 @@ class FakeLocalState implements RunLocalState {
   readonly events: Array<{ type: string; data: Record<string, unknown> | undefined }> = [];
   prepareInput: Parameters<RunLocalState["prepareRun"]>[0] | undefined;
 
-  constructor(private readonly options: { prepareError?: Error; cancellationRequested?: boolean; root?: string; fileBacked?: boolean } = {}) {
+  constructor(private readonly options: { prepareError?: Error; cancellationRequested?: boolean; root?: string; fileBacked?: boolean; handledCursor?: HandledCursor } = {}) {
     const root = options.root ?? "/tmp/grovie";
     this.paths = {
       root,
@@ -716,6 +790,10 @@ class FakeLocalState implements RunLocalState {
 
   getPaths(): LocalStatePaths {
     return this.paths;
+  }
+
+  readHandledCursor(): HandledCursor | undefined {
+    return this.options.handledCursor;
   }
 
   prepareRun(input: Parameters<RunLocalState["prepareRun"]>[0]): PreparedRun {

@@ -10,6 +10,7 @@ import {
 } from "./github.js";
 import { resolveLocalIdentity } from "./identity.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, LocalState, type DaemonLock, type ExecutionLock, type HandledCursor, type LocalStatePaths, type LockResult, type PreparedRun, type ResumableRun, type RunCancellation, type RunRequest } from "./local-state.js";
+import { getIssueActivity, type IssueActivity } from "./queue.js";
 import { GitResultHandler, type HandleRunResultResult, type ResultHandler } from "./result.js";
 import { createRuntime, type AgentRuntime, type RuntimeMonitor, type RuntimeName, type RuntimeRunResult } from "./runtime.js";
 import { syncStateRepository } from "./state-repo.js";
@@ -32,6 +33,13 @@ export type RunIssueInput = {
     sourceRunId?: string;
     reason?: RunRequest["reason"];
   };
+  triggerContext?: RunTriggerContext;
+};
+
+export type RunTriggerContext = {
+  source: "daemon" | "manual" | "run-request";
+  activity: IssueActivity;
+  previousHandledCursor?: HandledCursor;
 };
 
 export type RunIssueResult = {
@@ -245,6 +253,14 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   const runtime = input.runtime ?? createRuntime(input.agent);
   const now = new Date();
   const agentId = input.agentId ?? input.agent;
+  const triggerContext = resolveTriggerContext({
+    input,
+    localState,
+    agentId,
+    issue,
+    relatedPullRequests: relatedPullRequestsResult.value,
+    repository,
+  });
   const machineId = resolveSummaryMachineId(agentId);
   const sessionId = buildSessionId(repository, input.issueReference.number, agentId);
   const task = buildTaskContext({
@@ -254,6 +270,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
     runtime: runtime.name,
     agentInstructions: input.agentInstructions,
     runRequest: input.runRequest,
+    triggerContext,
   });
 
   let run: PreparedRun;
@@ -448,6 +465,7 @@ function buildTaskContext(input: {
   runtime: RuntimeName;
   agentInstructions?: string;
   runRequest?: RunIssueInput["runRequest"];
+  triggerContext: RunTriggerContext;
 }): Record<string, unknown> {
   return {
     schemaVersion: 1,
@@ -457,6 +475,17 @@ function buildTaskContext(input: {
     agentInstructions: input.agentInstructions,
     repository: `${input.issue.reference.owner}/${input.issue.reference.repo}`,
     runRequest: input.runRequest,
+    trigger: {
+      source: input.triggerContext.source,
+      activity: {
+        timestamp: input.triggerContext.activity.timestamp,
+        issueFingerprint: input.triggerContext.activity.issueFingerprint,
+      },
+      previousHandledCursor: input.triggerContext.previousHandledCursor,
+      daemonTrigger: input.triggerContext.source === "daemon"
+        ? input.triggerContext.activity.trigger
+        : undefined,
+    },
     issue: {
       number: input.issue.reference.number,
       title: input.issue.title,
@@ -482,6 +511,30 @@ function buildTaskContext(input: {
       reviewComments: pullRequest.reviewComments,
       diffSummary: pullRequest.diffSummary,
     })),
+  };
+}
+
+function resolveTriggerContext(input: {
+  input: RunIssueInput;
+  localState: RunLocalState;
+  agentId: string;
+  issue: GitHubIssue;
+  relatedPullRequests: GitHubRelatedPullRequest[];
+  repository: string;
+}): RunTriggerContext {
+  const previousHandledCursor = input.input.triggerContext?.previousHandledCursor
+    ?? input.localState.readHandledCursor?.({
+      repository: input.repository,
+      issueNumber: input.issue.reference.number,
+      agentId: input.agentId,
+    });
+
+  return {
+    source: input.input.triggerContext?.source
+      ?? (input.input.runRequest === undefined ? "manual" : "run-request"),
+    activity: input.input.triggerContext?.activity
+      ?? getIssueActivity(input.issue, input.relatedPullRequests),
+    previousHandledCursor,
   };
 }
 
