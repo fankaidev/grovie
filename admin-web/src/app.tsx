@@ -114,6 +114,8 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
   const daemon = props.data.health.daemon;
   const daemonState = "state" in daemon ? daemon.state : undefined;
   const runtime = props.data.health.runtime;
+  const agents = props.data.health.agents;
+  const unavailableAgentCount = agents.filter((agent) => !agent.availability.available).length;
   const runs = props.data.runs.slice(0, 20);
   const activity = props.data.activity.slice(0, 20);
 
@@ -130,6 +132,7 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
       <section className="tile-grid" aria-label="Admin console status">
         <StatusTile icon="D" label="Daemon" value={renderDaemonSummary(daemon)} tone={daemon.status === "running" ? "success" : "neutral"} />
         <StatusTile icon="R" label="Runtime" value={`${runtime.runtime}: ${runtime.available ? "available" : "unavailable"}`} tone={runtime.available ? "success" : "danger"} />
+        <StatusTile icon="A" label="Agents" value={`${agents.length} configured${unavailableAgentCount === 0 ? "" : `, ${unavailableAgentCount} unavailable`}`} tone={unavailableAgentCount === 0 ? "success" : "danger"} />
         <StatusTile icon="W" label="Watched repos" value={String(props.data.repositories.length)} />
       </section>
 
@@ -153,6 +156,9 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
             ]}
           />
         </InfoPanel>
+        <InfoPanel title="Agents">
+          <AgentsTable agents={agents} />
+        </InfoPanel>
         <InfoPanel title="Useful Paths">
           <DescriptionList
             mono
@@ -169,6 +175,35 @@ export function AdminHomeContent(props: { data: AdminHomeData }): ReactNode {
       <RecentRunsPanel runs={runs} />
       <RecentActivityPanel activity={activity} />
     </main>
+  );
+}
+
+function AgentsTable(props: { agents: AdminApiHealthResponse["agents"] }): ReactNode {
+  if (props.agents.length === 0) {
+    return <p className="muted-copy">No local agents configured.</p>;
+  }
+
+  return (
+    <table className="data-table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Runtime</th>
+          <th>Status</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        {props.agents.map((agent) => (
+          <tr key={agent.agentId}>
+            <td>{agent.agentId}</td>
+            <td>{agent.runtime}</td>
+            <td>{agent.availability.available ? "available" : "unavailable"}</td>
+            <td>{agent.availability.message}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

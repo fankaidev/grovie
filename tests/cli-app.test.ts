@@ -10,7 +10,7 @@ import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
 import type { HandledCursor, LocalStatePaths, PreparedRun, RunRequest } from "../src/local-state.js";
 import type { RunLocalState } from "../src/run.js";
-import type { AgentRunInput, AgentRuntime, RuntimeAvailability } from "../src/runtime.js";
+import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeName } from "../src/runtime.js";
 
 const tmpDirs: string[] = [];
 
@@ -117,11 +117,57 @@ describe("CLI command registration", () => {
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
-        `Configured agents: coder@${machineId} (codex)`,
+        "Configured agents:",
+        `- coder@${machineId} (codex): available (codex-cli 0.133.0)`,
         "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
         "Codex: available (codex-cli 0.133.0).",
+      ].join("\n"),
+    });
+  });
+
+  it("[UC-WORKER-01-S04] reports unavailable configured agents through doctor", () => {
+    const cwd = createTmpDir();
+    runCli(["init"], { cwd });
+
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const machineId = resolveMachineId(hostname());
+    saveGlobalConfig(globalRoot, {
+      version: 1,
+      agents: [
+        { name: "codex", runtime: "codex", args: [], envKeys: [] },
+        { name: "pi", runtime: "pi", args: [], envKeys: [] },
+      ],
+      watchedRepositories: [],
+      adminConsole: { enabled: false },
+    });
+
+    expect(runCli(["doctor"], {
+      cwd,
+      github: fakeGitHubGateway(),
+      localState,
+      runtimeAvailabilityChecker: fakeRuntimeAvailability,
+    })).toEqual({
+      exitCode: 1,
+      stdout: [
+        "grovie doctor",
+        "",
+        `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
+        `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
+        `Machine id: ${machineId}`,
+        "Configured agents:",
+        `- codex@${machineId} (codex): available (codex-cli 0.133.0)`,
+        `- pi@${machineId} (pi): pi command not found`,
+        "Default runtime: codex",
+        "Queue label: grovie",
+        "GitHub: authenticated as fankaidev.",
+        "Codex: available (codex-cli 0.133.0).",
+      ].join("\n"),
+      stderr: [
+        "Unavailable configured agents:",
+        `- pi@${machineId}: pi command not found`,
       ].join("\n"),
     });
   });
@@ -274,6 +320,8 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("Enabled: true");
     expect(result.stdout).toContain("URL: http://127.0.0.1:9876");
     expect(result.stdout).toContain("Availability: not expected to be available while the daemon is stopped");
+    expect(result.stdout).toContain("Configured agents:");
+    expect(result.stdout).toContain("none");
     expect(result.stdout).toContain("- fankaidev/grovie");
     expect(result.stdout).toContain(`Runs: ${localState.paths.runsDir}`);
     expect(result.stdout).toContain("active-run fankaidev/grovie#36 status=running");
@@ -1557,6 +1605,29 @@ function fakeRuntime(availability: Partial<RuntimeAvailability> = {}): AgentRunt
       throw new Error("runtime resume was not expected");
     },
   };
+}
+
+function fakeRuntimeAvailability(runtime: RuntimeName): RuntimeAvailability {
+  if (runtime === "pi") {
+    return {
+      runtime,
+      command: "pi",
+      available: false,
+      message: "pi command not found",
+    };
+  }
+
+  if (runtime === "claude-code") {
+    return {
+      runtime,
+      command: "claude",
+      available: true,
+      version: "2.1.142 (Claude Code)",
+      message: "available (2.1.142 (Claude Code))",
+    };
+  }
+
+  return fakeRuntime().checkAvailability();
 }
 
 function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGateway {

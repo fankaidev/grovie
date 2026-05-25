@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { getConfiguredAgentHealth, type AgentHealth, type RuntimeAvailabilityChecker } from "./agent-health.js";
 import { buildAgentLabel, getAssignedAgentIds, parseAgentId } from "./assignment.js";
 import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer, type AdminConsoleResolvedConfig } from "./admin-console.js";
 import {
@@ -25,6 +26,7 @@ import { LocalState } from "./local-state.js";
 import { inspectQueue, renderQueueInspection } from "./queue.js";
 import type { RunLocalState } from "./run.js";
 import { createRuntime, type AgentRuntime } from "./runtime.js";
+import type { RuntimeAvailability, RuntimeName } from "./runtime.js";
 import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail, renderRunsList } from "./status.js";
 import { initStateRepository } from "./state-repo.js";
 import { GROVIE_VERSION } from "./version.js";
@@ -39,6 +41,7 @@ export type CliContext = {
   cwd: string;
   github: GitHubGateway;
   runtime?: AgentRuntime;
+  runtimeAvailabilityChecker?: RuntimeAvailabilityChecker;
   localState: RunLocalState;
   daemonLifecycle: DaemonLifecycle;
   adminConsolePortCheck: AdminConsolePortCheck;
@@ -96,25 +99,31 @@ const commandDefinitions = [
 
         const runtime = resolveRuntime(context, loaded.config);
         const runtimeAvailability = runtime.checkAvailability();
-        const agents = resolveConfiguredAgents(globalConfig.config, identity.machineId);
+        const agentHealth = getConfiguredAgentHealth(
+          globalConfig.config,
+          identity.machineId,
+          (runtimeName) => checkRuntimeAvailability(context, runtimeName),
+        );
         const doctorOutput = [
           "grovie doctor",
           "",
           `Global config: ${renderGlobalConfigSource(globalConfig.path, globalConfig.config.watchedRepositories.length)}`,
           `Local policy config: ${renderConfigSource(loaded)}`,
           `Machine id: ${identity.machineId}`,
-          `Configured agents: ${renderConfiguredAgents(agents)}`,
+          ...renderConfiguredAgents(agentHealth),
           `Default runtime: ${loaded.config.runtime.default}`,
           `Queue label: ${loaded.config.queue.label}`,
           `GitHub: authenticated as ${authenticatedUser.value.login}.`,
           renderStatusLine(renderRuntimeLabel(loaded.config.runtime.default), runtimeAvailability.message),
         ];
 
-        if (!runtimeAvailability.available) {
+        const unavailableAgents = agentHealth.filter((agent) => !agent.availability.available);
+
+        if (!runtimeAvailability.available || unavailableAgents.length > 0) {
           return {
             exitCode: 1,
             stdout: doctorOutput.join("\n"),
-            stderr: renderRuntimeUnavailableError(loaded.config.runtime.default),
+            stderr: renderRuntimeUnavailableError(loaded.config.runtime.default, unavailableAgents),
           };
         }
 
@@ -136,6 +145,7 @@ const commandDefinitions = [
       try {
         const runs = listLocalRuns(context.localState.getPaths().runsDir);
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+        const identity = resolveLocalIdentity();
 
         return {
           exitCode: 0,
@@ -145,6 +155,11 @@ const commandDefinitions = [
               root: context.localState.getPaths().root,
             }),
             adminConsole: resolveAdminConsoleConfig(globalConfig.config),
+            agentHealth: getConfiguredAgentHealth(
+              globalConfig.config,
+              identity.machineId,
+              (runtimeName) => checkRuntimeAvailability(context, runtimeName),
+            ),
             watchedRepositories: globalConfig.config.watchedRepositories,
             paths: context.localState.getPaths(),
           }),
@@ -978,6 +993,7 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
     cwd: context.cwd ?? process.cwd(),
     github: context.github ?? new GhGitHubGateway(),
     runtime: context.runtime,
+    runtimeAvailabilityChecker: context.runtimeAvailabilityChecker,
     localState: context.localState ?? new LocalState(),
     daemonLifecycle: context.daemonLifecycle ?? new LocalDaemonLifecycle(),
     adminConsolePortCheck: context.adminConsolePortCheck ?? checkAdminConsolePortAvailable,
@@ -1020,6 +1036,18 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
 
 function resolveRuntime(context: CliContext, config: { runtime: { default: Parameters<typeof createRuntime>[0] } }): AgentRuntime {
   return context.runtime ?? createRuntime(config.runtime.default);
+}
+
+function checkRuntimeAvailability(context: CliContext, runtime: RuntimeName): RuntimeAvailability {
+  if (context.runtimeAvailabilityChecker !== undefined) {
+    return context.runtimeAvailabilityChecker(runtime);
+  }
+
+  if (context.runtime?.name === runtime) {
+    return context.runtime.checkAvailability();
+  }
+
+  return createRuntime(runtime).checkAvailability();
 }
 
 function startDaemonProcess(args: string[], context: CliContext): CliResult {
@@ -1082,15 +1110,28 @@ function renderRuntimeLabel(runtime: Parameters<typeof createRuntime>[0]): strin
   return runtime === "codex" ? "Codex" : runtime;
 }
 
-function renderConfiguredAgents(agents: Array<{ agentId: string; runtime: string }>): string {
+function renderConfiguredAgents(agents: AgentHealth[]): string[] {
   if (agents.length === 0) {
-    return "none";
+    return ["Configured agents: none"];
   }
 
-  return agents.map((agent) => `${agent.agentId} (${agent.runtime})`).join(", ");
+  return [
+    "Configured agents:",
+    ...agents.map((agent) => `- ${agent.agentId} (${agent.runtime}): ${agent.availability.message}`),
+  ];
 }
 
-function renderRuntimeUnavailableError(runtime: Parameters<typeof createRuntime>[0]): string {
+function renderRuntimeUnavailableError(
+  runtime: Parameters<typeof createRuntime>[0],
+  unavailableAgents: AgentHealth[] = [],
+): string {
+  if (unavailableAgents.length > 0) {
+    return [
+      "Unavailable configured agents:",
+      ...unavailableAgents.map((agent) => `- ${agent.agentId}: ${agent.availability.message}`),
+    ].join("\n");
+  }
+
   if (runtime === "codex") {
     return "Codex runtime is not available. Install the Codex CLI or choose another runtime when one is supported.";
   }

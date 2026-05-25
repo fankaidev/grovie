@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname, extname, join, normalize, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
+import { getConfiguredAgentHealth, type RuntimeAvailabilityChecker } from "./agent-health.js";
 import { loadGlobalConfig, type GlobalGrovieConfig } from "./config.js";
 import { readDaemonActivity, type DaemonActivityEntry } from "./daemon-activity.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "./daemon-lifecycle.js";
@@ -46,6 +47,7 @@ export type AdminConsoleContext = {
   paths: LocalStatePaths;
   daemonLifecycle: DaemonLifecycle;
   runtime: AgentRuntime;
+  runtimeAvailabilityChecker?: RuntimeAvailabilityChecker;
   adminWebAssetsDir?: string;
 };
 
@@ -151,10 +153,13 @@ export function createAdminConsoleServer(context?: AdminConsoleContext): Server 
 
 function handleAdminApiGet(context: AdminConsoleContext, request: IncomingMessage, url: URL, response: ServerResponse): void {
   if (url.pathname === "/api/health") {
+    const globalConfig = loadGlobalConfig(context.paths.root);
+    const identity = resolveLocalIdentity();
     const body: AdminApiHealthResponse = {
       ok: true,
       daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
       runtime: context.runtime.checkAvailability(),
+      agents: getConfiguredAgentHealth(globalConfig.config, identity.machineId, context.runtimeAvailabilityChecker),
     };
     writeJson(response, 200, body);
     return;
@@ -607,14 +612,15 @@ function renderApiDaemonStatus(status: DaemonLifecycleStatus): AdminApiDaemonSta
 }
 
 function renderAdminHome(context: AdminConsoleContext): string {
+  const globalConfig = loadGlobalConfig(context.paths.root);
+  const identity = resolveLocalIdentity();
   const health = {
     daemon: renderApiDaemonStatus(context.daemonLifecycle.status({ root: context.paths.root })),
     runtime: context.runtime.checkAvailability(),
+    agents: getConfiguredAgentHealth(globalConfig.config, identity.machineId, context.runtimeAvailabilityChecker),
   };
-  const globalConfig = loadGlobalConfig(context.paths.root);
   const runs = listLocalRuns(context.paths.runsDir).slice(0, 20);
   const activity = readDaemonActivity(context.paths, 20);
-  const identity = resolveLocalIdentity();
 
   return renderDocument("Grovie Admin Console", [
     "<h1>Grovie Admin Console</h1>",
@@ -633,6 +639,10 @@ function renderAdminHome(context: AdminConsoleContext): string {
     `<p>${escapeHtml(health.runtime.runtime)}: ${escapeHtml(health.runtime.message)}</p>`,
     "</section>",
     "<section>",
+    "<h2>Agents</h2>",
+    renderAgentHealthTable(health.agents),
+    "</section>",
+    "<section>",
     "<h2>Watched Repositories</h2>",
     renderWatchedRepositories(globalConfig.config.watchedRepositories),
     "</section>",
@@ -645,6 +655,28 @@ function renderAdminHome(context: AdminConsoleContext): string {
     renderRunsTable(runs),
     "</section>",
   ].join("\n"));
+}
+
+function renderAgentHealthTable(agents: ReturnType<typeof getConfiguredAgentHealth>): string {
+  if (agents.length === 0) {
+    return "<p>No local agents configured.</p>";
+  }
+
+  return [
+    "<table>",
+    "<thead><tr><th>Agent</th><th>Runtime</th><th>Status</th><th>Message</th></tr></thead>",
+    "<tbody>",
+    ...agents.map((agent) => [
+      "<tr>",
+      `<td>${escapeHtml(agent.agentId)}</td>`,
+      `<td>${escapeHtml(agent.runtime)}</td>`,
+      `<td>${agent.availability.available ? "available" : "unavailable"}</td>`,
+      `<td>${escapeHtml(agent.availability.message)}</td>`,
+      "</tr>",
+    ].join("")),
+    "</tbody>",
+    "</table>",
+  ].join("\n");
 }
 
 function renderActivityTable(activity: DaemonActivityEntry[]): string {

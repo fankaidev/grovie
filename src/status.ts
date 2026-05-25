@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import type { AgentHealth } from "./agent-health.js";
 import type { WatchedRepository } from "./config.js";
 import type { DaemonLifecycleStatus } from "./daemon-lifecycle.js";
 import type { LocalStatePaths } from "./local-state.js";
@@ -61,6 +62,7 @@ export type LocalStatusOverviewInput = {
   runs: LocalRunSummary[];
   daemonStatus: DaemonLifecycleStatus;
   adminConsole?: AdminConsoleResolvedConfig;
+  agentHealth?: AgentHealth[];
   watchedRepositories: WatchedRepository[];
   paths: LocalStatePaths;
 };
@@ -169,6 +171,8 @@ export function renderLocalStatusOverview(input: LocalStatusOverviewInput): stri
     ...renderDaemonStatusDetails(input.daemonStatus),
     "Admin console:",
     ...renderAdminConsoleStatus(input.adminConsole, input.daemonStatus),
+    "Configured agents:",
+    renderAgentHealth(input.agentHealth),
     "Watched repositories:",
     renderWatchedRepositories(input.watchedRepositories),
     "Paths:",
@@ -181,6 +185,20 @@ export function renderLocalStatusOverview(input: LocalStatusOverviewInput): stri
     "Recent failures:",
     renderRunSection(recentFailures, "  No recent failures."),
   ].join("\n");
+}
+
+function renderAgentHealth(agentHealth: AgentHealth[] | undefined): string {
+  if (agentHealth === undefined) {
+    return "  Not loaded.";
+  }
+
+  if (agentHealth.length === 0) {
+    return "  none";
+  }
+
+  return agentHealth
+    .map((agent) => `  - ${agent.agentId} runtime=${agent.runtime} ${agent.availability.available ? "available" : "unavailable"}: ${agent.availability.message}`)
+    .join("\n");
 }
 
 function renderAdminConsoleStatus(

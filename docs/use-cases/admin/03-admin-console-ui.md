@@ -16,7 +16,7 @@
 
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-ADMIN-03-S01 | P2 | The React `GET /` route fetches admin APIs and shows daemon health, runtime availability, useful paths, watched repositories, and recent runs. |
+| UC-ADMIN-03-S01 | P2 | The React `GET /` route fetches admin APIs and shows daemon health, runtime availability, configured agent availability, useful paths, watched repositories, and recent runs. |
 | UC-ADMIN-03-S02 | P2 | The React `/runs/:runId` route fetches run detail and shows issue reference, status, agent/runtime, run reason, source run, branch, worktree path, run directory, prompt/task paths, stdout/stderr paths, events, and GitHub result links. |
 | UC-ADMIN-03-S03 | P2 | The React `/runs/:runId` route shows a clear not-found state for missing local runs. |
 | UC-ADMIN-03-S04 | P1 | The React `GET /` route shows recent daemon activity entries with timestamp, type, repository, issue, agent, and message. |
