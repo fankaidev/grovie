@@ -950,6 +950,7 @@ function fakeIssue(reference: IssueReference, comments?: GitHubIssue["comments"]
     reference,
     title: "Implement one-shot run",
     body: "Run this issue once.",
+    author: "fankaidev",
     state: "open",
     updatedAt: "2026-05-22T00:00:00Z",
     labels: ["mvp", "type:task"],

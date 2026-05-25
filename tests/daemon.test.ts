@@ -1215,6 +1215,80 @@ describe("runDaemonCycle", () => {
     });
   });
 
+  it("[UC-WORKER-04-S17] skips automatic queue runs when the issue creator is not trusted", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        author: "external-user",
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localAgents: [configuredCodexAgent("coder", machineId)],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "coder ran",
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      exitCode: 0,
+      processed: false,
+    });
+    expect(result.stdout).toContain("Skipped assigned issues:");
+    expect(result.stdout).toContain("untrusted issue creator external-user");
+    expect(runs).toEqual([]);
+  });
+
+  it("[UC-WORKER-04-S17] uses configured trusted authors instead of the authenticated gh login", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        author: "trusted-user",
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: {
+        ...defaultConfig(),
+        trust: {
+          trustedAuthors: ["trusted-user"],
+        },
+      },
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localAgents: [configuredCodexAgent("coder", machineId)],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "coder ran",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]?.issueReference.number).toBe(8);
+  });
+
   it("[UC-WORKER-04-S01] refuses to start when a live daemon lock exists", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const existingLock = localState.acquireDaemonLock(resolveMachineId(hostname()), NOW);
@@ -2578,7 +2652,12 @@ class FakeGitHub implements GitHubGateway {
   ) {}
 
   getAuthenticatedUser(): ReturnType<GitHubGateway["getAuthenticatedUser"]> {
-    throw new Error("getAuthenticatedUser was not expected");
+    return {
+      ok: true,
+      value: {
+        login: "fankaidev",
+      },
+    };
   }
 
   listOpenIssues(repository: string, label: string): ReturnType<GitHubGateway["listOpenIssues"]> {
@@ -2782,6 +2861,7 @@ function fakeIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
     },
     title: "Implement daemon",
     body: "Run queued work.",
+    author: "fankaidev",
     state: "open",
     updatedAt: NOW.toISOString(),
     labels: ["grovie", `agent:default@${resolveMachineId(hostname())}`],

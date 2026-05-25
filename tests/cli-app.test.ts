@@ -1818,6 +1818,7 @@ function fakeIssue(reference: IssueReference): GitHubIssue {
     reference,
     title: "Stream runtime output",
     body: "Make runtime logs visible while Codex runs.",
+    author: "fankaidev",
     state: "open",
     updatedAt: "2026-05-22T00:00:00Z",
     labels: ["mvp", "type:task"],

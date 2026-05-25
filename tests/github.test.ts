@@ -66,6 +66,7 @@ describe("GhGitHubGateway", () => {
         stdout: JSON.stringify({
           title: "Implement config",
           body: null,
+          user: { login: "fankaidev" },
           state: "open",
           updated_at: "2026-05-22T00:00:02Z",
           labels: [{ name: "mvp" }, { name: "type:task" }],
@@ -102,6 +103,7 @@ describe("GhGitHubGateway", () => {
         },
         title: "Implement config",
         body: "",
+        author: "fankaidev",
         state: "open",
         updatedAt: "2026-05-22T00:00:02Z",
         labels: ["mvp", "type:task"],

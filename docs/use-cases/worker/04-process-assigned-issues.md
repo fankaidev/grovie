@@ -11,6 +11,7 @@
 | R3 | Different agents can work on the same issue independently. |
 | R4 | Before polling a watched repository, the daemon resolves that repository's `.grovie.yml` from the bare cache on the remote default branch; the issue worktree is prepared later with the same resolved policy. |
 | R5 | Long-running daemon cycles use GitHub repository events as change hints, but fresh issue and pull request reads remain the source of truth before starting work. |
+| R6 | Automatic queue runs require the issue creator to be trusted; repo-local `trust.trustedAuthors` supplies the trusted list, and the authenticated `gh` user is the default when no trusted authors are configured. |
 
 ## Scenarios
 
@@ -32,3 +33,4 @@
 | UC-WORKER-04-S14 | P0 | A daemon cycle skips an issue assigned to an agent id that matches the machine but is not configured locally. |
 | UC-WORKER-04-S15 | P1 | A long-running daemon cycle reads repository events, skips queue inspection when no relevant events changed, resolves pull request events to related issues through GitHub with a local cache, and periodically falls back to a full queue scan. |
 | UC-WORKER-04-S16 | P1 | A daemon cycle reruns a handled issue when a linked open pull request's merge state changes to `DIRTY` or otherwise requires branch update work, and records daemon activity explaining the mergeability trigger. |
+| UC-WORKER-04-S17 | P1 | A daemon cycle skips automatic queue runs whose issue creator is not trusted, while configured trusted authors can allow creators other than the authenticated `gh` user. |

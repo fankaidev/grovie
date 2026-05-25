@@ -527,6 +527,22 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     });
   }
 
+  const trustedAuthors = resolveTrustedIssueAuthors(input);
+
+  if (!trustedAuthors.ok) {
+    recordActivity(input, {
+      type: "queue.failed",
+      message: trustedAuthors.message,
+      repository: input.repository,
+    });
+
+    return {
+      exitCode: 1,
+      processed: false,
+      stderr: trustedAuthors.message,
+    };
+  }
+
   const queueResult = inspectQueue({
     repositories: [
       {
@@ -536,6 +552,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     ],
     github: input.github,
     machineId: identity.machineId,
+    trustedAuthors: trustedAuthors.value,
     configuredAgentIds: input.localAgents?.map((agent) => agent.agentId),
     localState: input.localState,
     issueNumbers: input.issueNumbers,
@@ -608,6 +625,31 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       `No queued issues found for ${input.repository} with label ${input.label}.`,
       ...(skippedSummary === undefined ? [] : ["", skippedSummary]),
     ].join("\n"),
+  };
+}
+
+function resolveTrustedIssueAuthors(input: Pick<DaemonInput, "config" | "github">): { ok: true; value: string[] } | { ok: false; message: string } {
+  const configured = input.config.trust?.trustedAuthors.filter((author) => author.trim().length > 0) ?? [];
+
+  if (configured.length > 0) {
+    return {
+      ok: true,
+      value: configured,
+    };
+  }
+
+  const authenticated = input.github.getAuthenticatedUser();
+
+  if (!authenticated.ok) {
+    return {
+      ok: false,
+      message: `Could not resolve default trusted issue creator from gh login: ${authenticated.error.message}`,
+    };
+  }
+
+  return {
+    ok: true,
+    value: [authenticated.value.login],
   };
 }
 
