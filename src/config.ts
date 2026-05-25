@@ -31,9 +31,6 @@ export const configSchema = z.strictObject({
   branches: z.strictObject({
     prefix: z.string().min(1, "must not be empty"),
   }),
-  worktrees: z.strictObject({
-    cleanup: z.enum(["on-success", "never"]),
-  }),
   pullRequests: z.strictObject({
     create: z.boolean(),
     draft: z.boolean(),
@@ -324,9 +321,6 @@ export function defaultConfig(): GrovieConfig {
     },
     branches: {
       prefix: "grovie/",
-    },
-    worktrees: {
-      cleanup: "on-success",
     },
     pullRequests: {
       create: true,
