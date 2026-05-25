@@ -34,12 +34,20 @@ describe("admin web home route", () => {
               statePath: "/state/daemon/daemon.json",
             },
           },
-          runtime: {
-            runtime: "codex",
-            command: "codex",
-            available: true,
-            message: "codex is available.",
-          },
+          runtimes: [
+            {
+              runtime: "codex",
+              command: "codex",
+              available: true,
+              message: "codex is available.",
+            },
+            {
+              runtime: "pi",
+              command: "pi",
+              available: false,
+              message: "pi command not found.",
+            },
+          ],
           agents: [
             {
               agentId: "codex@kai-mini",
@@ -125,10 +133,6 @@ describe("admin web home route", () => {
         daemon: {
           status: "running",
         },
-        runtime: {
-          runtime: "codex",
-          available: true,
-        },
       },
       config: {
         path: "/state/config.yml",
@@ -137,6 +141,7 @@ describe("admin web home route", () => {
       activity: [{ type: "run.started" }],
       runs: [{ runId: "run-126" }],
     });
+    expect(data.health.runtimes).toEqual(expect.arrayContaining([expect.objectContaining({ runtime: "codex", available: true })]));
     expect(requests).toEqual([
       { url: "/api/health", method: "GET" },
       { url: "/api/config", method: "GET" },
@@ -163,12 +168,20 @@ describe("admin web home route", () => {
                 statePath: "/state/daemon/daemon.json",
               },
             },
-            runtime: {
-              runtime: "codex",
-              command: "codex",
-              available: true,
-              message: "codex is available.",
-            },
+            runtimes: [
+              {
+                runtime: "codex",
+                command: "codex",
+                available: true,
+                message: "codex is available.",
+              },
+              {
+                runtime: "pi",
+                command: "pi",
+                available: false,
+                message: "pi command not found.",
+              },
+            ],
             agents: [
               {
                 agentId: "codex@kai-mini",
@@ -238,7 +251,7 @@ describe("admin web home route", () => {
     );
 
     expect(html).toContain("running pid 321");
-    expect(html).toContain("codex: available");
+    expect(html).toContain("2 supported, 1 unavailable");
     expect(html).toContain("2 configured, 1 unavailable");
     expect(html).toContain("codex@kai-mini");
     expect(html).toContain("command");

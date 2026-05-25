@@ -307,9 +307,6 @@ class FakeGitHub implements GitHubGateway {
 function defaultConfig(): GrovieConfig {
   return {
     version: 1,
-    runtime: {
-      default: "codex",
-    },
     queue: {
       label: "grovie",
     },

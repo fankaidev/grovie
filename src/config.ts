@@ -22,9 +22,6 @@ export const agentNameSchema = z.string()
 
 export const configSchema = z.strictObject({
   version: z.literal(1),
-  runtime: z.strictObject({
-    default: runtimeNameSchema,
-  }),
   queue: z.strictObject({
     label: z.string().min(1, "must not be empty"),
   }),
@@ -316,9 +313,6 @@ export function parseGitHubRemote(remoteUrl: string): string | undefined {
 export function defaultConfig(): GrovieConfig {
   return {
     version: 1,
-    runtime: {
-      default: "codex",
-    },
     queue: {
       label: "grovie",
     },
@@ -356,9 +350,6 @@ export function renderDefaultConfig(): string {
   return `# Grovie configuration.
 # GitHub remains the source of truth; this file defines local runner policy.
 version: 1
-
-runtime:
-  default: codex
 
 queue:
   label: grovie

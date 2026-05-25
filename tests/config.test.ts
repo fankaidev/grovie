@@ -37,7 +37,7 @@ describe("config helpers", () => {
     const config = renderDefaultConfig();
 
     expect(config).not.toContain("repository:");
-    expect(config).toContain("default: codex");
+    expect(config).not.toContain("runtime:");
     expect(config).toContain("label: grovie");
     expect(config).toContain("allowDefaultBranchPush: false");
   });
@@ -50,39 +50,10 @@ describe("config helpers", () => {
     expect(loaded.path).toBeUndefined();
     expect(loaded.config).toMatchObject({
       version: 1,
-      runtime: {
-        default: "codex",
-      },
       queue: {
         label: "grovie",
       },
     });
-  });
-
-  it("[UC-EXECUTION-06-S04] accepts supported explicit runtime names", () => {
-    for (const runtime of ["codex", "claude-code", "pi"]) {
-      const cwd = createTmpDir();
-      writeFileSync(
-        join(cwd, ".grovie.yml"),
-        renderDefaultConfig().replace("default: codex", `default: ${runtime}`),
-        "utf8",
-      );
-
-      expect(loadConfig(cwd).config.runtime.default).toBe(runtime);
-    }
-  });
-
-  it("[UC-EXECUTION-06-S04] rejects retired runtime names", () => {
-    for (const runtime of ["cc", "opencode", "hermes"]) {
-      const cwd = createTmpDir();
-      writeFileSync(
-        join(cwd, ".grovie.yml"),
-        renderDefaultConfig().replace("default: codex", `default: ${runtime}`),
-        "utf8",
-      );
-
-      expect(() => loadConfig(cwd)).toThrow("Invalid .grovie.yml:");
-    }
   });
 
   it("[UC-WORKER-04-S12] loads repo-local policy config through a repository file reader", () => {
@@ -90,12 +61,12 @@ describe("config helpers", () => {
       readRepositoryFile: ({ repository, path }) => ({
         exists: true,
         path: `${repository}:${path}`,
-        content: renderDefaultConfig().replace("default: codex", "default: claude-code"),
+        content: renderDefaultConfig().replace("label: grovie", "label: ready"),
       }),
     });
 
     expect(loaded.path).toBe("fankaidev/grovie:.grovie.yml");
-    expect(loaded.config.runtime.default).toBe("claude-code");
+    expect(loaded.config.queue.label).toBe("ready");
   });
 
   it("[UC-WORKER-04-S13] rejects invalid repo-local policy config from a watched repository", () => {
@@ -104,7 +75,7 @@ describe("config helpers", () => {
         readRepositoryFile: ({ repository, path }) => ({
           exists: true,
           path: `${repository}:${path}`,
-          content: renderDefaultConfig().replace("default: codex", "default: unknown"),
+          content: `${renderDefaultConfig()}runtime:\n  default: unknown\n`,
         }),
       });
     }).toThrow("Invalid fankaidev/grovie:.grovie.yml:");
@@ -116,8 +87,6 @@ describe("config helpers", () => {
       join(cwd, ".grovie.yml"),
       [
         "version: 1",
-        "runtime:",
-        "  default: codex",
         "queue:",
         "  label: grovie",
         "branches:",
@@ -150,8 +119,6 @@ describe("config helpers", () => {
         "repositories:",
         "  allowed:",
         "    - fankaidev/grovie",
-        "runtime:",
-        "  default: codex",
         "queue:",
         "  label: grovie",
         "branches:",

@@ -2000,10 +2000,10 @@ describe("runDaemonCycle", () => {
         expect(response.status).toBe(200);
         expect(await response.json()).toMatchObject({
           ok: true,
-          runtime: {
+          runtimes: expect.arrayContaining([expect.objectContaining({
             runtime: "codex",
             available: true,
-          },
+          })]),
         });
 
         return {
@@ -2273,7 +2273,7 @@ describe("runDaemonCycle", () => {
       ],
       repositoryConfigLoader: (repository) => {
         if (repository === "fankaidev/bad") {
-          throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- runtime.default: Invalid option");
+          throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- queue.label: Invalid input");
         }
 
         return {
@@ -2303,7 +2303,7 @@ describe("runDaemonCycle", () => {
         "grovie daemon",
         "",
         "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
-        "- runtime.default: Invalid option",
+        "- queue.label: Invalid input",
       ].join("\n"),
     });
     expect(runs[0]?.repository).toBe("fankaidev/other");
@@ -2317,7 +2317,7 @@ describe("runDaemonCycle", () => {
         },
       ],
       repositoryConfigLoader: () => {
-        throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- runtime.default: Invalid option");
+        throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- queue.label: Invalid input");
       },
       config: defaultConfig(),
       configPath: "built-in defaults",
@@ -2335,7 +2335,7 @@ describe("runDaemonCycle", () => {
         "grovie daemon",
         "",
         "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
-        "- runtime.default: Invalid option",
+        "- queue.label: Invalid input",
       ].join("\n"),
     });
   });
@@ -2351,7 +2351,7 @@ describe("runDaemonCycle", () => {
         },
       ],
       repositoryConfigLoader: () => {
-        throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- runtime.default: Invalid option");
+        throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- queue.label: Invalid input");
       },
       config: defaultConfig(),
       configPath: "built-in defaults",
@@ -2377,7 +2377,7 @@ describe("runDaemonCycle", () => {
           "grovie daemon",
           "",
           "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
-          "- runtime.default: Invalid option",
+          "- queue.label: Invalid input",
         ].join("\n"),
       },
     ]);
@@ -2553,9 +2553,6 @@ class FakeGitHub implements GitHubGateway {
 function defaultConfig(): GrovieConfig {
   return {
     version: 1,
-    runtime: {
-      default: "codex",
-    },
     queue: {
       label: "grovie",
     },

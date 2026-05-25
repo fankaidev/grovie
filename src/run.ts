@@ -241,7 +241,7 @@ function prepareIssueRun(input: RunIssueInput): PreparedIssueRun {
   }
 
   const localState = input.localState ?? new LocalState();
-  const runtime = input.runtime ?? createRuntime(input.config.runtime.default);
+  const runtime = input.runtime ?? createRuntime(input.agent);
   const now = new Date();
   const agentId = input.agentId ?? input.agent;
   const machineId = resolveSummaryMachineId(agentId);

@@ -2,9 +2,6 @@
 # GitHub remains the source of truth; this file defines local runner policy.
 version: 1
 
-runtime:
-  default: codex
-
 queue:
   label: grovie
 

@@ -32,7 +32,7 @@ export type AdminApiDaemonStatus =
 export type AdminApiHealthResponse = {
   ok: true;
   daemon: AdminApiDaemonStatus;
-  runtime: RuntimeAvailability;
+  runtimes: RuntimeAvailability[];
   agents: AgentHealth[];
 };
 

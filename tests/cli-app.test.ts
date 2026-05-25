@@ -117,12 +117,14 @@ describe("CLI command registration", () => {
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
+        "Runtimes:",
+        "- codex command=codex: available (codex-cli 0.133.0)",
+        "- claude-code command=claude: available (2.1.142 (Claude Code))",
+        "- pi command=pi: spawnSync pi ENOENT",
         "Configured agents:",
         `- coder@${machineId} (codex, command=codex): available (codex-cli 0.133.0)`,
-        "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
-        "Codex: available (codex-cli 0.133.0).",
       ].join("\n"),
     });
   });
@@ -157,13 +159,15 @@ describe("CLI command registration", () => {
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
+        "Runtimes:",
+        "- codex command=codex: available (codex-cli 0.133.0)",
+        "- claude-code command=claude: available (2.1.142 (Claude Code))",
+        "- pi command=pi: pi command not found",
         "Configured agents:",
         `- codex@${machineId} (codex, command=codex): available (codex-cli 0.133.0)`,
         `- pi@${machineId} (pi, command=pi): pi command not found`,
-        "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
-        "Codex: available (codex-cli 0.133.0).",
       ].join("\n"),
       stderr: [
         "Unavailable configured agents:",
@@ -211,7 +215,7 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(root, "config.yml"), "utf8")).toContain("stateRepo:");
   });
 
-  it("[UC-WORKER-01-S04] [UC-EXECUTION-03-S02] reports unavailable Codex runtime through doctor", () => {
+  it("[UC-WORKER-01-S04] [UC-EXECUTION-03-S02] reports unavailable runtime inventory through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
     const globalRoot = createTmpDir();
@@ -228,20 +232,21 @@ describe("CLI command registration", () => {
         }),
       }),
     ).toEqual({
-      exitCode: 1,
+      exitCode: 0,
       stdout: [
         "grovie doctor",
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
+        "Runtimes:",
+        "- codex command=codex: codex command not found",
+        "- claude-code command=claude: available (2.1.142 (Claude Code))",
+        "- pi command=pi: spawnSync pi ENOENT",
         "Configured agents: none",
-        "Default runtime: codex",
         "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
-        "Codex: codex command not found.",
       ].join("\n"),
-      stderr: "Codex runtime is not available. Install the Codex CLI or choose another runtime when one is supported.",
     });
   });
 

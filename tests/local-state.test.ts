@@ -295,7 +295,7 @@ describe("LocalState", () => {
     const root = createTmpDir();
     const runner = new FakeRunner({
       repositoryFiles: {
-        ".grovie.yml": "version: 1\nruntime:\n  default: claude-code\n",
+        ".grovie.yml": "version: 1\nqueue:\n  label: ready\n",
       },
     });
     const state = new LocalState({ paths: { root }, runner });
@@ -307,7 +307,7 @@ describe("LocalState", () => {
     expect(result).toEqual({
       exists: true,
       path: "fankaidev/grovie:.grovie.yml",
-      content: "version: 1\nruntime:\n  default: claude-code\n",
+      content: "version: 1\nqueue:\n  label: ready\n",
     });
     expect(runner.calls.map((call) => call.args)).toEqual([
       ["clone", "--bare", "https://github.com/fankaidev/grovie.git", join(root, "repos", "fankaidev-grovie.git")],
