@@ -105,6 +105,30 @@ describe("local run status", () => {
     expect(run?.status).toBe("interrupted");
   });
 
+  it("[UC-DAEMON-03-S02] normalizes legacy source runs stuck in resuming state as interrupted", () => {
+    const runsDir = createRunsDir();
+    writeRun(runsDir, "legacy-resuming-source-run", {
+      metadata: {
+        status: "resuming",
+        runId: "legacy-resuming-source-run",
+        repository: "fankaidev/grovie",
+        issueNumber: 133,
+        branchName: "grovie/issue-133",
+      },
+      events: [
+        event("2026-05-23T09:00:00.000Z", "run.interrupted", { resumeEligible: true }),
+        event("2026-05-23T09:01:00.000Z", "run.resuming", { reason: "daemon restart recovery" }),
+      ],
+    });
+
+    const [run] = listLocalRuns(runsDir, {
+      now: new Date("2026-05-23T10:00:01.000Z"),
+    });
+
+    expect(run?.status).toBe("interrupted");
+    expect(renderRunsList(run === undefined ? [] : [run])).toContain("Status: interrupted");
+  });
+
   it("[UC-WORKER-06-S16] reports rejected runs as rejected recent failures", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "rejected-run", {
