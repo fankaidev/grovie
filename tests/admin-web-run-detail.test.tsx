@@ -159,7 +159,7 @@ describe("admin web home route", () => {
     ]);
   });
 
-  it("[UC-ADMIN-03-S01] [UC-ADMIN-03-S04] [UC-ADMIN-03-S06] renders daemon, runtime, useful paths, watched repositories, activity, and grouped recent runs", () => {
+  it("[UC-ADMIN-03-S01] [UC-ADMIN-03-S04] [UC-ADMIN-03-S06] renders daemon, runtime, useful paths, watched repositories, activity, and recent sessions", () => {
     const html = renderToStaticMarkup(
       <AdminHomeContent
         data={{
@@ -356,6 +356,16 @@ describe("admin web run detail route", () => {
               entries: [],
             },
           },
+          prompt: {
+            runId: "run-1",
+            path: "/state/runs/run-1/prompt.md",
+            content: "Prompt content",
+          },
+          task: {
+            runId: "run-1",
+            path: "/state/runs/run-1/task.json",
+            content: "{\"issue\":123}",
+          },
         }}
         cancelState={{ status: "idle" }}
         onCancel={() => {}}
@@ -450,6 +460,22 @@ describe("admin web run detail route", () => {
         });
       }
 
+      if (url === "/api/runs/run-1/prompt") {
+        return jsonResponse(200, {
+          runId: "run-1",
+          path: "/state/runs/run-1/prompt.md",
+          content: "Prompt content",
+        });
+      }
+
+      if (url === "/api/runs/run-1/task") {
+        return jsonResponse(200, {
+          runId: "run-1",
+          path: "/state/runs/run-1/task.json",
+          content: "{\"issue\":123}",
+        });
+      }
+
       return jsonResponse(404, {
         error: "not_found",
       });
@@ -472,6 +498,12 @@ describe("admin web run detail route", () => {
           recognized: true,
         },
       },
+      prompt: {
+        content: "Prompt content",
+      },
+      task: {
+        content: "{\"issue\":123}",
+      },
     });
     expect(requests).toEqual([
       { url: "/api/runs/run-1", method: "GET" },
@@ -479,6 +511,8 @@ describe("admin web run detail route", () => {
       { url: "/api/runs/run-1/logs/stdout", method: "GET" },
       { url: "/api/runs/run-1/logs/stderr", method: "GET" },
       { url: "/api/runs/run-1/logs/stdout/transcript", method: "GET" },
+      { url: "/api/runs/run-1/prompt", method: "GET" },
+      { url: "/api/runs/run-1/task", method: "GET" },
     ]);
   });
 
@@ -515,6 +549,16 @@ describe("admin web run detail route", () => {
                 { kind: "assistant_message", text: "The run passed." },
               ],
             },
+          },
+          prompt: {
+            runId: "run-1",
+            path: "/state/runs/run-1/prompt.md",
+            content: "Prompt content",
+          },
+          task: {
+            runId: "run-1",
+            path: "/state/runs/run-1/task.json",
+            content: "{\"issue\":123}",
           },
         }}
         cancelState={{ status: "idle" }}
