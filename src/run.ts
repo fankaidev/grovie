@@ -637,7 +637,6 @@ function renderRunResultComment(summary: RunSummary): string {
     marker,
     "Grovie run finished.",
     "",
-    "- Run status: running",
     `- Runtime: ${summary.runtime}`,
     `- Agent: \`${summary.agentId}\``,
     `- Machine: \`${summary.machineId}\``,
