@@ -28,6 +28,7 @@ export type AgentRuntime = {
 export type AgentRunInput = {
   run: PreparedRun;
   issue: GitHubIssue;
+  envKeys?: string[];
   monitor?: RuntimeMonitor;
 };
 
@@ -212,6 +213,7 @@ type PreparedRuntimeInput = {
   runtime: RuntimeName;
   prompt: string;
   command: string[];
+  env: NodeJS.ProcessEnv;
   worktreeTaskPath: string;
   worktreePromptPath: string;
   runtimeSessionRef?: RuntimeSessionRef;
@@ -239,6 +241,42 @@ type RuntimeRunOptions = {
   mode?: "auto" | "start" | "resume";
   runtimeSessionRef?: RuntimeSessionRef;
 };
+
+const BASELINE_ENV_KEYS = [
+  "PATH",
+  "HOME",
+  "SHELL",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "USER",
+  "LOGNAME",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_DATA_HOME",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "SystemRoot",
+  "COMSPEC",
+  "PATHEXT",
+] as const;
+
+export function buildRuntimeEnvironment(envKeys: readonly string[] = [], sourceEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+
+  for (const key of [...BASELINE_ENV_KEYS, ...envKeys]) {
+    const value = sourceEnv[key];
+
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+
+  return env;
+}
 
 function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
   if (runtime === "codex") {
@@ -299,6 +337,7 @@ function runRuntimeSync(
   const preparedInput = prepareRuntimeInput(input, adapter, options);
   const result = runner.run(preparedInput.command[0] ?? adapter.command, preparedInput.command.slice(1), preparedInput.prompt, {
     cwd: input.run.worktreePath,
+    env: preparedInput.env,
     maxBuffer: 1024 * 1024 * 50,
   });
 
@@ -337,6 +376,7 @@ function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter, opti
   const command = existingSessionRef === undefined
     ? adapter.startCommand(input)
     : adapter.resumeCommand(existingSessionRef.sessionId, input);
+  const env = buildRuntimeEnvironment(input.envKeys);
   const startedAt = new Date().toISOString();
 
   mkdirSync(handoffDir, { recursive: true });
@@ -358,6 +398,7 @@ function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter, opti
     runtime: adapter.runtime,
     prompt,
     command,
+    env,
     worktreeTaskPath,
     worktreePromptPath,
     runtimeSessionRef: existingSessionRef,
@@ -632,6 +673,7 @@ function runStreamingCommand(input: AgentRunInput, preparedInput: PreparedRuntim
 
     const child = spawn(preparedInput.command[0] ?? "codex", preparedInput.command.slice(1), {
       cwd: input.run.worktreePath,
+      env: preparedInput.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
     if (child.pid !== undefined) {

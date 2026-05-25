@@ -809,6 +809,7 @@ async function runWithLocalExecutionLock(input: DaemonInput & {
       agent: runtimeName,
       agentId: input.workerId,
       agentInstructions: agent?.instructions,
+      agentEnvKeys: agent?.envKeys,
       github: input.github,
       runtime: input.runtime ?? createRuntime(runtimeName),
       localState: input.localState,

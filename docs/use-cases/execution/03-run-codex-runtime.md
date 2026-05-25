@@ -11,6 +11,7 @@
 | R3 | Local stdout and stderr logs are raw execution logs. |
 | R4 | Current Codex runs use `danger-full-access` sandboxing until configurable agent runtime safety settings are implemented. |
 | R5 | Configured local agent instructions are trusted local context and are included in the runtime handoff separately from GitHub issue content. |
+| R6 | Runtime child processes receive only a small baseline environment plus variables explicitly named by the configured agent `envKeys` allowlist. |
 
 ## Scenarios
 
@@ -25,3 +26,4 @@
 | UC-EXECUTION-03-S07 | P0 | Codex runs persist the concrete Codex runtime session id and resume runs use that id instead of an ambiguous latest session. |
 | UC-EXECUTION-03-S08 | P1 | A run for a configured local agent includes that agent's custom instructions in the generated prompt and task handoff. |
 | UC-EXECUTION-03-S09 | P1 | A run handoff includes trigger context with source, activity timestamp, activity fingerprint, previous handled cursor when available, and daemon trigger metadata when applicable. |
+| UC-EXECUTION-03-S10 | P1 | A run for a configured local agent passes only baseline environment variables and that agent's configured `envKeys` values to the runtime child process. |

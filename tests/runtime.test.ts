@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CommandResult, CommandRunner, CommandRunOptions, GitHubIssue } from "../src/github.js";
 import type { PreparedRun } from "../src/local-state.js";
-import { buildCodexPrompt, ClaudeCodeRuntime, CodexRuntime, PiRuntime } from "../src/runtime.js";
+import { buildCodexPrompt, buildRuntimeEnvironment, ClaudeCodeRuntime, CodexRuntime, PiRuntime } from "../src/runtime.js";
 
 const tmpDirs: string[] = [];
 
@@ -72,6 +72,28 @@ describe("CodexRuntime", () => {
     expect(prompt).toContain("Please keep it small.");
   });
 
+  it("[UC-EXECUTION-03-S10] builds a runtime environment from baseline keys and configured env keys only", () => {
+    const env = buildRuntimeEnvironment(["OPENAI_API_KEY"], {
+      PATH: "/usr/local/bin:/usr/bin",
+      HOME: "/home/runner",
+      SHELL: "/bin/zsh",
+      OPENAI_API_KEY: "openai-secret",
+      AWS_SECRET_ACCESS_KEY: "aws-secret",
+      DATABASE_URL: "postgres://user:pass@example/db",
+      GITHUB_TOKEN: "github-secret",
+    });
+
+    expect(env).toMatchObject({
+      PATH: "/usr/local/bin:/usr/bin",
+      HOME: "/home/runner",
+      SHELL: "/bin/zsh",
+      OPENAI_API_KEY: "openai-secret",
+    });
+    expect(env).not.toHaveProperty("AWS_SECRET_ACCESS_KEY");
+    expect(env).not.toHaveProperty("DATABASE_URL");
+    expect(env).not.toHaveProperty("GITHUB_TOKEN");
+  });
+
   it("[UC-EXECUTION-03-S03] runs Codex in the prepared worktree and writes handoff files plus logs", () => {
     const root = createTmpDir();
     const run = fakeRun(root);
@@ -115,6 +137,38 @@ describe("CodexRuntime", () => {
       },
     });
     expect(runner.calls[0]?.input).toContain(".grovie/task.json");
+  });
+
+  it("[UC-EXECUTION-03-S10] passes only configured env keys to the runtime process", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root);
+    const runner = new FakeRunner([
+      {
+        stdout: "done\n",
+      },
+    ]);
+    const runtime = new CodexRuntime(runner);
+    const previousOpenAi = process.env.OPENAI_API_KEY;
+    const previousGitHub = process.env.GITHUB_TOKEN;
+
+    process.env.OPENAI_API_KEY = "openai-secret";
+    process.env.GITHUB_TOKEN = "github-secret";
+
+    try {
+      runtime.run({
+        run,
+        issue: fakeIssue(),
+        envKeys: ["OPENAI_API_KEY"],
+      });
+    } finally {
+      restoreEnv("OPENAI_API_KEY", previousOpenAi);
+      restoreEnv("GITHUB_TOKEN", previousGitHub);
+    }
+
+    expect(runner.calls[0]?.options?.env).toMatchObject({
+      OPENAI_API_KEY: "openai-secret",
+    });
+    expect(runner.calls[0]?.options?.env).not.toHaveProperty("GITHUB_TOKEN");
   });
 
   it("[UC-EXECUTION-03-S07] stores and uses Codex runtime session refs for resume runs", () => {
@@ -606,6 +660,15 @@ function createTmpDir(): string {
   mkdirSync(dir, { recursive: true });
   tmpDirs.push(dir);
   return dir;
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = value;
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {

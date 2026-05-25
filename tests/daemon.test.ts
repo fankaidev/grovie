@@ -1175,6 +1175,46 @@ describe("runDaemonCycle", () => {
     });
   });
 
+  it("[UC-EXECUTION-03-S10] passes configured agent env keys into the runtime handoff", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/project/.grovie.yml",
+      github,
+      once: true,
+      localAgents: [
+        {
+          ...configuredCodexAgent("coder", machineId),
+          envKeys: ["OPENAI_API_KEY"],
+        },
+      ],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "coder ran",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]).toMatchObject({
+      agent: "codex",
+      agentId: `coder@${machineId}`,
+      agentEnvKeys: ["OPENAI_API_KEY"],
+    });
+  });
+
   it("[UC-WORKER-04-S01] refuses to start when a live daemon lock exists", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const existingLock = localState.acquireDaemonLock(resolveMachineId(hostname()), NOW);

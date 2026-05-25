@@ -9,6 +9,7 @@
 | R1 | Runtime selection is explicit and limited to supported local CLI adapters. |
 | R2 | All runtimes report availability through the runtime boundary. |
 | R3 | All runtimes write stdout, stderr, runtime events, and cancellation state through the same local run files. |
+| R4 | All runtime child processes receive the same baseline-plus-`envKeys` allowlisted environment behavior. |
 
 ## Scenarios
 
