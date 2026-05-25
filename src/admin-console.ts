@@ -664,12 +664,13 @@ function renderAgentHealthTable(agents: ReturnType<typeof getConfiguredAgentHeal
 
   return [
     "<table>",
-    "<thead><tr><th>Agent</th><th>Runtime</th><th>Status</th><th>Message</th></tr></thead>",
+    "<thead><tr><th>Agent</th><th>Runtime</th><th>Command</th><th>Status</th><th>Message</th></tr></thead>",
     "<tbody>",
     ...agents.map((agent) => [
       "<tr>",
       `<td>${escapeHtml(agent.agentId)}</td>`,
       `<td>${escapeHtml(agent.runtime)}</td>`,
+      `<td>${escapeHtml(agent.availability.command)}</td>`,
       `<td>${agent.availability.available ? "available" : "unavailable"}</td>`,
       `<td>${escapeHtml(agent.availability.message)}</td>`,
       "</tr>",

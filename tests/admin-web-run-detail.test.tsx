@@ -241,6 +241,8 @@ describe("admin web home route", () => {
     expect(html).toContain("codex: available");
     expect(html).toContain("2 configured, 1 unavailable");
     expect(html).toContain("codex@kai-mini");
+    expect(html).toContain("command");
+    expect(html).toContain("pi");
     expect(html).toContain("pi command not found.");
     expect(html).toContain("/state/config.yml");
     expect(html).toContain("/state/daemon/stdout.log");

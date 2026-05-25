@@ -189,6 +189,7 @@ function AgentsTable(props: { agents: AdminApiHealthResponse["agents"] }): React
         <tr>
           <th>Agent</th>
           <th>Runtime</th>
+          <th>Command</th>
           <th>Status</th>
           <th>Message</th>
         </tr>
@@ -198,6 +199,7 @@ function AgentsTable(props: { agents: AdminApiHealthResponse["agents"] }): React
           <tr key={agent.agentId}>
             <td>{agent.agentId}</td>
             <td>{agent.runtime}</td>
+            <td>{agent.availability.command}</td>
             <td>{agent.availability.available ? "available" : "unavailable"}</td>
             <td>{agent.availability.message}</td>
           </tr>

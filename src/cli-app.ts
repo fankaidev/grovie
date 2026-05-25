@@ -97,8 +97,7 @@ const commandDefinitions = [
           return githubErrorResult(authenticatedUser.error);
         }
 
-        const runtime = resolveRuntime(context, loaded.config);
-        const runtimeAvailability = runtime.checkAvailability();
+        const runtimeAvailability = checkRuntimeAvailability(context, loaded.config.runtime.default);
         const agentHealth = getConfiguredAgentHealth(
           globalConfig.config,
           identity.machineId,
@@ -1117,7 +1116,7 @@ function renderConfiguredAgents(agents: AgentHealth[]): string[] {
 
   return [
     "Configured agents:",
-    ...agents.map((agent) => `- ${agent.agentId} (${agent.runtime}): ${agent.availability.message}`),
+    ...agents.map((agent) => `- ${agent.agentId} (${agent.runtime}, command=${agent.availability.command}): ${agent.availability.message}`),
   ];
 }
 

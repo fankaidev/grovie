@@ -197,7 +197,7 @@ function renderAgentHealth(agentHealth: AgentHealth[] | undefined): string {
   }
 
   return agentHealth
-    .map((agent) => `  - ${agent.agentId} runtime=${agent.runtime} ${agent.availability.available ? "available" : "unavailable"}: ${agent.availability.message}`)
+    .map((agent) => `  - ${agent.agentId} runtime=${agent.runtime} command=${agent.availability.command} ${agent.availability.available ? "available" : "unavailable"}: ${agent.availability.message}`)
     .join("\n");
 }
 
