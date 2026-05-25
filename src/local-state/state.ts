@@ -4,10 +4,11 @@ import type { RepositoryFileResult } from "../config.js";
 import { SpawnCommandRunner, type CommandRunner } from "../github.js";
 import { getRunCancellationPath, isRunCancellationRequested, writeRunCancellation } from "./cancellation.js";
 import { appendRunEvent, hasRunIdentity, hasTerminalRunEvent, interruptRuntimeProcess, isLivePid, isRecoverableRunMetadata, toErrorMessage } from "./events.js";
-import { readJsonFile, readdirDirectoryNames, readdirRequestFiles, removeFileIfExists, writeJsonFile } from "./files.js";
+import { readJsonFile, readdirDirectoryNames, writeJsonFile } from "./files.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, sanitizePathPart } from "./ids.js";
 import { acquireDaemonLock, acquireExecutionLock, getExecutionLockPath, hasExecutionLock, isDaemonRunning, releaseDaemonLock, releaseExecutionLock } from "./locks.js";
 import { resolvePaths } from "./paths.js";
+import { enqueueRunRequest, takeRunRequest } from "./requests.js";
 import { ensureRepositoryCache, ensureWorktree, getRepositoryCachePath, readRepositoryFile } from "./repository.js";
 import type { DaemonLock, ExecutionLock, HandledCursor, LocalStateOptions, LocalStatePaths, LockResult, PreparedRun, PrepareRunInput, ResumableRun, RunCancellation, RunMetadata, RunRequest } from "./types.js";
 
@@ -220,48 +221,12 @@ export class LocalState {
     reason?: RunRequest["reason"];
   }): RunRequest {
     this.ensureBaseDirectories();
-    const createdAt = (input.now ?? new Date()).toISOString();
-    const id = [
-      buildRunTimestamp(new Date(createdAt)),
-      sanitizePathPart(input.repository),
-      `issue-${input.issueNumber}`,
-      sanitizePathPart(input.agentId),
-    ].join("-");
-    const requestPath = this.getRunRequestPath(id);
-    const request = {
-      id: requestPath.id,
-      repository: input.repository,
-      issueNumber: input.issueNumber,
-      agentId: input.agentId,
-      createdAt,
-      path: requestPath.path,
-      sourceRunId: input.sourceRunId,
-      reason: input.reason,
-    };
-
-    writeJsonFile(requestPath.path, request);
-    return request;
+    return enqueueRunRequest(this.paths, input);
   }
 
   takeRunRequest(repository: string): RunRequest | undefined {
     this.ensureBaseDirectories();
-    const entries = readdirRequestFiles(this.paths.requestsDir);
-
-    for (const entry of entries) {
-      const request = readJsonFile<RunRequest>(join(this.paths.requestsDir, entry));
-
-      if (request?.repository !== repository) {
-        continue;
-      }
-
-      removeFileIfExists(join(this.paths.requestsDir, entry));
-      return {
-        ...request,
-        path: join(this.paths.requestsDir, entry),
-      };
-    }
-
-    return undefined;
+    return takeRunRequest(this.paths, repository);
   }
 
   requestRunCancellation(input: { runId: string; reason?: string; now?: Date }): RunCancellation {
@@ -441,23 +406,6 @@ export class LocalState {
       repository: input.repository,
       path: input.path,
     });
-  }
-
-  private getRunRequestPath(id: string): { id: string; path: string } {
-    let candidate = id;
-    let path = join(this.paths.requestsDir, `${candidate}.json`);
-    let suffix = 2;
-
-    while (existsSync(path)) {
-      candidate = `${id}-${suffix}`;
-      path = join(this.paths.requestsDir, `${candidate}.json`);
-      suffix += 1;
-    }
-
-    return {
-      id: candidate,
-      path,
-    };
   }
 
   private getHandledCursorPath(repository: string, issueNumber: number, agentId: string): string {
