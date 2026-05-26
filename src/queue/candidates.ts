@@ -5,6 +5,7 @@ import type { RunLocalState } from "../run.js";
 import {
   findPullRequestMergeabilityTrigger,
   getIssueActivity,
+  isOwnAgentOutputOnlyDelta,
   type IssueActivity,
 } from "./activity.js";
 import type { IssuePriority, QueueCandidate } from "../queue.js";
@@ -159,6 +160,18 @@ export function evaluateActivityCandidates(input: {
 
     if (handledCursor !== undefined && isHandledCursorCovered(handledCursor, activity)) {
       return skippedCandidate(input, priority, activity, agentId, "no unhandled activity");
+    }
+
+    if (
+      handledCursor !== undefined &&
+      isOwnAgentOutputOnlyDelta({
+        issue: input.issue,
+        relatedPullRequests: input.relatedPullRequests,
+        agentId,
+        handledThrough: handledCursor.handledThrough,
+      })
+    ) {
+      return skippedCandidate(input, priority, activity, agentId, "only own agent output");
     }
 
     const candidateActivity = mergeabilityTrigger === undefined

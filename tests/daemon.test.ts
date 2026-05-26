@@ -1728,6 +1728,117 @@ describe("runDaemonCycle", () => {
     expect(readFileSync(join(localState.getPaths().root, "daemon", "activity.jsonl"), "utf8")).toContain("No queued issues found for fankaidev/grovie with label grovie.");
   });
 
+  it("[UC-DAEMON-02-S19] silently advances handled state for own-output-only deltas", async () => {
+    const machineId = resolveMachineId(hostname());
+    const agentId = `default@${machineId}`;
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.writeHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId,
+      handledThrough: "2026-05-22T00:00:01.000Z",
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        updatedAt: "2026-05-22T00:00:02.000Z",
+        comments: [
+          fakeComment({
+            id: 10,
+            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n- Agent: \`${agentId}\`\n\n1`,
+            updatedAt: "2026-05-22T00:00:02.000Z",
+          }),
+        ],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(result.processed).toBe(false);
+    expect(runs).toEqual([]);
+    expect(github.createdComments).toEqual([]);
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId,
+    })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
+    expect(readFileSync(join(localState.getPaths().root, "daemon", "activity.jsonl"), "utf8")).toContain("queue.silent_skip");
+  });
+
+  it("[UC-DAEMON-02-S19] runs when the delta contains another agent output", async () => {
+    const machineId = resolveMachineId(hostname());
+    const agentId = `default@${machineId}`;
+    const otherAgentId = `reviewer@${machineId}`;
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.writeHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId,
+      handledThrough: "2026-05-22T00:00:01.000Z",
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        updatedAt: "2026-05-22T00:00:03.000Z",
+        comments: [
+          fakeComment({
+            id: 10,
+            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n- Agent: \`${agentId}\`\n\n1`,
+            updatedAt: "2026-05-22T00:00:02.000Z",
+          }),
+          fakeComment({
+            id: 11,
+            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId: otherAgentId })} -->\n- Agent: \`${otherAgentId}\`\n\n2`,
+            updatedAt: "2026-05-22T00:00:03.000Z",
+          }),
+        ],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran mixed agent output",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran mixed agent output",
+    });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.agentId).toBe(agentId);
+  });
+
   it("[UC-DAEMON-02-S03] updates the handled cursor after terminal run completion", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });

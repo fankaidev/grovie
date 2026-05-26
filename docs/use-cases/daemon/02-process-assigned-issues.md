@@ -34,3 +34,4 @@
 | UC-DAEMON-02-S16 | P1 | A daemon cycle reruns a handled issue when a linked open pull request's merge state changes to `DIRTY` or otherwise requires branch update work, and records daemon activity explaining the mergeability trigger. |
 | UC-DAEMON-02-S17 | P1 | A daemon cycle skips automatic queue runs whose issue creator is not trusted, while configured trusted authors can allow creators other than the authenticated `gh` user. |
 | UC-DAEMON-02-S18 | P1 | A long-running daemon obeys GitHub repository event `X-Poll-Interval` values, sends stored `ETag` values through `If-None-Match`, and treats `304 Not Modified` as unchanged repository events. |
+| UC-DAEMON-02-S19 | P1 | A daemon silently skips and advances handled state when an agent's only new effective activity is that same agent's own visible output, but still runs when the delta includes another agent's output. |
