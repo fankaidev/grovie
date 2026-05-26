@@ -70,6 +70,63 @@ describe("CLI command registration", () => {
     expect(watchHelp).toContain("grovie watch remove owner/repo");
   });
 
+  it("[UC-DAEMON-04-S17] rejects unknown, duplicate, and extra CLI arguments consistently", async () => {
+    const localState = new FakeLocalState(createTmpDir());
+
+    expect(runCli(["init", "--bogus"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Unknown option: --bogus",
+    });
+    expect(runCli(["status", "--bogus"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Unknown option: --bogus",
+    });
+    expect(runCli(["runs", "list", "--bogus"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Unknown option: --bogus",
+    });
+    expect(runCli(["runs", "show", "run-1", "extra"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Unexpected argument: extra",
+    });
+    expect(runCli(["runs", "cleanup", "--older-than", "1d", "--older-than", "2d"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Duplicate option: --older-than",
+    });
+    expect(runCli(["daemon", "status", "--bogus"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Unknown option: --bogus",
+    });
+    expect(runCli(["daemon", "logs", "--lines"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Missing value for --lines.",
+    });
+    expect(runCli(["queue", "list", "--json", "--json"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Duplicate option: --json",
+    });
+    expect(runCli(["watch", "list", "--bogus"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Unknown option: --bogus",
+    });
+    expect(runCli(["watch", "add", "fankaidev/grovie", "extra"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Unexpected argument: extra",
+    });
+    expect(runCli(["issue", "assign", "fankaidev/grovie#1", "coder@machine", "--bogus"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Unknown option: --bogus",
+    });
+    expect(runCli(["state", "init", "--repo"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Missing value for --repo.",
+    });
+    await expect(runCliAsync(["admin", "serve", "--bogus"], { localState })).resolves.toEqual({
+      exitCode: 1,
+      stderr: "Unknown option: --bogus",
+    });
+  });
+
   it("[UC-DAEMON-04-S01] reports the package version through long and short flags", () => {
     const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 

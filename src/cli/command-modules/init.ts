@@ -31,6 +31,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -39,7 +40,13 @@ export const initCommand = {
     description: "Create the minimal global Grovie config.",
     usage: "grovie init",
     issue: "#3",
-    run: (_args: string[], context: CliContext) => {
+    run: (args: string[], context: CliContext) => {
+      const argValidation = validateCliArgs(args);
+
+      if (!argValidation.ok) {
+        return argValidation.result;
+      }
+
       let configPath: string;
 
       try {

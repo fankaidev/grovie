@@ -31,6 +31,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -49,6 +50,12 @@ export const watchCommand = {
 
       try {
         if (subcommand === "list") {
+          const argValidation = validateCliArgs(args.slice(1));
+
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
+
           const loaded = loadGlobalConfig(globalRoot);
           const lines = loaded.config.watchedRepositories.map((watchedRepository) => {
             const label = watchedRepository.label === undefined ? "" : ` label=${watchedRepository.label}`;
@@ -67,6 +74,19 @@ export const watchCommand = {
         }
 
         if (subcommand === "add") {
+          const argValidation = validateCliArgs(args.slice(1), {
+            positionals: {
+              min: 1,
+              max: 1,
+              label: "repository",
+            },
+            valueOptions: ["--label"],
+          });
+
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
+
           if (repository === undefined) {
             return {
               exitCode: 1,
@@ -99,6 +119,18 @@ export const watchCommand = {
         }
 
         if (subcommand === "remove") {
+          const argValidation = validateCliArgs(args.slice(1), {
+            positionals: {
+              min: 1,
+              max: 1,
+              label: "repository",
+            },
+          });
+
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
+
           if (repository === undefined) {
             return {
               exitCode: 1,

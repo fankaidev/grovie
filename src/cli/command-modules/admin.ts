@@ -31,6 +31,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -47,6 +48,12 @@ export const adminCommand = {
           exitCode: 1,
           stderr: "Missing admin subcommand. Usage: grovie admin serve",
         };
+      }
+
+      const argValidation = validateCliArgs(args.slice(1));
+
+      if (!argValidation.ok) {
+        return argValidation.result;
       }
 
       try {

@@ -30,3 +30,4 @@
 | UC-DAEMON-04-S14 | P1 | `grovie daemon run` starts the enabled admin console in the same daemon process and makes `GET /api/health` available at the configured local URL. |
 | UC-DAEMON-04-S15 | P1 | Stopping the daemon also stops the admin console server owned by that daemon process. |
 | UC-DAEMON-04-S16 | P1 | `grovie status` reports rejected local runs as rejected recent failures. |
+| UC-DAEMON-04-S17 | P0 | CLI commands reject unknown options, duplicate single-value options, and extra positional arguments instead of silently ignoring typos. |

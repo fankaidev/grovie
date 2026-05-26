@@ -31,6 +31,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -47,6 +48,18 @@ export const issueCommand = {
           exitCode: 1,
           stderr: "Missing issue subcommand. Usage: grovie issue <assign|unassign> owner/repo#123 agent@machine",
         };
+      }
+
+      const argValidation = validateCliArgs(args.slice(1), {
+        positionals: {
+          min: 2,
+          max: 2,
+          label: "issue reference or agent id",
+        },
+      });
+
+      if (!argValidation.ok) {
+        return argValidation.result;
       }
 
       if (issueRef === undefined || agentId === undefined) {

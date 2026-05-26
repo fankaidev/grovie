@@ -31,6 +31,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -47,6 +48,14 @@ export const stateCommand = {
           exitCode: 1,
           stderr: "Missing state subcommand. Usage: grovie state init [--owner owner|--repo owner/grovie-state]",
         };
+      }
+
+      const argValidation = validateCliArgs(args.slice(1), {
+        valueOptions: ["--owner", "--repo", "--branch", "--sync-interval"],
+      });
+
+      if (!argValidation.ok) {
+        return argValidation.result;
       }
 
       const ownerOption = readStringOption(args, "--owner");
