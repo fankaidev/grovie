@@ -54,6 +54,7 @@ export type QueueInspectionInput = {
   configuredAgentIds?: string[];
   localState?: RunLocalState;
   issueNumbers?: number[];
+  includePullRequestContext?: boolean;
 };
 
 export function inspectQueue(input: QueueInspectionInput): { ok: true; value: QueueInspectionResult[] } | { ok: false; message: string } {
@@ -86,10 +87,15 @@ export function inspectQueue(input: QueueInspectionInput): { ok: true; value: Qu
         continue;
       }
 
-      const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(issue.reference) ?? {
-        ok: true as const,
-        value: [],
-      };
+      const relatedPullRequestsResult = input.includePullRequestContext === false
+        ? {
+          ok: true as const,
+          value: [],
+        }
+        : input.github.readRelatedPullRequests?.(issue.reference) ?? {
+          ok: true as const,
+          value: [],
+        };
 
       if (!relatedPullRequestsResult.ok) {
         return {
