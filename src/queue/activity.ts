@@ -64,7 +64,7 @@ export function findPullRequestMergeabilityTrigger(
   };
 }
 
-function isGrovieActivityComment(body: string): boolean {
+export function isGrovieActivityComment(body: string): boolean {
   return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:run ") || body.includes("<!-- grovie:session ");
 }
 

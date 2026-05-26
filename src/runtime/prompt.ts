@@ -1,7 +1,15 @@
 import type { GitHubIssue } from "../github.js";
 import type { PreparedRun } from "../local-state.js";
+import { isGrovieActivityComment } from "../queue/activity.js";
 
 export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; task: unknown }): string {
+  const previousHandledThrough = getPreviousHandledThrough(input.task);
+  const firstRun = previousHandledThrough === undefined;
+  const effectiveComments = input.issue.comments.filter((comment) => !isGrovieActivityComment(comment.body));
+  const recentComments = firstRun
+    ? effectiveComments
+    : effectiveComments.filter((comment) => Date.parse(comment.updatedAt) > Date.parse(previousHandledThrough));
+
   return [
     "You are Grovie running a local Codex task.",
     "",
@@ -25,6 +33,7 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
     `- If the task asks only for a GitHub issue comment, write the comment body to \`${input.run.runDir}/issue-comment.md\` instead of using \`gh\` or other GitHub tools; Grovie will add visible agent attribution when publishing it.`,
     `- If writing a structured agent result, write it to \`${input.run.runDir}/result.json\`.`,
     "- Leave logs and run artifacts on disk for Grovie to inspect.",
+    "- Full structured context is available in `.grovie/task.json`; this prompt shows the effective issue context for this run.",
     "",
     "Configured Agent Instructions:",
     renderAgentInstructions(input.task),
@@ -37,14 +46,23 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
     `State: ${input.issue.state}`,
     `Labels: ${input.issue.labels.length > 0 ? input.issue.labels.join(", ") : "(none)"}`,
     "",
-    "Body:",
-    input.issue.body.trim().length > 0 ? input.issue.body : "(empty)",
-    "",
-    "Comments:",
-    renderComments(input.issue.comments),
-    "",
-    "Task JSON:",
-    fencedJson(input.task),
+    ...(firstRun
+      ? [
+          "Body:",
+          input.issue.body.trim().length > 0 ? input.issue.body : "(empty)",
+          "",
+          "Effective comments:",
+          renderComments(effectiveComments),
+        ]
+      : [
+          "Current body:",
+          "See `.grovie/task.json` for the complete current issue body and full comment history.",
+          "",
+          `Previous handled cursor: ${previousHandledThrough}`,
+          "",
+          "Recent activity since last run:",
+          renderComments(recentComments),
+        ]),
   ].join("\n");
 }
 
@@ -71,6 +89,30 @@ function renderComments(comments: GitHubIssue["comments"]): string {
       ].join("\n"),
     )
     .join("\n\n");
+}
+
+function getPreviousHandledThrough(task: unknown): string | undefined {
+  if (task === null || typeof task !== "object") {
+    return undefined;
+  }
+
+  const trigger = (task as { trigger?: unknown }).trigger;
+
+  if (trigger === null || typeof trigger !== "object") {
+    return undefined;
+  }
+
+  const previousHandledCursor = (trigger as { previousHandledCursor?: unknown }).previousHandledCursor;
+
+  if (previousHandledCursor === null || typeof previousHandledCursor !== "object") {
+    return undefined;
+  }
+
+  const handledThrough = (previousHandledCursor as { handledThrough?: unknown }).handledThrough;
+
+  return typeof handledThrough === "string" && !Number.isNaN(Date.parse(handledThrough))
+    ? handledThrough
+    : undefined;
 }
 
 function indent(value: string): string {
