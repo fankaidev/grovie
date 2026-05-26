@@ -9,7 +9,7 @@ import type {
   GitHubIssueSummary,
   GitHubPullRequestIssueLink,
   GitHubRelatedPullRequest,
-  GitHubRepositoryEvent,
+  GitHubRepositoryEventsResult,
   GitHubUser,
   IssueReference,
   Result,
@@ -327,16 +327,81 @@ export class GhGitHubGateway implements GitHubGateway {
     });
   }
 
-  listRepositoryEvents(repository: string): Result<GitHubRepositoryEvent[]> {
-    const result = this.api.json<GitHubRepositoryEventResponse[]>(`repos/${repository}/events?per_page=100`);
+  listRepositoryEvents(repository: string, options: { ifNoneMatch?: string } = {}): Result<GitHubRepositoryEventsResult> {
+    const args = ["api", "-i"];
 
-    if (!result.ok) {
-      return result;
+    if (options.ifNoneMatch !== undefined) {
+      args.push("-H", `If-None-Match: ${options.ifNoneMatch}`);
+    }
+
+    args.push(`repos/${repository}/events?per_page=100`);
+    const result = this.runner.run("gh", args);
+
+    if (result.exitCode !== 0 && !isNotModifiedResponse(result.stdout)) {
+      return {
+        ok: false,
+        error: {
+          code: "gh_failed",
+          message: result.stderr.trim() || `gh ${args.join(" ")} failed with exit code ${result.exitCode}.`,
+          command: `gh ${args.join(" ")}`,
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+        },
+      };
+    }
+
+    const parsed = parseIncludedGitHubResponse(result.stdout);
+
+    if (parsed.status === 304) {
+      return {
+        ok: true,
+        value: {
+          status: "not-modified",
+          etag: parsed.headers.etag,
+          pollIntervalSeconds: parsePollInterval(parsed.headers["x-poll-interval"]),
+        },
+      };
+    }
+
+    if (parsed.status < 200 || parsed.status >= 300) {
+      return {
+        ok: false,
+        error: {
+          code: "gh_failed",
+          message: result.stderr.trim() || `gh ${args.join(" ")} returned HTTP ${parsed.status}.`,
+          command: `gh ${args.join(" ")}`,
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+        },
+      };
+    }
+
+    let events: GitHubRepositoryEventResponse[];
+
+    try {
+      events = JSON.parse(parsed.body) as GitHubRepositoryEventResponse[];
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      return {
+        ok: false,
+        error: {
+          code: "invalid_json",
+          message: `gh ${args.join(" ")} returned invalid JSON: ${message}`,
+          command: `gh ${args.join(" ")}`,
+          stderr: parsed.body,
+        },
+      };
     }
 
     return {
       ok: true,
-      value: result.value.map(toRepositoryEvent),
+      value: {
+        status: "modified",
+        events: events.map(toRepositoryEvent),
+        etag: parsed.headers.etag,
+        pollIntervalSeconds: parsePollInterval(parsed.headers["x-poll-interval"]),
+      },
     };
   }
 
@@ -348,4 +413,43 @@ export class GhGitHubGateway implements GitHubGateway {
     });
   }
 
+}
+
+function isNotModifiedResponse(output: string): boolean {
+  return /^HTTP\/\S+\s+304\b/m.test(output);
+}
+
+function parseIncludedGitHubResponse(output: string): { status: number; headers: Record<string, string>; body: string } {
+  const normalized = output.replace(/\r\n/g, "\n");
+  const separatorIndex = normalized.indexOf("\n\n");
+  const headerText = separatorIndex < 0 ? normalized : normalized.slice(0, separatorIndex);
+  const body = separatorIndex < 0 ? "" : normalized.slice(separatorIndex + 2);
+  const [statusLine = "", ...headerLines] = headerText.split("\n");
+  const status = Number.parseInt(statusLine.split(/\s+/)[1] ?? "0", 10);
+  const headers: Record<string, string> = {};
+
+  for (const line of headerLines) {
+    const separator = line.indexOf(":");
+
+    if (separator < 0) {
+      continue;
+    }
+
+    headers[line.slice(0, separator).trim().toLowerCase()] = line.slice(separator + 1).trim();
+  }
+
+  return {
+    status,
+    headers,
+    body,
+  };
+}
+
+function parsePollInterval(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const interval = Number.parseInt(value, 10);
+  return Number.isFinite(interval) && interval > 0 ? interval : undefined;
 }

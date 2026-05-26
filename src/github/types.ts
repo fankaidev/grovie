@@ -99,6 +99,19 @@ export type GitHubRepositoryEvent = {
   reviewUrl?: string;
 };
 
+export type GitHubRepositoryEventsResult =
+  | {
+    status: "modified";
+    events: GitHubRepositoryEvent[];
+    etag?: string;
+    pollIntervalSeconds?: number;
+  }
+  | {
+    status: "not-modified";
+    etag?: string;
+    pollIntervalSeconds?: number;
+  };
+
 export type GitHubPullRequestIssueLink = {
   pullRequestNumber: number;
   issueNumber: number;
@@ -160,7 +173,7 @@ export type GitHubGateway = {
   updateIssueComment(repository: string, commentId: number, body: string): Result<CreatedComment>;
   createPullRequest(input: CreatePullRequestInput): Result<CreatedPullRequest>;
   readRelatedPullRequests?(reference: IssueReference): Result<GitHubRelatedPullRequest[]>;
-  listRepositoryEvents?(repository: string): Result<GitHubRepositoryEvent[]>;
+  listRepositoryEvents?(repository: string, options?: { ifNoneMatch?: string }): Result<GitHubRepositoryEventsResult>;
   readPullRequestIssueLinks?(repository: string, pullRequestNumber: number): Result<GitHubPullRequestIssueLink[]>;
   listRepositoryOwners?(): Result<string[]>;
   readRepository?(repository: string): Result<CreatedRepository>;

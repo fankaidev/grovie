@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { GrovieConfig } from "../src/config.js";
 import { runDaemon, runDaemonCycle, runDaemonForRepositories } from "../src/daemon.js";
+import { runDaemonSingleRepositoryCycle } from "../src/daemon/repository-cycle.js";
 import type {
   CreatedComment,
   GitHubGateway,
@@ -1412,6 +1413,85 @@ describe("runDaemonCycle", () => {
     expect(github.listOpenIssueCalls).toEqual([]);
   });
 
+  it("[UC-DAEMON-02-S18] skips repository event requests before the GitHub poll interval elapses", async () => {
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const events = [fakeRepositoryEvent("event-1")];
+    const github = new FakeGitHub([], {
+      repositoryEvents: events,
+      repositoryEventsEtag: "W/\"events-etag\"",
+      repositoryEventsPollIntervalSeconds: 60,
+    });
+
+    planRepositoryEventPolling({
+      paths: localState.getPaths(),
+      repository: "fankaidev/grovie",
+      events,
+      github,
+      etag: "W/\"events-etag\"",
+      pollIntervalSeconds: 60,
+      now: NOW,
+    });
+
+    const result = await runDaemonSingleRepositoryCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: false,
+      localState,
+      now: () => new Date("2026-05-22T00:00:30Z"),
+    });
+
+    expect(result).toMatchObject({
+      exitCode: 0,
+      processed: false,
+    });
+    expect(result.stdout).toContain("repository event poll interval has not elapsed");
+    expect(github.listRepositoryEventCalls).toEqual([]);
+    expect(github.listOpenIssueCalls).toEqual([]);
+  });
+
+  it("[UC-DAEMON-02-S18] sends stored repository event ETags and handles not-modified responses", async () => {
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const events = [fakeRepositoryEvent("event-1")];
+    const github = new FakeGitHub([], {
+      repositoryEventsStatus: "not-modified",
+      repositoryEventsEtag: "\"events-etag\"",
+      repositoryEventsPollIntervalSeconds: 60,
+    });
+
+    planRepositoryEventPolling({
+      paths: localState.getPaths(),
+      repository: "fankaidev/grovie",
+      events,
+      github,
+      etag: "W/\"events-etag\"",
+      pollIntervalSeconds: 60,
+      now: NOW,
+    });
+
+    const result = await runDaemonSingleRepositoryCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: false,
+      localState,
+      now: () => new Date("2026-05-22T00:01:00Z"),
+    });
+
+    expect(result).toMatchObject({
+      exitCode: 0,
+      processed: false,
+    });
+    expect(result.stdout).toContain("repository events were not modified");
+    expect(github.listRepositoryEventCalls).toEqual(["fankaidev/grovie"]);
+    expect(github.listRepositoryEventOptions).toEqual([{ ifNoneMatch: "W/\"events-etag\"" }]);
+    expect(github.listOpenIssueCalls).toEqual([]);
+  });
+
   it("[UC-DAEMON-02-S05] [UC-DAEMON-02-S11] reports an assigned issue skipped by a local execution lock", async () => {
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });
@@ -2572,6 +2652,7 @@ class FakeGitHub implements GitHubGateway {
   readonly listOpenIssueCalls: Array<{ repository: string; label: string }> = [];
   readonly readIssueCalls: IssueReference[] = [];
   readonly listRepositoryEventCalls: string[] = [];
+  readonly listRepositoryEventOptions: Array<{ ifNoneMatch?: string } | undefined> = [];
   private nextCommentId = 1;
 
   constructor(
@@ -2581,6 +2662,9 @@ class FakeGitHub implements GitHubGateway {
       failReadIssueFor?: number;
       relatedPullRequests?: GitHubRelatedPullRequest[];
       repositoryEvents?: GitHubRepositoryEvent[];
+      repositoryEventsStatus?: "modified" | "not-modified";
+      repositoryEventsEtag?: string;
+      repositoryEventsPollIntervalSeconds?: number;
     } = {},
   ) {}
 
@@ -2705,12 +2789,29 @@ class FakeGitHub implements GitHubGateway {
     };
   }
 
-  listRepositoryEvents(repository: string): ReturnType<NonNullable<GitHubGateway["listRepositoryEvents"]>> {
+  listRepositoryEvents(repository: string, options?: { ifNoneMatch?: string }): ReturnType<NonNullable<GitHubGateway["listRepositoryEvents"]>> {
     this.listRepositoryEventCalls.push(repository);
+    this.listRepositoryEventOptions.push(options);
+
+    if (this.options.repositoryEventsStatus === "not-modified") {
+      return {
+        ok: true,
+        value: {
+          status: "not-modified",
+          etag: this.options.repositoryEventsEtag,
+          pollIntervalSeconds: this.options.repositoryEventsPollIntervalSeconds,
+        },
+      };
+    }
 
     return {
       ok: true,
-      value: this.options.repositoryEvents ?? [],
+      value: {
+        status: "modified",
+        events: this.options.repositoryEvents ?? [],
+        etag: this.options.repositoryEventsEtag,
+        pollIntervalSeconds: this.options.repositoryEventsPollIntervalSeconds,
+      },
     };
   }
 

@@ -11,10 +11,20 @@ export type RepositoryEventPlan = {
   eventCount: number;
 };
 
+export type RepositoryEventRequestPlan =
+  | {
+    mode: "request";
+    ifNoneMatch?: string;
+  }
+  | RepositoryEventPlan;
+
 type RepositoryEventCursor = {
   repository: string;
   lastSeenEventId?: string;
   lastFullScanAt?: string;
+  etag?: string;
+  pollIntervalSeconds?: number;
+  nextPollAt?: string;
   updatedAt: string;
 };
 
@@ -28,11 +38,90 @@ type PullRequestIssueAssociation = {
 
 const FULL_SCAN_FALLBACK_INTERVAL_MS = 5 * 60 * 1000;
 
+export function planRepositoryEventRequest(input: {
+  paths: LocalStatePaths | undefined;
+  repository: string;
+  now?: Date;
+}): RepositoryEventRequestPlan {
+  if (input.paths === undefined) {
+    return {
+      mode: "request",
+    };
+  }
+
+  const cursor = readRepositoryEventCursor(input.paths, input.repository);
+  const nextPollAt = cursor?.nextPollAt === undefined ? undefined : Date.parse(cursor.nextPollAt);
+
+  if (nextPollAt !== undefined && !Number.isNaN(nextPollAt) && nextPollAt > (input.now ?? new Date()).getTime()) {
+    if (isFullScanDue(cursor?.lastFullScanAt, input.now)) {
+      markRepositoryFullScan(input.paths, input.repository, cursor?.lastSeenEventId, input.now);
+      return {
+        mode: "full-scan",
+        reason: "periodic full scan fallback is due",
+        eventCount: 0,
+      };
+    }
+
+    return {
+      mode: "skip",
+      reason: "repository event poll interval has not elapsed",
+      eventCount: 0,
+    };
+  }
+
+  return {
+    mode: "request",
+    ifNoneMatch: cursor?.etag,
+  };
+}
+
+export function planUnchangedRepositoryEventPolling(input: {
+  paths: LocalStatePaths | undefined;
+  repository: string;
+  etag?: string;
+  pollIntervalSeconds?: number;
+  now?: Date;
+}): RepositoryEventPlan {
+  if (input.paths === undefined) {
+    return {
+      mode: "full-scan",
+      reason: "local state is unavailable",
+      eventCount: 0,
+    };
+  }
+
+  const cursor = readRepositoryEventCursor(input.paths, input.repository);
+
+  updateRepositoryEventCursor(input.paths, input.repository, {
+    etag: input.etag,
+    pollIntervalSeconds: input.pollIntervalSeconds,
+    nextPollAt: resolveNextPollAt(input.pollIntervalSeconds, input.now),
+    updatedAt: (input.now ?? new Date()).toISOString(),
+  });
+
+  if (isFullScanDue(cursor?.lastFullScanAt, input.now)) {
+    markRepositoryFullScan(input.paths, input.repository, cursor?.lastSeenEventId, input.now);
+    return {
+      mode: "full-scan",
+      reason: "periodic full scan fallback is due",
+      eventCount: 0,
+    };
+  }
+
+  return {
+    mode: "skip",
+    reason: "repository events were not modified",
+    eventCount: 0,
+  };
+}
+
 export function planRepositoryEventPolling(input: {
   paths: LocalStatePaths | undefined;
   repository: string;
   events: GitHubRepositoryEvent[];
   github: Pick<GitHubGateway, "readPullRequestIssueLinks">;
+  etag?: string;
+  pollIntervalSeconds?: number;
   now?: Date;
 }): RepositoryEventPlan {
   if (input.paths === undefined) {
@@ -47,6 +136,13 @@ export function planRepositoryEventPolling(input: {
   const newestEventId = input.events[0]?.id;
 
   if (newestEventId === undefined) {
+    updateRepositoryEventCursor(input.paths, input.repository, {
+      etag: input.etag,
+      pollIntervalSeconds: input.pollIntervalSeconds,
+      nextPollAt: resolveNextPollAt(input.pollIntervalSeconds, input.now),
+      updatedAt: (input.now ?? new Date()).toISOString(),
+    });
+
     if (cursor === undefined || isFullScanDue(cursor.lastFullScanAt, input.now)) {
       markRepositoryFullScan(input.paths, input.repository, undefined, input.now);
       return {
@@ -70,6 +166,9 @@ export function planRepositoryEventPolling(input: {
     repository: input.repository,
     lastSeenEventId: newestEventId,
     lastFullScanAt: cursor?.lastFullScanAt,
+    etag: input.etag ?? cursor?.etag,
+    pollIntervalSeconds: input.pollIntervalSeconds ?? cursor?.pollIntervalSeconds,
+    nextPollAt: resolveNextPollAt(input.pollIntervalSeconds, input.now) ?? cursor?.nextPollAt,
     updatedAt: (input.now ?? new Date()).toISOString(),
   });
 
@@ -264,12 +363,39 @@ function isFullScanDue(lastFullScanAt: string | undefined, now?: Date): boolean 
 }
 
 function markRepositoryFullScan(paths: LocalStatePaths, repository: string, lastSeenEventId: string | undefined, now?: Date): void {
+  const cursor = readRepositoryEventCursor(paths, repository);
+
   writeRepositoryEventCursor(paths, {
     repository,
     lastSeenEventId,
+    etag: cursor?.etag,
+    pollIntervalSeconds: cursor?.pollIntervalSeconds,
+    nextPollAt: cursor?.nextPollAt,
     lastFullScanAt: (now ?? new Date()).toISOString(),
     updatedAt: (now ?? new Date()).toISOString(),
   });
+}
+
+function updateRepositoryEventCursor(paths: LocalStatePaths, repository: string, patch: Partial<RepositoryEventCursor>): void {
+  const cursor = readRepositoryEventCursor(paths, repository);
+
+  writeRepositoryEventCursor(paths, {
+    repository,
+    lastSeenEventId: cursor?.lastSeenEventId,
+    lastFullScanAt: cursor?.lastFullScanAt,
+    etag: patch.etag ?? cursor?.etag,
+    pollIntervalSeconds: patch.pollIntervalSeconds ?? cursor?.pollIntervalSeconds,
+    nextPollAt: patch.nextPollAt ?? cursor?.nextPollAt,
+    updatedAt: patch.updatedAt ?? (new Date()).toISOString(),
+  });
+}
+
+function resolveNextPollAt(pollIntervalSeconds: number | undefined, now?: Date): string | undefined {
+  if (pollIntervalSeconds === undefined) {
+    return undefined;
+  }
+
+  return new Date((now ?? new Date()).getTime() + pollIntervalSeconds * 1000).toISOString();
 }
 
 function readRepositoryEventCursor(paths: LocalStatePaths, repository: string): RepositoryEventCursor | undefined {

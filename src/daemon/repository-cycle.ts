@@ -1,5 +1,5 @@
 import type { RunIssueResult } from "../run.js";
-import { planRepositoryEventPolling } from "../repository-events.js";
+import { planRepositoryEventPolling, planRepositoryEventRequest, planUnchangedRepositoryEventPolling } from "../repository-events.js";
 import { recordActivity } from "./activity.js";
 import { runDaemonCycle } from "./cycle.js";
 import type { DaemonCycleResult, DaemonInput, MultiRepositoryDaemonInput } from "./types.js";
@@ -121,7 +121,19 @@ function planRepositoryCycle(input: Pick<DaemonInput, "once" | "github" | "local
     };
   }
 
-  const eventsResult = input.github.listRepositoryEvents(repository);
+  const requestPlan = planRepositoryEventRequest({
+    paths: input.localState?.getPaths?.(),
+    repository,
+    now: input.now?.(),
+  });
+
+  if (requestPlan.mode !== "request") {
+    return requestPlan;
+  }
+
+  const eventsResult = input.github.listRepositoryEvents(repository, {
+    ifNoneMatch: requestPlan.ifNoneMatch,
+  });
 
   if (!eventsResult.ok) {
     return {
@@ -131,11 +143,23 @@ function planRepositoryCycle(input: Pick<DaemonInput, "once" | "github" | "local
     };
   }
 
+  if (eventsResult.value.status === "not-modified") {
+    return planUnchangedRepositoryEventPolling({
+      paths: input.localState?.getPaths?.(),
+      repository,
+      etag: eventsResult.value.etag,
+      pollIntervalSeconds: eventsResult.value.pollIntervalSeconds,
+      now: input.now?.(),
+    });
+  }
+
   return planRepositoryEventPolling({
     paths: input.localState?.getPaths?.(),
     repository,
-    events: eventsResult.value,
+    events: eventsResult.value.events,
     github: input.github,
+    etag: eventsResult.value.etag,
+    pollIntervalSeconds: eventsResult.value.pollIntervalSeconds,
     now: input.now?.(),
   });
 }
