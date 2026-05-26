@@ -132,10 +132,6 @@ export class GitResultHandler implements ResultHandler {
       };
     }
 
-    if (!input.config.pullRequests.create) {
-      throw new Error("Pull request creation is disabled by config.");
-    }
-
     this.git(input.run.worktreePath, ["add", "--all", "--", ".", ":(exclude).grovie"]);
     this.git(input.run.worktreePath, ["restore", "--staged", "--", ".grovie"], { allowFailure: true });
     this.git(input.run.worktreePath, [
@@ -162,7 +158,7 @@ export class GitResultHandler implements ResultHandler {
       }),
       head: input.run.branchName,
       base: input.issue.defaultBranch,
-      draft: input.config.pullRequests.draft,
+      draft: false,
     });
 
     if (!pullRequestResult.ok) {

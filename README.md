@@ -239,7 +239,7 @@ Use this checklist before trusting a new machine or repository:
 3. Run `grovie doctor` and confirm config, GitHub auth, and local agent runtime availability are green.
 4. Note the concrete agent id shown by `grovie doctor`, such as `coder@your-machine-id`.
 5. Run `grovie watch add owner/repo --label grovie` for repositories this machine should poll.
-6. Optionally edit the repository entry in `~/.grovie/config.yml` to set queue label, branch prefix, pull request behavior, or trusted authors.
+6. Optionally edit the repository entry in `~/.grovie/config.yml` to set queue label, branch prefix, or trusted authors.
 7. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
 8. Start the daemon with `grovie daemon start`.
 9. Run `grovie run owner/repo#123 --agent coder@your-machine-id` from any directory.

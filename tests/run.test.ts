@@ -972,13 +972,6 @@ function defaultConfig(): GrovieConfig {
     branches: {
       prefix: "grovie/",
     },
-    pullRequests: {
-      create: true,
-      draft: false,
-    },
-    comments: {
-      mode: "concise",
-    },
     safety: {
       allowDefaultBranchPush: false,
     },

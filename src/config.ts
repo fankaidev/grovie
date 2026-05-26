@@ -29,13 +29,6 @@ export const repositoryPolicySchema = z.strictObject({
   branches: z.strictObject({
     prefix: z.string().min(1, "must not be empty"),
   }),
-  pullRequests: z.strictObject({
-    create: z.boolean(),
-    draft: z.boolean(),
-  }),
-  comments: z.strictObject({
-    mode: z.literal("concise"),
-  }),
   trust: z.strictObject({
     trustedAuthors: z.array(z.string().min(1, "must not be empty")).default([]),
   }).optional(),
@@ -59,14 +52,12 @@ export const globalConfigSchema = z.strictObject({
     instructions: z.string().min(1, "must not be empty").optional(),
     model: z.string().min(1, "must not be empty").optional(),
     envKeys: z.array(z.string().min(1, "must not be empty")).default([]),
-  })).default([]),
+  })),
   watchedRepositories: z.array(z.strictObject({
     repository: repositoryNameSchema,
     label: z.string().min(1, "must not be empty").optional(),
     branches: repositoryPolicySchema.shape.branches.optional(),
-    pullRequests: repositoryPolicySchema.shape.pullRequests.optional(),
-    comments: repositoryPolicySchema.shape.comments.optional(),
-    trust: repositoryPolicySchema.shape.trust,
+    trust: repositoryPolicySchema.shape.trust.optional(),
   })),
   stateRepo: z.strictObject({
     enabled: z.boolean(),
@@ -153,8 +144,6 @@ export function resolveWatchedRepositoryConfig(watchedRepository: WatchedReposit
       label: watchedRepository?.label ?? defaults.queue.label,
     },
     branches: watchedRepository?.branches ?? defaults.branches,
-    pullRequests: watchedRepository?.pullRequests ?? defaults.pullRequests,
-    comments: watchedRepository?.comments ?? defaults.comments,
     ...(watchedRepository?.trust === undefined ? {} : { trust: watchedRepository.trust }),
   };
 }
@@ -265,13 +254,6 @@ export function defaultConfig(): GrovieConfig {
     },
     branches: {
       prefix: "grovie/",
-    },
-    pullRequests: {
-      create: true,
-      draft: false,
-    },
-    comments: {
-      mode: "concise",
     },
     safety: {
       allowDefaultBranchPush: false,
