@@ -14,6 +14,7 @@ export type IssueActivityTrigger = {
 };
 
 const GITHUB_COMMENT_UPDATE_SKEW_MS = 10_000;
+const AGENT_COMMENT_MARKER = "grovie:agent-comment";
 
 export function getIssueActivity(issue: GitHubIssue, relatedPullRequests: GitHubRelatedPullRequest[]): IssueActivity {
   const latestGrovieActivity = issue.comments
@@ -68,13 +69,72 @@ export function isGrovieActivityComment(body: string): boolean {
   return body.includes("<!-- grovie:claim ") || body.includes("<!-- grovie:run ") || body.includes("<!-- grovie:session ");
 }
 
+export function readVisibleAgentCommentAgentId(body: string): string | undefined {
+  const marker = new RegExp(`<!--\\s*${AGENT_COMMENT_MARKER}\\s+(?<json>\\{.*?\\})\\s*-->`).exec(body);
+  const json = marker?.groups?.json;
+
+  if (json === undefined) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(json) as { agentId?: unknown };
+    return typeof parsed.agentId === "string" && parsed.agentId.length > 0 ? parsed.agentId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function isVisibleAgentCommentFor(body: string, agentId: string): boolean {
+  return readVisibleAgentCommentAgentId(body) === agentId;
+}
+
+export function isOwnAgentOutputOnlyDelta(input: {
+  issue: GitHubIssue;
+  relatedPullRequests: GitHubRelatedPullRequest[];
+  agentId: string;
+  handledThrough: string;
+}): boolean {
+  const handledAt = Date.parse(input.handledThrough);
+
+  if (Number.isNaN(handledAt)) {
+    return false;
+  }
+
+  const recentEffectiveComments = input.issue.comments.filter((comment) =>
+    !isGrovieActivityComment(comment.body) && Date.parse(comment.updatedAt) > handledAt
+  );
+
+  if (recentEffectiveComments.length === 0) {
+    return false;
+  }
+
+  if (!recentEffectiveComments.every((comment) => isVisibleAgentCommentFor(comment.body, input.agentId))) {
+    return false;
+  }
+
+  if (input.relatedPullRequests.flatMap(getPullRequestActivityTimestamps).some((timestamp) => Date.parse(timestamp) > handledAt)) {
+    return false;
+  }
+
+  const latestOwnCommentAt = recentEffectiveComments
+    .map((comment) => comment.updatedAt)
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
+
+  return latestOwnCommentAt !== undefined && Date.parse(input.issue.updatedAt) <= Date.parse(latestOwnCommentAt);
+}
+
 function isAfterGrovieCommentUpdateWindow(issueUpdatedAt: string, latestGrovieActivity: string): boolean {
+  return isAfterCommentUpdateWindow(issueUpdatedAt, latestGrovieActivity);
+}
+
+function isAfterCommentUpdateWindow(issueUpdatedAt: string, commentUpdatedAt: string): boolean {
   const issueTimestamp = Date.parse(issueUpdatedAt);
-  const grovieTimestamp = Date.parse(latestGrovieActivity);
+  const commentTimestamp = Date.parse(commentUpdatedAt);
 
   return Number.isNaN(issueTimestamp) ||
-    Number.isNaN(grovieTimestamp) ||
-    issueTimestamp - grovieTimestamp > GITHUB_COMMENT_UPDATE_SKEW_MS;
+    Number.isNaN(commentTimestamp) ||
+    issueTimestamp - commentTimestamp > GITHUB_COMMENT_UPDATE_SKEW_MS;
 }
 
 function getIssueFingerprint(issue: GitHubIssue, relatedPullRequests: GitHubRelatedPullRequest[]): string {

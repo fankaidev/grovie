@@ -1,6 +1,6 @@
 import { formatIssueReference } from "../github.js";
 import { resolveLocalIdentity } from "../identity.js";
-import { inspectQueue, renderSkippedQueueSummary, selectNextRunnableCandidate, type IssueActivity } from "../queue.js";
+import { inspectQueue, renderSkippedQueueSummary, selectNextRunnableCandidate, type IssueActivity, type QueueInspectionResult } from "../queue.js";
 import { runIssueAsync } from "../run.js";
 import { recordActivity } from "./activity.js";
 import { runWithLocalExecutionLock } from "./issue-execution.js";
@@ -107,6 +107,8 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     };
   }
 
+  advanceSilentOwnOutputSkips(input, queueResult.value, now());
+
   const candidate = selectNextRunnableCandidate(queueResult.value);
 
   if (candidate !== undefined) {
@@ -161,6 +163,40 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       ...(skippedSummary === undefined ? [] : ["", skippedSummary]),
     ].join("\n"),
   };
+}
+
+function advanceSilentOwnOutputSkips(
+  input: DaemonInput,
+  results: QueueInspectionResult[],
+  now: Date,
+): void {
+  for (const candidate of results.flatMap((result) => result.candidates)) {
+    if (candidate.reason !== "only own agent output" || candidate.agentId === undefined) {
+      continue;
+    }
+
+    input.localState?.writeHandledCursor?.({
+      repository: candidate.repository,
+      issueNumber: candidate.issueReference.number,
+      agentId: candidate.agentId,
+      handledThrough: candidate.activity.timestamp,
+      issueFingerprint: candidate.activity.issueFingerprint,
+      now,
+    });
+
+    recordActivity(input, {
+      type: "queue.silent_skip",
+      message: `${formatIssueReference(candidate.issueReference)} skipped for ${candidate.agentId}: only own agent output since last cursor.`,
+      repository: candidate.repository,
+      issueNumber: candidate.issueReference.number,
+      agentId: candidate.agentId,
+      data: {
+        reason: candidate.reason,
+        handledThrough: candidate.activity.timestamp,
+        issueFingerprint: candidate.activity.issueFingerprint,
+      },
+    });
+  }
 }
 
 function resolveTrustedIssueAuthors(input: Pick<DaemonInput, "config" | "github">): { ok: true; value: string[] } | { ok: false; message: string } {
