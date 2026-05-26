@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe("repository event polling", () => {
-  it("[UC-WORKER-04-S15] initializes repository event polling with a full scan", () => {
+  it("[UC-DAEMON-02-S15] initializes repository event polling with a full scan", () => {
     const paths = resolvePaths({ root: createTmpDir() });
 
     expect(planRepositoryEventPolling({
@@ -32,7 +32,7 @@ describe("repository event polling", () => {
     });
   });
 
-  it("[UC-WORKER-04-S15] initializes empty repository event polling with a full scan", () => {
+  it("[UC-DAEMON-02-S15] initializes empty repository event polling with a full scan", () => {
     const paths = resolvePaths({ root: createTmpDir() });
 
     expect(planRepositoryEventPolling({
@@ -48,7 +48,7 @@ describe("repository event polling", () => {
     });
   });
 
-  it("[UC-WORKER-04-S15] skips queue inspection when repository events have not changed", () => {
+  it("[UC-DAEMON-02-S15] skips queue inspection when repository events have not changed", () => {
     const paths = resolvePaths({ root: createTmpDir() });
     planRepositoryEventPolling({
       paths,
@@ -71,7 +71,7 @@ describe("repository event polling", () => {
     });
   });
 
-  it("[UC-WORKER-04-S15] filters queue inspection to issues affected by new issue events", () => {
+  it("[UC-DAEMON-02-S15] filters queue inspection to issues affected by new issue events", () => {
     const paths = resolvePaths({ root: createTmpDir() });
     planRepositoryEventPolling({
       paths,
@@ -102,7 +102,7 @@ describe("repository event polling", () => {
     });
   });
 
-  it("[UC-WORKER-04-S15] resolves pull request events through GitHub and caches PR issue links", () => {
+  it("[UC-DAEMON-02-S15] resolves pull request events through GitHub and caches PR issue links", () => {
     const paths = resolvePaths({ root: createTmpDir() });
     const links: Array<{ pullRequestNumber: number; issueNumber: number; source: "closing-reference" | "body" | "branch" }> = [
       { pullRequestNumber: 127, issueNumber: 124, source: "closing-reference" },
@@ -161,7 +161,7 @@ describe("repository event polling", () => {
     expect(github.calls).toEqual([127, 127]);
   });
 
-  it("[UC-WORKER-04-S15] falls back to a full scan when the events cursor is outside the returned window", () => {
+  it("[UC-DAEMON-02-S15] falls back to a full scan when the events cursor is outside the returned window", () => {
     const paths = resolvePaths({ root: createTmpDir() });
     planRepositoryEventPolling({
       paths,
@@ -183,7 +183,7 @@ describe("repository event polling", () => {
     });
   });
 
-  it("[UC-WORKER-04-S15] periodically falls back to a full scan even when events do not change", () => {
+  it("[UC-DAEMON-02-S15] periodically falls back to a full scan even when events do not change", () => {
     const paths = resolvePaths({ root: createTmpDir() });
     planRepositoryEventPolling({
       paths,

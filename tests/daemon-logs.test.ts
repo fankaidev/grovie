@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("daemon logs", () => {
-  it("[UC-WORKER-06-S05] reads recent daemon stdout and stderr from the daemon directory", () => {
+  it("[UC-DAEMON-04-S05] reads recent daemon stdout and stderr from the daemon directory", () => {
     const root = createTmpDir();
     writeDaemonLogs(root, {
       stdout: "stdout-1\nstdout-2\nstdout-3\n",
@@ -39,7 +39,7 @@ describe("daemon logs", () => {
     });
   });
 
-  it("[UC-WORKER-06-S06] selects stdout without reading stderr or run logs", () => {
+  it("[UC-DAEMON-04-S06] selects stdout without reading stderr or run logs", () => {
     const root = createTmpDir();
     writeDaemonLogs(root, {
       stdout: "daemon stdout\n",
@@ -64,7 +64,7 @@ describe("daemon logs", () => {
     expect(result.output).not.toContain("run stdout");
   });
 
-  it("[UC-WORKER-06-S07] reports a clear error when daemon logs are unavailable", () => {
+  it("[UC-DAEMON-04-S07] reports a clear error when daemon logs are unavailable", () => {
     const root = createTmpDir();
 
     expect(readDaemonLogs({ root })).toEqual({
@@ -73,7 +73,7 @@ describe("daemon logs", () => {
     });
   });
 
-  it("[UC-WORKER-06-S07] builds a follow command for the selected daemon stream", () => {
+  it("[UC-DAEMON-04-S07] builds a follow command for the selected daemon stream", () => {
     const root = createTmpDir();
 
     expect(buildTailDaemonLogsArgs({

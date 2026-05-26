@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe("CodexRuntime", () => {
-  it("[UC-EXECUTION-03-S01] checks Codex CLI availability", () => {
+  it("[UC-RUN-03-S01] checks Codex CLI availability", () => {
     const runtime = new CodexRuntime(
       new FakeRunner([
         {
@@ -33,7 +33,7 @@ describe("CodexRuntime", () => {
     });
   });
 
-  it("[UC-EXECUTION-03-S02] reports unavailable Codex CLI", () => {
+  it("[UC-RUN-03-S02] reports unavailable Codex CLI", () => {
     const runtime = new CodexRuntime(
       new FakeRunner([
         {
@@ -51,7 +51,7 @@ describe("CodexRuntime", () => {
     });
   });
 
-  it("[UC-EXECUTION-03-S03] builds a prompt from trusted task context and issue content", () => {
+  it("[UC-RUN-03-S03] builds a prompt from trusted task context and issue content", () => {
     const prompt = buildCodexPrompt({
       issue: fakeIssue(),
       run: fakeRun(createTmpDir()),
@@ -72,7 +72,7 @@ describe("CodexRuntime", () => {
     expect(prompt).toContain("Please keep it small.");
   });
 
-  it("[UC-EXECUTION-03-S10] builds a runtime environment from baseline keys and configured env keys only", () => {
+  it("[UC-RUN-03-S10] builds a runtime environment from baseline keys and configured env keys only", () => {
     const env = buildRuntimeEnvironment(["OPENAI_API_KEY"], {
       PATH: "/usr/local/bin:/usr/bin",
       HOME: "/home/runner",
@@ -94,7 +94,7 @@ describe("CodexRuntime", () => {
     expect(env).not.toHaveProperty("GITHUB_TOKEN");
   });
 
-  it("[UC-EXECUTION-03-S03] runs Codex in the prepared worktree and writes handoff files plus logs", () => {
+  it("[UC-RUN-03-S03] runs Codex in the prepared worktree and writes handoff files plus logs", () => {
     const root = createTmpDir();
     const run = fakeRun(root);
     const runner = new FakeRunner([
@@ -139,7 +139,7 @@ describe("CodexRuntime", () => {
     expect(runner.calls[0]?.input).toContain(".grovie/task.json");
   });
 
-  it("[UC-EXECUTION-03-S10] passes only configured env keys to the runtime process", () => {
+  it("[UC-RUN-03-S10] passes only configured env keys to the runtime process", () => {
     const root = createTmpDir();
     const run = fakeRun(root);
     const runner = new FakeRunner([
@@ -171,7 +171,7 @@ describe("CodexRuntime", () => {
     expect(runner.calls[0]?.options?.env).not.toHaveProperty("GITHUB_TOKEN");
   });
 
-  it("[UC-EXECUTION-03-S07] stores and uses Codex runtime session refs for resume runs", () => {
+  it("[UC-RUN-03-S07] stores and uses Codex runtime session refs for resume runs", () => {
     const root = createTmpDir();
     const firstRun = fakeRun(root);
     const runner = new FakeRunner([
@@ -233,7 +233,7 @@ describe("CodexRuntime", () => {
     expect(readFileSync(join(resumeRun.runDir, "metadata.json"), "utf8")).toContain("codex-thread-1");
   });
 
-  it("[UC-EXECUTION-03-S06] returns a clear failure while preserving stdout and stderr logs", () => {
+  it("[UC-RUN-03-S06] returns a clear failure while preserving stdout and stderr logs", () => {
     const root = createTmpDir();
     const run = fakeRun(root);
     const runtime = new CodexRuntime(
@@ -267,7 +267,7 @@ describe("CodexRuntime", () => {
     expect(readFileSync(run.eventsPath, "utf8")).toContain('"exitCode":2');
   });
 
-  it("[UC-EXECUTION-03-S04] streams stdout and stderr to log files before the Codex process exits", async () => {
+  it("[UC-RUN-03-S04] streams stdout and stderr to log files before the Codex process exits", async () => {
     const root = createTmpDir();
     const binDir = join(root, "bin");
     const oldPath = process.env.PATH;
@@ -331,7 +331,7 @@ describe("CodexRuntime", () => {
     }
   });
 
-  it("[UC-EXECUTION-03-S05] terminates a monitored Codex process when cancellation is requested", async () => {
+  it("[UC-RUN-03-S05] terminates a monitored Codex process when cancellation is requested", async () => {
     const root = createTmpDir();
     const binDir = join(root, "bin");
     const oldPath = process.env.PATH;
@@ -375,7 +375,7 @@ describe("CodexRuntime", () => {
 });
 
 describe("additional local runtimes", () => {
-  it("[UC-EXECUTION-06-S01] checks Claude Code CLI availability", () => {
+  it("[UC-RUN-06-S01] checks Claude Code CLI availability", () => {
     const runtime = new ClaudeCodeRuntime(
       new FakeRunner([
         {
@@ -393,7 +393,7 @@ describe("additional local runtimes", () => {
     });
   });
 
-  it("[UC-EXECUTION-06-S02] starts Claude Code through the runtime boundary", () => {
+  it("[UC-RUN-06-S02] starts Claude Code through the runtime boundary", () => {
     const root = createTmpDir();
     const run = fakeRun(root);
     const runner = new FakeRunner([
@@ -428,7 +428,7 @@ describe("additional local runtimes", () => {
     });
   });
 
-  it("[UC-EXECUTION-06-S05] resumes Claude Code from a persisted runtime session ref", () => {
+  it("[UC-RUN-06-S05] resumes Claude Code from a persisted runtime session ref", () => {
     const root = createTmpDir();
     const run = fakeRun(root, "fankaidev-grovie-issue-6-resume");
     writeFileSync(
@@ -471,7 +471,7 @@ describe("additional local runtimes", () => {
     expect(readFileSync(join(run.runDir, "metadata.json"), "utf8")).toContain("claude-session-1");
   });
 
-  it("[UC-EXECUTION-06-S01] checks Pi CLI availability", () => {
+  it("[UC-RUN-06-S01] checks Pi CLI availability", () => {
     const runtime = new PiRuntime(
       new FakeRunner([
         {
@@ -489,7 +489,7 @@ describe("additional local runtimes", () => {
     });
   });
 
-  it("[UC-EXECUTION-06-S05] resumes Pi from a persisted runtime session ref", () => {
+  it("[UC-RUN-06-S05] resumes Pi from a persisted runtime session ref", () => {
     const root = createTmpDir();
     const run = fakeRun(root, "fankaidev-grovie-issue-6-pi-resume");
     writeFileSync(
@@ -534,7 +534,7 @@ describe("additional local runtimes", () => {
     });
   });
 
-  it("[UC-EXECUTION-06-S03] cancels Pi through the runtime monitor", async () => {
+  it("[UC-RUN-06-S03] cancels Pi through the runtime monitor", async () => {
     const root = createTmpDir();
     const binDir = join(root, "bin");
     const oldPath = process.env.PATH;

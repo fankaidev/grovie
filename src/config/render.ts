@@ -11,7 +11,7 @@ export function renderGlobalConfig(config: GlobalGrovieConfig): string {
     },
   });
 
-  return `# Grovie global worker configuration.
+  return `# Grovie global configuration.
 # This file schedules repositories for the local daemon. It is not a security allowlist.
 ${renderedConfig.replace(/^stateRepo:/m, [
     "# Optional state repo sync is for observability and recovery only.",
