@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -122,6 +123,10 @@ function createVerificationRun(agent: AgentMetadata): PreparedRun {
   mkdirSync(runDir, { recursive: true });
   mkdirSync(sessionDir, { recursive: true });
   mkdirSync(worktreePath, { recursive: true });
+  execFileSync("git", ["init"], {
+    cwd: worktreePath,
+    stdio: "ignore",
+  });
 
   const taskPath = join(runDir, "task.json");
   const promptPath = join(runDir, "prompt.md");
