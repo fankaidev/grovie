@@ -253,7 +253,7 @@ Use this checklist before trusting a new machine or repository:
 
 ## Isolated Smoke Validation
 
-For end-to-end smoke tests, run Grovie with a temporary `HOME` so daemon state, locks, run files, worktrees, and logs stay separate from your normal `~/.grovie` daemon. Reuse real GitHub authentication through `GH_CONFIG_DIR` when the test should create issues or comments, and put a fake agent CLI earlier in `PATH` when you only need to validate the Grovie CLI, daemon, GitHub, worktree, and result-comment flow without asking a real model to edit code. If the temporary home needs to clone private repositories, configure git in that home to use `gh auth git-credential`. This validates Grovie orchestration, not real agent reasoning or code-generation quality.
+For end-to-end smoke tests, run Grovie with a temporary `HOME` so daemon state, locks, request files, repository cache, run files, worktrees, and logs stay separate from your normal `~/.grovie` daemon. Reuse real GitHub authentication through `GH_CONFIG_DIR` when the test should create issues or comments, and put a fake agent CLI earlier in `PATH` when you only need to validate the Grovie CLI, daemon, GitHub, worktree, and result-comment flow without asking a real model to edit code. If the temporary home needs to clone private repositories, configure git in that home to use `gh auth git-credential`. This validates Grovie orchestration, not real agent reasoning or code-generation quality.
 
 ## Contributing
 
