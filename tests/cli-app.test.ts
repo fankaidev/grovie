@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -307,6 +308,44 @@ describe("CLI command registration", () => {
     await expect(runCliAsync(["admin", "serve"], { localState })).resolves.toEqual({
       exitCode: 1,
       stderr: "Admin console is disabled. Set adminConsole.enabled: true in the global config.",
+    });
+  });
+
+  it("[UC-ADMIN-01-S05] serves the admin console at the configured host", async () => {
+    const localState = new FakeLocalState(createTmpDir());
+    saveGlobalConfig(localState.paths.root, {
+      version: 1,
+      agents: [],
+      watchedRepositories: [],
+      adminConsole: {
+        enabled: true,
+        host: "localhost",
+        port: 9876,
+      },
+    });
+
+    await expect(runCliAsync(["admin", "serve"], {
+      localState,
+      adminConsoleStarter: async ({ config, server }) => {
+        expect(config).toEqual({
+          enabled: true,
+          host: "localhost",
+          port: 9876,
+        });
+        expect(server).toBeDefined();
+
+        return {
+          server: createServer(),
+          url: "http://localhost:9876",
+        };
+      },
+    })).resolves.toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie admin serve",
+        "",
+        "Admin console listening at http://localhost:9876.",
+      ].join("\n"),
     });
   });
 
