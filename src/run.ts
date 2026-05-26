@@ -23,6 +23,7 @@ export function runIssue(input: RunIssueInput): RunIssueResult {
     runtimeResult: prepared.runtime.run({
       run: prepared.run,
       issue: prepared.issue,
+      model: input.agentModel,
       envKeys: input.agentEnvKeys,
     }),
   });
@@ -40,12 +41,14 @@ export async function runIssueAsync(input: RunIssueAsyncInput): Promise<RunIssue
       ? prepared.runtime.run({
         run: prepared.run,
         issue: prepared.issue,
+        model: input.agentModel,
         envKeys: input.agentEnvKeys,
         monitor: mergeCancellationMonitor(prepared.localState, prepared.run, input.stateRepo, input.monitor),
       })
     : await prepared.runtime.runAsync({
         run: prepared.run,
         issue: prepared.issue,
+        model: input.agentModel,
         envKeys: input.agentEnvKeys,
         monitor: mergeCancellationMonitor(prepared.localState, prepared.run, input.stateRepo, input.monitor),
       });

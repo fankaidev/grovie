@@ -93,6 +93,38 @@ describe("runIssue", () => {
     ]);
   });
 
+  it("[UC-RUN-02-S11] passes the configured agent model to the runtime", () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      agent: "codex",
+      agentModel: "gpt-5",
+      github,
+      localState,
+      runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "no-changes",
+        status: "",
+        validationSummary: "No validation output captured.",
+      }),
+    });
+
+    expect(runtime.runInput?.model).toBe("gpt-5");
+  });
+
   it("[UC-GITHUB-01-S03] includes state repo sync paths in the issue summary comment", () => {
     const root = mkdtempSync(join(tmpdir(), "grovie-run-"));
     const github = new FakeGitHub();

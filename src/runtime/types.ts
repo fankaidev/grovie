@@ -25,6 +25,7 @@ export type AgentRuntime = {
 export type AgentRunInput = {
   run: PreparedRun;
   issue: GitHubIssue;
+  model?: string;
   envKeys?: string[];
   monitor?: RuntimeMonitor;
 };

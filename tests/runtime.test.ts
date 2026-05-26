@@ -171,6 +171,40 @@ describe("CodexRuntime", () => {
     expect(runner.calls[0]?.options?.env).not.toHaveProperty("GITHUB_TOKEN");
   });
 
+  it("[UC-RUN-02-S11] passes a configured model to Codex", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root);
+    const runner = new FakeRunner([
+      {
+        stdout: "done\n",
+      },
+    ]);
+    const runtime = new CodexRuntime(runner);
+
+    runtime.run({
+      run,
+      issue: fakeIssue(),
+      model: "gpt-5",
+    });
+
+    expect(runner.calls[0]).toMatchObject({
+      command: "codex",
+      args: [
+        "--ask-for-approval",
+        "never",
+        "exec",
+        "--model",
+        "gpt-5",
+        "--json",
+        "--cd",
+        run.worktreePath,
+        "--sandbox",
+        "danger-full-access",
+        "-",
+      ],
+    });
+  });
+
   it("[UC-RUN-02-S07] stores and uses Codex runtime session refs for resume runs", () => {
     const root = createTmpDir();
     const firstRun = fakeRun(root);
@@ -428,6 +462,24 @@ describe("additional local runtimes", () => {
     });
   });
 
+  it("[UC-RUN-04-S06] passes a configured model to Claude Code", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root);
+    const runner = new FakeRunner([{ stdout: "done\n" }]);
+    const runtime = new ClaudeCodeRuntime(runner);
+
+    runtime.run({
+      run,
+      issue: fakeIssue(),
+      model: "sonnet",
+    });
+
+    expect(runner.calls[0]).toMatchObject({
+      command: "claude",
+      args: ["--permission-mode", "bypassPermissions", "--model", "sonnet", "--print"],
+    });
+  });
+
   it("[UC-RUN-04-S05] resumes Claude Code from a persisted runtime session ref", () => {
     const root = createTmpDir();
     const run = fakeRun(root, "fankaidev-grovie-issue-6-resume");
@@ -531,6 +583,24 @@ describe("additional local runtimes", () => {
     expect(runner.calls[0]).toMatchObject({
       command: "pi",
       args: ["resume", "pi-session-1", "-"],
+    });
+  });
+
+  it("[UC-RUN-04-S06] passes a configured model to Pi", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root);
+    const runner = new FakeRunner([{ stdout: "done\n" }]);
+    const runtime = new PiRuntime(runner);
+
+    runtime.run({
+      run,
+      issue: fakeIssue(),
+      model: "openai/gpt-5:high",
+    });
+
+    expect(runner.calls[0]).toMatchObject({
+      command: "pi",
+      args: ["--model", "openai/gpt-5:high", "-"],
     });
   });
 

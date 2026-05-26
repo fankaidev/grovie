@@ -19,6 +19,7 @@ export type RunIssueInput = {
   stateRepo?: StateRepoConfig;
   agentId?: string;
   agentInstructions?: string;
+  agentModel?: string;
   agentEnvKeys?: string[];
   runRequest?: {
     sourceRunId?: string;

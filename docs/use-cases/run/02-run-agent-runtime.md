@@ -10,6 +10,7 @@
 | R2 | Local stdout and stderr logs are raw execution logs. |
 | R3 | Configured local agent instructions are trusted local context and are included in the runtime handoff separately from GitHub issue content. |
 | R4 | Runtime child processes receive only a small baseline environment plus variables explicitly named by the configured agent `envKeys` allowlist. |
+| R5 | A configured local agent `model`, when present, selects the primary model for that runtime invocation. |
 
 ## Scenarios
 
@@ -25,3 +26,4 @@
 | UC-RUN-02-S08 | P1 | A run for a configured local agent includes that agent's custom instructions in the generated prompt and task handoff. |
 | UC-RUN-02-S09 | P1 | A run handoff includes trigger context with source, activity timestamp, activity fingerprint, previous handled cursor when available, and daemon trigger metadata when applicable. |
 | UC-RUN-02-S10 | P1 | A run for a configured local agent passes only baseline environment variables and that agent's configured `envKeys` values to the runtime child process. |
+| UC-RUN-02-S11 | P1 | A run for a configured local agent passes that agent's configured primary `model` to the runtime child process. |

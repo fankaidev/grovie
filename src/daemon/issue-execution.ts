@@ -171,6 +171,7 @@ export async function runWithLocalExecutionLock(input: DaemonInput & {
       agent: runtimeName,
       agentId: input.workerId,
       agentInstructions: agent?.instructions,
+      agentModel: agent?.model,
       agentEnvKeys: agent?.envKeys,
       github: input.github,
       runtime: input.runtime ?? createRuntime(runtimeName),
