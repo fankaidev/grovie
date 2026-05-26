@@ -121,7 +121,7 @@ export function isOwnAgentOutputOnlyDelta(input: {
     .map((comment) => comment.updatedAt)
     .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
 
-  return latestOwnCommentAt !== undefined && !isAfterCommentUpdateWindow(input.issue.updatedAt, latestOwnCommentAt);
+  return latestOwnCommentAt !== undefined && Date.parse(input.issue.updatedAt) <= Date.parse(latestOwnCommentAt);
 }
 
 function isAfterGrovieCommentUpdateWindow(issueUpdatedAt: string, latestGrovieActivity: string): boolean {

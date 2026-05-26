@@ -1839,6 +1839,58 @@ describe("runDaemonCycle", () => {
     expect(runs[0]?.agentId).toBe(agentId);
   });
 
+  it("[UC-DAEMON-02-S19] runs when issue metadata changed after own agent output", async () => {
+    const machineId = resolveMachineId(hostname());
+    const agentId = `default@${machineId}`;
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    localState.writeHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId,
+      handledThrough: "2026-05-22T00:00:01.000Z",
+      now: NOW,
+    });
+    const github = new FakeGitHub([
+      fakeIssue({
+        updatedAt: "2026-05-22T00:00:03.000Z",
+        body: "Updated issue body after the agent comment.",
+        comments: [
+          fakeComment({
+            id: 10,
+            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n- Agent: \`${agentId}\`\n\n1`,
+            updatedAt: "2026-05-22T00:00:02.000Z",
+          }),
+        ],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran issue metadata update",
+        };
+      },
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran issue metadata update",
+    });
+    expect(runs).toHaveLength(1);
+  });
+
   it("[UC-DAEMON-02-S03] updates the handled cursor after terminal run completion", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
