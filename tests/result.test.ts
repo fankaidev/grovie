@@ -14,6 +14,7 @@ import type {
   IssueReference,
 } from "../src/github.js";
 import type { PreparedRun } from "../src/local-state.js";
+import { getIssueCommentArtifactPath, getResultArtifactPath } from "../src/run-artifacts.js";
 import { GitResultHandler } from "../src/result.js";
 import type { RuntimeExecution } from "../src/runtime.js";
 
@@ -45,6 +46,37 @@ describe("GitResultHandler", () => {
     expect(runner.calls.map((call) => call.args)).toEqual([
       ["status", "--short", "--", ".", ":(exclude).grovie"],
     ]);
+    expect(github.pullRequests).toHaveLength(0);
+  });
+
+  it("[UC-RUN-03-S12] rejects a tool write failure that produced no explicit result artifact", () => {
+    const run = fakeFileBackedRun((preparedRun) => {
+      writeFileSync(
+        preparedRun.stderrPath,
+        "ERROR codex_core::tools::router: error=patch rejected: writing outside of the project; rejected by user approval settings\n",
+        "utf8",
+      );
+    });
+    const runner = new FakeRunner([
+      {
+        stdout: "",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    expect(() =>
+      handler.handle({
+        run,
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/home/user/.grovie/config.yml",
+        repository: "fankaidev/grovie",
+        runtime: "codex",
+        execution: fakeExecution(),
+      }),
+    ).toThrow("Runtime reported a tool write rejection outside the project and produced no result artifact.");
+    expect(github.comments).toHaveLength(0);
     expect(github.pullRequests).toHaveLength(0);
   });
 
@@ -201,7 +233,7 @@ describe("GitResultHandler", () => {
           body: "stale result",
         },
       }, null, 2)}\n`, "utf8");
-      writeFileSync(join(preparedRun.runDir, "result.json"), `${JSON.stringify({
+      writeFileSync(getResultArtifactPath(preparedRun), `${JSON.stringify({
         schemaVersion: 1,
         action: "no-op",
         reason: "The current run intentionally produced no comment.",
@@ -539,28 +571,38 @@ function fakeRun(): PreparedRun {
 
 function fakeRunWithIssueComment(comment: string): PreparedRun {
   return fakeFileBackedRun((run) => {
-    writeFileSync(join(run.runDir, "issue-comment.md"), `${comment}\n`, "utf8");
+    writeFileSync(getIssueCommentArtifactPath(run), `${comment}\n`, "utf8");
   });
 }
 
 function fakeRunWithResult(result: Record<string, unknown>): PreparedRun {
   return fakeFileBackedRun((run) => {
-    writeFileSync(join(run.runDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    writeFileSync(getResultArtifactPath(run), `${JSON.stringify(result, null, 2)}\n`, "utf8");
   });
 }
 
 function fakeFileBackedRun(writeArtifacts: (run: PreparedRun) => void): PreparedRun {
   const root = mkdtempSync(join(tmpdir(), "grovie-result-"));
+  const runId = "fankaidev-grovie-issue-9";
+  const runDir = join(root, "runs", runId);
   const run = {
     ...fakeRun(),
     sessionDir: join(root, "sessions", "fankaidev-grovie-issue-9-codex"),
     repositoryCachePath: join(root, "repos", "fankaidev-grovie.git"),
     worktreePath: join(root, "worktrees", "fankaidev-grovie-issue-9"),
-    runDir: join(root, "runs", "fankaidev-grovie-issue-9"),
+    runDir,
+    taskPath: join(runDir, "task.json"),
+    promptPath: join(runDir, "prompt.md"),
+    eventsPath: join(runDir, "events.jsonl"),
+    stdoutPath: join(runDir, "stdout.log"),
+    stderrPath: join(runDir, "stderr.log"),
   };
 
   mkdirSync(join(run.worktreePath, ".grovie"), { recursive: true });
+  mkdirSync(join(run.worktreePath, ".grovie", "runs", run.runId), { recursive: true });
   mkdirSync(run.runDir, { recursive: true });
+  writeFileSync(run.stdoutPath, "", "utf8");
+  writeFileSync(run.stderrPath, "", "utf8");
   writeArtifacts(run);
   return run;
 }

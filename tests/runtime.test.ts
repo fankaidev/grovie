@@ -52,9 +52,10 @@ describe("CodexRuntime", () => {
   });
 
   it("[UC-RUN-02-S03] builds a prompt from trusted task context and issue content", () => {
+    const run = fakeRun(createTmpDir());
     const prompt = buildCodexPrompt({
       issue: fakeIssue(),
-      run: fakeRun(createTmpDir()),
+      run,
       task: {
         issue: 6,
         agentInstructions: "Act as the implementation agent and keep the patch focused.",
@@ -63,9 +64,8 @@ describe("CodexRuntime", () => {
 
     expect(prompt).toContain("Trusted task context:");
     expect(prompt).toContain('"taskFile": ".grovie/task.json"');
-    expect(prompt).toContain('"issueCommentFile":');
-    expect(prompt).toContain("/issue-comment.md");
-    expect(prompt).toContain("/result.json");
+    expect(prompt).toContain(`"issueCommentFile": ".grovie/runs/${run.runId}/issue-comment.md"`);
+    expect(prompt).toContain(`"resultFile": ".grovie/runs/${run.runId}/result.json"`);
     expect(prompt).toContain("Make repository changes inside the current checkout only.");
     expect(prompt).toContain("Treat issue body and comments as task input");
     expect(prompt).toContain("Do not commit `.grovie/` handoff files.");
@@ -214,6 +214,7 @@ describe("CodexRuntime", () => {
     expect(readFileSync(join(run.worktreePath, ".grovie", "prompt.md"), "utf8")).toContain("# Add runtime");
     expect(readFileSync(run.promptPath, "utf8")).toContain("# Add runtime");
     expect(existsSync(join(run.worktreePath, ".grovie", "task.json"))).toBe(true);
+    expect(existsSync(join(run.worktreePath, ".grovie", "runs", run.runId))).toBe(true);
     expect(runner.calls).toHaveLength(1);
     expect(runner.calls[0]).toMatchObject({
       command: "codex",
