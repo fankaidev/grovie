@@ -1,4 +1,4 @@
-import type { AgentHealth } from "../agent-health.js";
+import type { AgentHealth, AgentVerificationResult } from "../agent-health.js";
 import { getAssignedAgentIds, parseAgentId } from "../assignment.js";
 import type { GrovieConfig } from "../config.js";
 import { formatIssueReference, type GitHubGateway, parseIssueReference } from "../github.js";
@@ -47,7 +47,7 @@ export function startDaemonProcess(args: string[], context: CliContext): CliResu
 export function renderRuntimeHealth(runtimes: RuntimeAvailability[]): string[] {
   return [
     "Runtimes:",
-    ...runtimes.map((runtime) => `- ${runtime.runtime} command=${runtime.command}: ${runtime.message}`),
+    ...runtimes.map((runtime) => `- ${runtime.runtime} command=${runtime.command}: ${renderCliAvailabilityMessage(runtime)}`),
   ];
 }
 
@@ -58,7 +58,7 @@ export function renderConfiguredAgents(agents: AgentHealth[]): string[] {
 
   return [
     "Configured agents:",
-    ...agents.map((agent) => `- ${agent.agentId} (${agent.runtime}, command=${agent.availability.command}): ${agent.availability.message}`),
+    ...agents.map((agent) => `- ${agent.agentId} (${agent.runtime}, command=${agent.availability.command}): ${renderCliAvailabilityMessage(agent.availability)}`),
   ];
 }
 
@@ -67,6 +67,39 @@ export function renderUnavailableAgents(unavailableAgents: AgentHealth[]): strin
     "Unavailable configured agents:",
     ...unavailableAgents.map((agent) => `- ${agent.agentId}: ${agent.availability.message}`),
   ].join("\n");
+}
+
+export function renderAgentVerificationResults(results: AgentVerificationResult[]): string[] {
+  if (results.length === 0) {
+    return ["Agent execution verification: no configured agents"];
+  }
+
+  return [
+    "Agent execution verification:",
+    "This check runs real agent invocations and may use network access or provider credits.",
+    ...results.map((result) => [
+      `- ${result.agent.agentId} (${result.agent.runtime}${result.agent.model === undefined ? "" : `, model=${result.agent.model}`}): ${result.ok ? "verified" : `failed: ${result.message}`}`,
+      `  command: ${formatCommandShape(result.command)}`,
+      `  envKeys: ${result.agent.envKeys.length === 0 ? "none" : result.agent.envKeys.join(", ")}`,
+    ].join("\n")),
+  ];
+}
+
+export function renderFailedAgentVerifications(results: AgentVerificationResult[]): string {
+  return [
+    "Failed configured agent verifications:",
+    ...results.filter((result) => !result.ok).map((result) => `- ${result.agent.agentId}: ${result.message}`),
+  ].join("\n");
+}
+
+function renderCliAvailabilityMessage(runtime: RuntimeAvailability): string {
+  return runtime.available && runtime.message.startsWith("available")
+    ? `CLI ${runtime.message}`
+    : runtime.message;
+}
+
+function formatCommandShape(command: string[]): string {
+  return command.map((part) => JSON.stringify(part)).join(" ");
 }
 
 export function formatIssueRepository(reference: { owner: string; repo: string }): string {

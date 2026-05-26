@@ -143,15 +143,16 @@ describe("CLI command registration", () => {
       exitCode: 0,
       stdout: [
         "grovie doctor",
+        "Mode: fast local check. Agent execution is not verified; run `grovie doctor --verify-agents` for deep checks.",
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Machine id: ${machineId}`,
         "Runtimes:",
-        "- codex command=codex: available (codex-cli 0.133.0)",
-        "- claude-code command=claude: available (2.1.142 (Claude Code))",
+        "- codex command=codex: CLI available (codex-cli 0.133.0)",
+        "- claude-code command=claude: CLI available (2.1.142 (Claude Code))",
         "- pi command=pi: pi command not found",
         "Configured agents:",
-        `- coder@${machineId} (codex, command=codex): available (codex-cli 0.133.0)`,
+        `- coder@${machineId} (codex, command=codex): CLI available (codex-cli 0.133.0)`,
         "GitHub: authenticated as fankaidev.",
       ].join("\n"),
     });
@@ -183,15 +184,16 @@ describe("CLI command registration", () => {
       exitCode: 1,
       stdout: [
         "grovie doctor",
+        "Mode: fast local check. Agent execution is not verified; run `grovie doctor --verify-agents` for deep checks.",
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Machine id: ${machineId}`,
         "Runtimes:",
-        "- codex command=codex: available (codex-cli 0.133.0)",
-        "- claude-code command=claude: available (2.1.142 (Claude Code))",
+        "- codex command=codex: CLI available (codex-cli 0.133.0)",
+        "- claude-code command=claude: CLI available (2.1.142 (Claude Code))",
         "- pi command=pi: pi command not found",
         "Configured agents:",
-        `- codex@${machineId} (codex, command=codex): available (codex-cli 0.133.0)`,
+        `- codex@${machineId} (codex, command=codex): CLI available (codex-cli 0.133.0)`,
         `- pi@${machineId} (pi, command=pi): pi command not found`,
         "GitHub: authenticated as fankaidev.",
       ].join("\n"),
@@ -200,6 +202,107 @@ describe("CLI command registration", () => {
         `- pi@${machineId}: pi command not found`,
       ].join("\n"),
     });
+  });
+
+  it("[UC-AGENT-01-S07] verifies configured agent execution through doctor on request", () => {
+    const cwd = createTmpDir();
+    runCli(["init"], { cwd });
+
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const machineId = resolveMachineId(hostname());
+    saveGlobalConfig(globalRoot, {
+      version: 1,
+      agents: [
+        { name: "coder", runtime: "codex", model: "gpt-5", envKeys: ["OPENAI_API_KEY"] },
+      ],
+      watchedRepositories: [],
+      adminConsole: { enabled: false },
+    });
+    const verifiedAgents: string[] = [];
+
+    expect(runCli(["doctor", "--verify-agents"], {
+      cwd,
+      github: fakeGitHubGateway(),
+      localState,
+      runtimeAvailabilityChecker: fakeRuntimeAvailability,
+      agentVerifier: (agent) => {
+        verifiedAgents.push(agent.agentId);
+        return {
+          agent,
+          ok: true,
+          command: ["codex", "exec", "--model", agent.model ?? "", "-"],
+          stdout: "GROVIE_AGENT_OK\n",
+          stderr: "",
+          message: "verified",
+        };
+      },
+    })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie doctor",
+        "Mode: deep configured-agent verification. This may call remote model providers and consume credits.",
+        "",
+        `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
+        `Machine id: ${machineId}`,
+        "Runtimes:",
+        "- codex command=codex: CLI available (codex-cli 0.133.0)",
+        "- claude-code command=claude: CLI available (2.1.142 (Claude Code))",
+        "- pi command=pi: pi command not found",
+        "Configured agents:",
+        `- coder@${machineId} (codex, command=codex): CLI available (codex-cli 0.133.0)`,
+        "GitHub: authenticated as fankaidev.",
+        "Agent execution verification:",
+        "This check runs real agent invocations and may use network access or provider credits.",
+        `- coder@${machineId} (codex, model=gpt-5): verified`,
+        "  command: \"codex\" \"exec\" \"--model\" \"gpt-5\" \"-\"",
+        "  envKeys: OPENAI_API_KEY",
+      ].join("\n"),
+    });
+    expect(verifiedAgents).toEqual([`coder@${machineId}`]);
+  });
+
+  it("[UC-AGENT-01-S07] reports all configured agent verification failures without secret values", () => {
+    const cwd = createTmpDir();
+    runCli(["init"], { cwd });
+
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const machineId = resolveMachineId(hostname());
+    saveGlobalConfig(globalRoot, {
+      version: 1,
+      agents: [
+        { name: "coder", runtime: "codex", envKeys: ["OPENAI_API_KEY"] },
+        { name: "reviewer", runtime: "codex", envKeys: ["DEEPSEEK_API_KEY"] },
+      ],
+      watchedRepositories: [],
+      adminConsole: { enabled: false },
+    });
+
+    const result = runCli(["doctor", "--verify-agents"], {
+      cwd,
+      github: fakeGitHubGateway(),
+      localState,
+      runtimeAvailabilityChecker: fakeRuntimeAvailability,
+      agentVerifier: (agent) => ({
+        agent,
+        ok: agent.name === "coder",
+        command: ["codex", "exec", "-"],
+        stdout: agent.name === "coder" ? "GROVIE_AGENT_OK\n" : "",
+        stderr: agent.name === "coder" ? "" : "missing API key",
+        message: agent.name === "coder" ? "verified" : "missing configured provider credential",
+      }),
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(`- coder@${machineId} (codex): verified`);
+    expect(result.stdout).toContain(`- reviewer@${machineId} (codex): failed: missing configured provider credential`);
+    expect(result.stdout).toContain("  envKeys: DEEPSEEK_API_KEY");
+    expect(result.stdout).not.toContain("secret-value");
+    expect(result.stderr).toBe([
+      "Failed configured agent verifications:",
+      `- reviewer@${machineId}: missing configured provider credential`,
+    ].join("\n"));
   });
 
   it("[UC-STATE-REPO-01-S01] configures a private default state repository through state init", () => {
@@ -265,12 +368,13 @@ describe("CLI command registration", () => {
       exitCode: 0,
       stdout: [
         "grovie doctor",
+        "Mode: fast local check. Agent execution is not verified; run `grovie doctor --verify-agents` for deep checks.",
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
         `Machine id: ${machineId}`,
         "Runtimes:",
         "- codex command=codex: codex command not found",
-        "- claude-code command=claude: available (2.1.142 (Claude Code))",
+        "- claude-code command=claude: CLI available (2.1.142 (Claude Code))",
         "- pi command=pi: pi command not found",
         "Configured agents: none",
         "GitHub: authenticated as fankaidev.",
