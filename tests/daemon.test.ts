@@ -621,7 +621,7 @@ describe("runDaemonCycle", () => {
     expect(runs[1]?.runRequest).toBeUndefined();
   });
 
-  it("[UC-SESSION-01-S12] rejects a resumable run whose agent is no longer configured locally", async () => {
+  it("[UC-SESSION-01-S12] [UC-SESSION-01-S13] rejects a resumable run whose agent is no longer configured locally", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "old-run", {
@@ -1623,7 +1623,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-SESSION-01-S03] creates a run when issue activity is newer than the handled cursor", async () => {
+  it("[UC-RUN-01-S02] [UC-RUN-01-S03] [UC-SESSION-01-S03] [UC-SESSION-01-S11] creates a run when issue activity is newer than the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({

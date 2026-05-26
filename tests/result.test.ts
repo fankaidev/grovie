@@ -80,7 +80,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
-  it("[UC-RUN-03-S02] commits changed files, pushes the Grovie branch, and opens a PR", () => {
+  it("[UC-GITHUB-01-S07] [UC-RUN-03-S02] commits changed files, pushes the Grovie branch, and opens a PR", () => {
     const runner = new FakeRunner([
       {
         stdout: " M src/index.ts\n",

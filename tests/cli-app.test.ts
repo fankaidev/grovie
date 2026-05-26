@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,7 +49,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-DAEMON-04-S01] renders command-specific usage with supported subcommand options", () => {
+  it("[UC-DAEMON-04-S01] [UC-SESSION-01-S10] renders command-specific usage with supported subcommand options", () => {
     expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json]");
 
     const runsHelp = runCli(["runs", "--help"]).stdout;
@@ -653,14 +653,18 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(localState.paths.runsDir, "cleanup-run", "events.jsonl"), "utf8")).not.toContain("worktree.cleaned");
   });
 
-  it("[UC-RUN-01-S01] no longer registers the removed run command", () => {
-    const result = runCli(["run", "fankaidev/grovie#2", "--agent", "coder@fankai-mac"]);
+  it("[UC-RUN-01-S01] [UC-RUN-01-S04] no longer registers the removed run command or writes local request files", () => {
+    const globalRoot = createTmpDir();
+    const result = runCli(["run", "fankaidev/grovie#2", "--agent", "coder@fankai-mac"], {
+      localState: new FakeLocalState(globalRoot),
+    });
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Unknown command: run");
+    expect(existsSync(join(globalRoot, "requests"))).toBe(false);
   });
 
-  it("[UC-SESSION-01-S09] no longer supports request-file retry or rerun subcommands", () => {
+  it("[UC-SESSION-01-S09] [UC-SESSION-01-S10] no longer supports request-file retry or rerun subcommands", () => {
     expect(runCli(["runs", "retry", "failed-run"])).toEqual({
       exitCode: 1,
       stderr: "Missing runs subcommand. Usage: grovie runs <list|show|cleanup>",
