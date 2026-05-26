@@ -40,7 +40,11 @@ import type { CliCommand, CliContext } from "../types.js";
 export const watchCommand = {
     name: "watch",
     description: "Manage globally watched repositories for daemon polling.",
-    usage: "grovie watch <add|list|remove> [owner/repo] [--label grovie]",
+    usage: [
+      "grovie watch add owner/repo [--label grovie]",
+      "grovie watch list",
+      "grovie watch remove owner/repo",
+    ].join("\n"),
     issue: "#31",
     run: (args: string[], context: CliContext) => {
       const [subcommand, repository] = args;
@@ -124,7 +128,7 @@ export const watchCommand = {
 
         return {
           exitCode: 1,
-          stderr: "Missing watch subcommand. Usage: grovie watch <add|list|remove> [owner/repo]",
+          stderr: "Missing watch subcommand. Usage: grovie watch <add|list|remove>",
         };
       } catch (error) {
         return errorResult(error);

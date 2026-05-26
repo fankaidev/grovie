@@ -49,6 +49,24 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-WORKER-06-S01] renders command-specific usage with supported subcommand options", () => {
+    expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json]");
+
+    const runsHelp = runCli(["runs", "--help"]).stdout;
+    expect(runsHelp).toContain("grovie runs cleanup [--dry-run] [--logs] [--older-than 30m|12h|7d]");
+    expect(runsHelp).toContain("grovie runs rerun owner/repo#123 --agent coder@machine");
+
+    const daemonHelp = runCli(["daemon", "--help"]).stdout;
+    expect(daemonHelp).toContain("grovie daemon stop [--force]");
+    expect(daemonHelp).toContain("grovie daemon logs [--stream stdout|stderr] [--lines 100] [--follow]");
+    expect(daemonHelp).toContain("grovie daemon service <install|uninstall|path> [--platform launchd|systemd]");
+
+    const watchHelp = runCli(["watch", "--help"]).stdout;
+    expect(watchHelp).toContain("grovie watch add owner/repo [--label grovie]");
+    expect(watchHelp).toContain("grovie watch list");
+    expect(watchHelp).toContain("grovie watch remove owner/repo");
+  });
+
   it("[UC-WORKER-06-S01] reports the package version through long and short flags", () => {
     const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 

@@ -42,7 +42,7 @@ import type { CliCommand, CliContext } from "../types.js";
 export const queueCommand = {
     name: "queue",
     description: "List assigned issues and local daemon pick order.",
-    usage: "grovie queue list [--repo owner/repo]",
+    usage: "grovie queue list [--repo owner/repo] [--json]",
     issue: "#40",
     run: (args: string[], context: CliContext) => {
       const [subcommand] = args;
@@ -50,7 +50,7 @@ export const queueCommand = {
       if (subcommand !== "list") {
         return {
           exitCode: 1,
-          stderr: "Missing queue subcommand. Usage: grovie queue list [--repo owner/repo]",
+          stderr: "Missing queue subcommand. Usage: grovie queue list [--repo owner/repo] [--json]",
         };
       }
 
