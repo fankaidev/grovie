@@ -115,7 +115,7 @@ describe("config helpers", () => {
     });
   });
 
-  it("[UC-ADMIN-01-S05] rejects non-local admin console bind hosts", () => {
+  it("[UC-ADMIN-01-S05] accepts explicitly configured admin console bind hosts", () => {
     const root = createTmpDir();
     writeFileSync(
       join(root, "config.yml"),
@@ -131,7 +131,29 @@ describe("config helpers", () => {
       "utf8",
     );
 
-    expect(() => loadGlobalConfig(root)).toThrow("adminConsole.host: Invalid input: expected \"127.0.0.1\"");
+    expect(loadGlobalConfig(root).config.adminConsole).toEqual({
+      enabled: true,
+      host: "0.0.0.0",
+    });
+  });
+
+  it("[UC-ADMIN-01-S05] rejects empty admin console bind hosts", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "agents: []",
+        "watchedRepositories: []",
+        "adminConsole:",
+        "  enabled: true",
+        "  host: ''",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => loadGlobalConfig(root)).toThrow("adminConsole.host: must not be empty");
   });
 
   it("[UC-AGENT-01-S04] requires explicit agents in config.yml", () => {

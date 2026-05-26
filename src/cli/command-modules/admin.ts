@@ -1,6 +1,6 @@
 import { getConfiguredAgentHealth, getRuntimeHealth } from "../../agent-health.js";
 import { buildAgentLabel } from "../../assignment.js";
-import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "../../admin-console.js";
+import { createAdminConsoleServer, resolveAdminConsoleConfig } from "../../admin-console.js";
 import {
   addWatchedRepository,
   defaultConfig,
@@ -55,7 +55,7 @@ export const adminCommand = {
       try {
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
         const config = resolveAdminConsoleConfig(globalConfig.config);
-        const started = await startAdminConsoleServer({
+        const started = await context.adminConsoleStarter({
           config,
           server: createAdminConsoleServer({
             paths: context.localState.getPaths(),

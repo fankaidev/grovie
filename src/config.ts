@@ -67,7 +67,7 @@ export const globalConfigSchema = z.strictObject({
   }).optional(),
   adminConsole: z.strictObject({
     enabled: z.boolean(),
-    host: z.literal("127.0.0.1").optional(),
+    host: z.string().min(1, "must not be empty").optional(),
     port: z.number().int().min(1).max(65535).optional(),
   }).optional(),
 });

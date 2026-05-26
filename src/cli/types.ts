@@ -1,5 +1,6 @@
+import type { Server } from "node:http";
 import type { RuntimeAvailabilityChecker } from "../agent-health.js";
-import type { AdminConsoleResolvedConfig } from "../admin-console.js";
+import type { AdminConsoleResolvedConfig, StartedAdminConsole } from "../admin-console.js";
 import type { DaemonLifecycle } from "../daemon-lifecycle.js";
 import type { GitHubGateway } from "../github.js";
 import type { RunLocalState } from "../run.js";
@@ -12,6 +13,10 @@ export type CliResult = {
 };
 
 export type AdminConsolePortCheck = (config: AdminConsoleResolvedConfig) => Promise<void>;
+export type AdminConsoleStarter = (input: {
+  config: AdminConsoleResolvedConfig;
+  server?: Server;
+}) => Promise<StartedAdminConsole>;
 
 export type CliContext = {
   cwd: string;
@@ -21,6 +26,7 @@ export type CliContext = {
   localState: RunLocalState;
   daemonLifecycle: DaemonLifecycle;
   adminConsolePortCheck: AdminConsolePortCheck;
+  adminConsoleStarter: AdminConsoleStarter;
 };
 
 export type CliCommand = {

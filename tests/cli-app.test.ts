@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -103,11 +104,11 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
-    writeFileSync(join(globalRoot, "config.yml"), "version: 1\nwatchedRepositories: []\nadminConsole:\n  enabled: true\n  host: 0.0.0.0\n", "utf8");
+    writeFileSync(join(globalRoot, "config.yml"), "version: 1\nwatchedRepositories: []\nadminConsole:\n  enabled: true\n  host: ''\n", "utf8");
 
     expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState })).toEqual({
       exitCode: 1,
-      stderr: expect.stringContaining("adminConsole.host: Invalid input: expected \"127.0.0.1\""),
+      stderr: expect.stringContaining("adminConsole.host: must not be empty"),
     });
   });
 
@@ -310,6 +311,44 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-ADMIN-01-S05] serves the admin console at the configured host", async () => {
+    const localState = new FakeLocalState(createTmpDir());
+    saveGlobalConfig(localState.paths.root, {
+      version: 1,
+      agents: [],
+      watchedRepositories: [],
+      adminConsole: {
+        enabled: true,
+        host: "localhost",
+        port: 9876,
+      },
+    });
+
+    await expect(runCliAsync(["admin", "serve"], {
+      localState,
+      adminConsoleStarter: async ({ config, server }) => {
+        expect(config).toEqual({
+          enabled: true,
+          host: "localhost",
+          port: 9876,
+        });
+        expect(server).toBeDefined();
+
+        return {
+          server: createServer(),
+          url: "http://localhost:9876",
+        };
+      },
+    })).resolves.toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie admin serve",
+        "",
+        "Admin console listening at http://localhost:9876.",
+      ].join("\n"),
+    });
+  });
+
   it("[UC-DAEMON-04-S08] shows daemon state, admin console lifecycle, watched repositories, useful paths, active runs, and failures through status", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
@@ -320,6 +359,7 @@ describe("CLI command registration", () => {
       watchedRepositories: [{ repository: "fankaidev/grovie" }],
       adminConsole: {
         enabled: true,
+        host: "localhost",
         port: 9876,
       },
     });
@@ -350,7 +390,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("Status: stopped");
     expect(result.stdout).toContain("Admin console:");
     expect(result.stdout).toContain("Enabled: true");
-    expect(result.stdout).toContain("URL: http://127.0.0.1:9876");
+    expect(result.stdout).toContain("URL: http://localhost:9876");
     expect(result.stdout).toContain("Availability: not expected to be available while the daemon is stopped");
     expect(result.stdout).toContain("Configured agents:");
     expect(result.stdout).toContain("none");
@@ -1412,6 +1452,7 @@ describe("CLI command registration", () => {
       watchedRepositories: [],
       adminConsole: {
         enabled: true,
+        host: "localhost",
         port: 9876,
       },
     });
@@ -1422,16 +1463,16 @@ describe("CLI command registration", () => {
         adminConsolePortCheck: async (config) => {
           expect(config).toEqual({
             enabled: true,
-            host: "127.0.0.1",
+            host: "localhost",
             port: 9876,
           });
 
-          throw new Error("Admin console port 9876 is unavailable on 127.0.0.1.");
+          throw new Error("Admin console port 9876 is unavailable on localhost.");
         },
       }),
     ).resolves.toEqual({
       exitCode: 1,
-      stderr: "Admin console port 9876 is unavailable on 127.0.0.1.",
+      stderr: "Admin console port 9876 is unavailable on localhost.",
     });
   });
 

@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { type AdminConsoleResolvedConfig } from "./admin-console.js";
+import { startAdminConsoleServer, type AdminConsoleResolvedConfig } from "./admin-console.js";
 import { LocalDaemonLifecycle } from "./daemon-lifecycle.js";
 import { GhGitHubGateway } from "./github.js";
 import { LocalState } from "./local-state.js";
@@ -34,6 +34,7 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
     localState: context.localState ?? new LocalState(),
     daemonLifecycle: context.daemonLifecycle ?? new LocalDaemonLifecycle(),
     adminConsolePortCheck: context.adminConsolePortCheck ?? checkAdminConsolePortAvailable,
+    adminConsoleStarter: context.adminConsoleStarter ?? startAdminConsoleServer,
   };
   const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const [commandName, ...commandArgs] = normalizedArgs;
