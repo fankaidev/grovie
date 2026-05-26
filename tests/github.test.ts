@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GhGitHubGateway, type CommandResult, type CommandRunner, parseIssueReference } from "../src/github.js";
+import { GhGitHubGateway, SpawnCommandRunner, type CommandResult, type CommandRunner, parseIssueReference } from "../src/github.js";
 
 describe("parseIssueReference", () => {
   it("[UC-RUN-01-S01] parses owner/repo issue references", () => {
@@ -570,6 +570,16 @@ describe("GhGitHubGateway", () => {
         stderr: "not authenticated",
       },
     });
+  });
+});
+
+describe("SpawnCommandRunner", () => {
+  it("[UC-DAEMON-03-S09] applies command timeouts", () => {
+    const runner = new SpawnCommandRunner({ timeoutMs: 10 });
+    const result = runner.run(process.execPath, ["-e", "setTimeout(() => {}, 1000)"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("ETIMEDOUT");
   });
 });
 

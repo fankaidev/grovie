@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { startAdminConsoleServer, type AdminConsoleResolvedConfig } from "./admin-console.js";
 import { LocalDaemonLifecycle } from "./daemon-lifecycle.js";
-import { GhGitHubGateway } from "./github.js";
+import { GhGitHubGateway, SpawnCommandRunner } from "./github.js";
 import { LocalState } from "./local-state.js";
 import { GROVIE_VERSION } from "./version.js";
 import { commands } from "./cli/commands.js";
@@ -26,9 +26,12 @@ export async function runCliAsync(args: string[], context: Partial<CliContext> =
 }
 
 function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliResult | Promise<CliResult> {
+  const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const cliContext = {
     cwd: context.cwd ?? process.cwd(),
-    github: context.github ?? new GhGitHubGateway(),
+    github: context.github ?? new GhGitHubGateway(new SpawnCommandRunner({
+      timeoutMs: resolveQueueTimeoutMs(normalizedArgs),
+    })),
     runtime: context.runtime,
     runtimeAvailabilityChecker: context.runtimeAvailabilityChecker,
     agentVerifier: context.agentVerifier,
@@ -38,7 +41,6 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
     adminConsolePortCheck: context.adminConsolePortCheck ?? checkAdminConsolePortAvailable,
     adminConsoleStarter: context.adminConsoleStarter ?? startAdminConsoleServer,
   };
-  const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const [commandName, ...commandArgs] = normalizedArgs;
 
   if (commandName === undefined || commandName === "--help" || commandName === "-h" || commandName === "help") {
@@ -72,6 +74,37 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
   }
 
   return command.run(commandArgs, cliContext);
+}
+
+function resolveQueueTimeoutMs(args: string[]): number | undefined {
+  if (args[0] !== "queue") {
+    return undefined;
+  }
+
+  const timeoutIndex = args.indexOf("--timeout");
+  const timeoutValue = timeoutIndex === -1 ? undefined : args[timeoutIndex + 1];
+
+  if (timeoutValue === undefined) {
+    return undefined;
+  }
+
+  const match = /^(\d+)(ms|s|m)?$/.exec(timeoutValue);
+
+  if (match === null) {
+    return undefined;
+  }
+
+  const amount = Number(match[1]);
+
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return undefined;
+  }
+
+  const unit = match[2] ?? "ms";
+  const multiplier = unit === "m" ? 60_000 : unit === "s" ? 1_000 : 1;
+  const timeoutMs = amount * multiplier;
+
+  return Number.isSafeInteger(timeoutMs) ? timeoutMs : undefined;
 }
 
 function checkAdminConsolePortAvailable(config: AdminConsoleResolvedConfig): Promise<void> {

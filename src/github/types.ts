@@ -30,6 +30,7 @@ export type CommandRunOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   maxBuffer?: number;
+  timeoutMs?: number;
 };
 
 export type IssueReference = {

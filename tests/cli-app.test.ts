@@ -50,7 +50,7 @@ describe("CLI command registration", () => {
   });
 
   it("[UC-DAEMON-04-S01] [UC-SESSION-01-S10] renders command-specific usage with supported subcommand options", () => {
-    expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json]");
+    expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json] [--fast|--no-pr-context] [--timeout 15s]");
 
     const runsHelp = runCli(["runs", "--help"]).stdout;
     expect(runsHelp).toContain("grovie runs list [--limit 20] [--status status] [--repo owner/repo] [--issue owner/repo#123|123] [--agent agent@machine]");
@@ -106,6 +106,10 @@ describe("CLI command registration", () => {
     expect(runCli(["queue", "list", "--json", "--json"], { localState })).toEqual({
       exitCode: 1,
       stderr: "Duplicate option: --json",
+    });
+    expect(runCli(["queue", "list", "--timeout", "soon"], { localState })).toEqual({
+      exitCode: 1,
+      stderr: "Invalid --timeout value. Use a positive duration like 500ms, 15s, or 2m.",
     });
     expect(runCli(["watch", "list", "--bogus"], { localState })).toEqual({
       exitCode: 1,
@@ -1211,6 +1215,80 @@ describe("CLI command registration", () => {
         ],
       }),
     ]);
+  });
+
+  it("[UC-DAEMON-03-S08] skips related pull request context in fast queue inspection", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    const machineId = resolveMachineId(hostname());
+    configureLocalAgent(localState);
+    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie", "--fast"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: () => ({
+          ok: true,
+          value: [
+            {
+              reference: fakeReference(8),
+              title: "Fast issue",
+              labels: ["grovie", `agent:coder@${machineId}`],
+            },
+          ],
+        }),
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            title: "Fast issue",
+            labels: ["grovie", `agent:coder@${machineId}`],
+          },
+        }),
+        readRelatedPullRequests: () => {
+          throw new Error("fast queue inspection should not read related pull requests");
+        },
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(`#1 fankaidev/grovie#8 agent=coder@${machineId}`);
+  });
+
+  it("[UC-DAEMON-03-S08] treats no-pr-context as a fast queue inspection alias", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+    const machineId = resolveMachineId(hostname());
+    configureLocalAgent(localState);
+    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie", "--no-pr-context"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listOpenIssues: () => ({
+          ok: true,
+          value: [
+            {
+              reference: fakeReference(8),
+              title: "No PR context issue",
+              labels: ["grovie", `agent:coder@${machineId}`],
+            },
+          ],
+        }),
+        readIssue: (reference) => ({
+          ok: true,
+          value: {
+            ...fakeIssue(reference),
+            title: "No PR context issue",
+            labels: ["grovie", `agent:coder@${machineId}`],
+          },
+        }),
+        readRelatedPullRequests: () => {
+          throw new Error("no-pr-context queue inspection should not read related pull requests");
+        },
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(`#1 fankaidev/grovie#8 agent=coder@${machineId}`);
   });
 
   it("[UC-DAEMON-03-S07] skips machine-local agent labels that are not configured locally", () => {
