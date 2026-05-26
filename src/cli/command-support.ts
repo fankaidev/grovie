@@ -78,7 +78,7 @@ export function renderAgentVerificationResults(results: AgentVerificationResult[
     "Agent execution verification:",
     "This check runs real agent invocations and may use network access or provider credits.",
     ...results.map((result) => [
-      `- ${result.agent.agentId} (${result.agent.runtime}${result.agent.model === undefined ? "" : `, model=${result.agent.model}`}): ${result.ok ? "verified" : `failed: ${result.message}`}`,
+      `- ${result.agent.agentId} (${result.agent.runtime}${result.agent.model === undefined ? "" : `, model=${result.agent.model}`}): ${result.ok ? "verified" : `failed: ${redactVerificationMessage(result.message, result.agent.envKeys)}`}`,
       `  command: ${formatCommandShape(result.command)}`,
       `  envKeys: ${result.agent.envKeys.length === 0 ? "none" : result.agent.envKeys.join(", ")}`,
     ].join("\n")),
@@ -88,7 +88,7 @@ export function renderAgentVerificationResults(results: AgentVerificationResult[
 export function renderFailedAgentVerifications(results: AgentVerificationResult[]): string {
   return [
     "Failed configured agent verifications:",
-    ...results.filter((result) => !result.ok).map((result) => `- ${result.agent.agentId}: ${result.message}`),
+    ...results.filter((result) => !result.ok).map((result) => `- ${result.agent.agentId}: ${redactVerificationMessage(result.message, result.agent.envKeys)}`),
   ].join("\n");
 }
 
@@ -100,6 +100,25 @@ function renderCliAvailabilityMessage(runtime: RuntimeAvailability): string {
 
 function formatCommandShape(command: string[]): string {
   return command.map((part) => JSON.stringify(part)).join(" ");
+}
+
+function redactVerificationMessage(message: string, envKeys: readonly string[]): string {
+  let redacted = message;
+
+  for (const key of envKeys) {
+    const value = process.env[key];
+    if (value !== undefined && value.length >= 4) {
+      redacted = redacted.split(value).join("[REDACTED]");
+    }
+  }
+
+  return redacted
+    .replace(/\b([A-Z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD|DATABASE_URL)[A-Z0-9_]*)\b\s*[:=]\s*["']?[^"'\s]+["']?/g, "$1=[REDACTED]")
+    .replace(/\b(token|key|secret|password|database_url)\b\s*[:=]\s*["']?[^"'\s]+["']?/gi, "$1=[REDACTED]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{10,}\b/g, "[REDACTED]")
+    .replace(/\bsk-[A-Za-z0-9_-]{10,}\b/g, "[REDACTED]")
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED]");
 }
 
 export function formatIssueRepository(reference: { owner: string; repo: string }): string {

@@ -269,6 +269,8 @@ describe("CLI command registration", () => {
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
     const machineId = resolveMachineId(hostname());
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "secret-value";
     saveGlobalConfig(globalRoot, {
       version: 1,
       agents: [
@@ -290,18 +292,26 @@ describe("CLI command registration", () => {
         command: ["codex", "exec", "-"],
         stdout: agent.name === "coder" ? "GROVIE_AGENT_OK\n" : "",
         stderr: agent.name === "coder" ? "" : "missing API key",
-        message: agent.name === "coder" ? "verified" : "missing configured provider credential",
+        message: agent.name === "coder"
+          ? "verified"
+          : "provider error: OPENAI_API_KEY=secret-value Authorization: Bearer sk-test-secret-token",
       }),
     });
+    if (previousOpenAiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = previousOpenAiKey;
+    }
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(`- coder@${machineId} (codex): verified`);
-    expect(result.stdout).toContain(`- reviewer@${machineId} (codex): failed: missing configured provider credential`);
+    expect(result.stdout).toContain(`- reviewer@${machineId} (codex): failed: provider error: OPENAI_API_KEY=[REDACTED] Authorization: Bearer [REDACTED]`);
     expect(result.stdout).toContain("  envKeys: DEEPSEEK_API_KEY");
     expect(result.stdout).not.toContain("secret-value");
+    expect(result.stdout).not.toContain("sk-test-secret-token");
     expect(result.stderr).toBe([
       "Failed configured agent verifications:",
-      `- reviewer@${machineId}: missing configured provider credential`,
+      `- reviewer@${machineId}: provider error: OPENAI_API_KEY=[REDACTED] Authorization: Bearer [REDACTED]`,
     ].join("\n"));
   });
 
