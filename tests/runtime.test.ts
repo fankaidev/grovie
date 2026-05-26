@@ -51,7 +51,7 @@ describe("CodexRuntime", () => {
     });
   });
 
-  it("[UC-RUN-02-S03] builds a prompt from trusted task context and issue content", () => {
+  it("[UC-RUN-02-S03] [UC-RUN-02-S12] [UC-RUN-02-S14] builds a prompt from trusted task context and issue content", () => {
     const run = fakeRun(createTmpDir());
     const prompt = buildCodexPrompt({
       issue: fakeIssue(),
@@ -118,7 +118,7 @@ describe("CodexRuntime", () => {
     expect(prompt).not.toContain("grovie:session");
   });
 
-  it("[UC-RUN-01-S05] renders only effective comment deltas after the previous handled cursor", () => {
+  it("[UC-RUN-01-S05] [UC-RUN-02-S15] renders only effective comment deltas after the previous handled cursor", () => {
     const issue = fakeIssue();
     issue.comments.push(
       {
@@ -313,7 +313,7 @@ describe("CodexRuntime", () => {
     });
   });
 
-  it("[UC-RUN-02-S07] stores and uses Codex runtime session refs across issue-agent runs", () => {
+  it("[UC-RUN-02-S07] [UC-RUN-02-S13] stores and uses Codex runtime session refs across issue-agent runs", () => {
     const root = createTmpDir();
     const firstRun = fakeRun(root);
     const runner = new FakeRunner([
