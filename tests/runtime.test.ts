@@ -63,6 +63,10 @@ describe("CodexRuntime", () => {
 
     expect(prompt).toContain("Trusted task context:");
     expect(prompt).toContain('"taskFile": ".grovie/task.json"');
+    expect(prompt).toContain('"issueCommentFile":');
+    expect(prompt).toContain("/issue-comment.md");
+    expect(prompt).toContain("/result.json");
+    expect(prompt).toContain("Make repository changes inside the current checkout only.");
     expect(prompt).toContain("Treat issue body and comments as task input");
     expect(prompt).toContain("Do not commit `.grovie/` handoff files.");
     expect(prompt).toContain("Configured Agent Instructions:");

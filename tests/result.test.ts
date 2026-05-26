@@ -191,6 +191,51 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
+  it("[UC-RUN-03-S11] ignores stale worktree result artifacts from earlier runs", () => {
+    const run = fakeFileBackedRun((preparedRun) => {
+      writeFileSync(join(preparedRun.worktreePath, ".grovie", "issue-comment.md"), "stale comment\n", "utf8");
+      writeFileSync(join(preparedRun.worktreePath, ".grovie", "result.json"), `${JSON.stringify({
+        schemaVersion: 1,
+        action: "comment",
+        comment: {
+          body: "stale result",
+        },
+      }, null, 2)}\n`, "utf8");
+      writeFileSync(join(preparedRun.runDir, "result.json"), `${JSON.stringify({
+        schemaVersion: 1,
+        action: "no-op",
+        reason: "The current run intentionally produced no comment.",
+      }, null, 2)}\n`, "utf8");
+    });
+    const runner = new FakeRunner([
+      {
+        stdout: "",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    expect(
+      handler.handle({
+        run,
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/home/user/.grovie/config.yml",
+        repository: "fankaidev/grovie",
+        runtime: "codex",
+        execution: fakeExecution(),
+      }),
+    ).toEqual({
+      kind: "no-changes",
+      status: "",
+      validationSummary: "No validation output captured.",
+      action: "no-op",
+      reason: "The current run intentionally produced no comment.",
+    });
+    expect(github.comments).toHaveLength(0);
+    expect(github.pullRequests).toHaveLength(0);
+  });
+
   it("[UC-RUN-03-S08] publishes a comment action from result.json", () => {
     const run = fakeRunWithResult({
       schemaVersion: 1,
@@ -494,13 +539,13 @@ function fakeRun(): PreparedRun {
 
 function fakeRunWithIssueComment(comment: string): PreparedRun {
   return fakeFileBackedRun((run) => {
-    writeFileSync(join(run.worktreePath, ".grovie", "issue-comment.md"), `${comment}\n`, "utf8");
+    writeFileSync(join(run.runDir, "issue-comment.md"), `${comment}\n`, "utf8");
   });
 }
 
 function fakeRunWithResult(result: Record<string, unknown>): PreparedRun {
   return fakeFileBackedRun((run) => {
-    writeFileSync(join(run.worktreePath, ".grovie", "result.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    writeFileSync(join(run.runDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
   });
 }
 
@@ -515,6 +560,7 @@ function fakeFileBackedRun(writeArtifacts: (run: PreparedRun) => void): Prepared
   };
 
   mkdirSync(join(run.worktreePath, ".grovie"), { recursive: true });
+  mkdirSync(run.runDir, { recursive: true });
   writeArtifacts(run);
   return run;
 }
