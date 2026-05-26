@@ -30,4 +30,4 @@
 | UC-RUN-02-S12 | P1 | A run prompt documents the run-scoped `result.json` schema, allowed actions, and a valid no-op example so agents do not infer incompatible result artifact fields. |
 | UC-RUN-02-S13 | P0 | Follow-up runs for the same repository, issue, and agent resume the persisted runtime session ref when one exists, so the runtime history matches the Grovie issue-agent session. |
 | UC-RUN-02-S14 | P0 | A run prompt points comment and result handoff artifacts at run-scoped paths under the prepared worktree, such as `.grovie/runs/<runId>/issue-comment.md`, so local runtime sandboxes can write them without reusing stale artifacts. |
-| UC-RUN-02-S15 | P1 | A continuation run prompt uses compact instructions and tells the agent to read `.grovie/task.json` only when the prompt does not contain enough context. |
+| UC-RUN-02-S15 | P1 | A continuation run prompt uses minimal instructions, omits redundant issue/session metadata, keeps run-scoped artifact paths, and tells the agent to read `.grovie/task.json` only when the prompt does not contain enough context. |

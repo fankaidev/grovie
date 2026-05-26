@@ -158,11 +158,11 @@ describe("CodexRuntime", () => {
     });
 
     expect(prompt).toContain("Recent activity since last run:");
-    expect(prompt).toContain("You are Grovie resuming a local Codex issue-agent session.");
-    expect(prompt).toContain("Use prior runtime history plus the recent activity below as the primary input for this run.");
-    expect(prompt).toContain("Read `.grovie/task.json` only if this prompt does not contain enough context.");
-    expect(prompt).toContain('"issueCommentFile": ".grovie/runs/');
-    expect(prompt).toContain('"resultFile": ".grovie/runs/');
+    expect(prompt).toContain("Use recent activity as the primary input. Read `.grovie/task.json` only if needed.");
+    expect(prompt).toContain("Comment file: .grovie/runs/");
+    expect(prompt).toContain("Result file: .grovie/runs/");
+    expect(prompt).toContain("Full snapshot if needed: .grovie/task.json");
+    expect(prompt).toContain("Allowed result actions: no-op, comment, code-change, review, request-human, handoff.");
     expect(prompt).toContain("Previous handled cursor: 2026-05-22T00:10:00Z");
     expect(prompt).toContain("Please also update the docs.");
     expect(prompt).not.toContain("This old user comment was already handled.");
@@ -171,6 +171,12 @@ describe("CodexRuntime", () => {
     expect(prompt).not.toContain("See `.grovie/task.json` for the complete current issue body and full comment history.");
     expect(prompt).not.toContain("Structured result artifact:");
     expect(prompt).not.toContain('"body": "Please confirm which runtime should own this behavior."');
+    expect(prompt).not.toContain("You are Grovie resuming");
+    expect(prompt).not.toContain("Run context:");
+    expect(prompt).not.toContain("Issue:\n#");
+    expect(prompt).not.toContain("Repository: fankaidev/grovie");
+    expect(prompt).not.toContain("State: open");
+    expect(prompt).not.toContain("Labels:");
   });
 
   it("[UC-RUN-02-S10] builds a runtime environment from baseline keys and configured env keys only", () => {

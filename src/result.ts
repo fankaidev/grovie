@@ -93,8 +93,8 @@ export class GitResultHandler implements ResultHandler {
 
     const status = this.git(input.run.worktreePath, ["status", "--short", "--", ".", ":(exclude).grovie"]);
     const validationSummary = summarizeValidation(input.run);
-    const agentResult = readAgentResultArtifact(input.run);
     const issueComment = readIssueCommentArtifact(input.run);
+    const agentResult = issueComment === undefined ? readAgentResultArtifact(input.run) : readOptionalAgentResultArtifact(input.run);
     const commentBody = resolveCommentBody(agentResult, issueComment);
 
     if (commentBody !== undefined) {
@@ -297,6 +297,14 @@ function readAgentResultArtifact(run: PreparedRun): AgentResultArtifact | undefi
   }
 
   return result.data;
+}
+
+function readOptionalAgentResultArtifact(run: PreparedRun): AgentResultArtifact | undefined {
+  try {
+    return readAgentResultArtifact(run);
+  } catch {
+    return undefined;
+  }
 }
 
 function resolveCommentBody(agentResult: AgentResultArtifact | undefined, issueComment: string | undefined): string | undefined {

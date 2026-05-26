@@ -188,6 +188,52 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
+  it("[UC-RUN-03-S13] publishes a valid issue comment artifact even when result.json contains an unsupported action", () => {
+    const run = fakeFileBackedRun((preparedRun) => {
+      writeFileSync(getIssueCommentArtifactPath(preparedRun), "3\n", "utf8");
+      writeFileSync(getResultArtifactPath(preparedRun), `${JSON.stringify({
+        schemaVersion: 1,
+        action: "publish",
+        reason: "The comment artifact contains the intended issue reply.",
+      }, null, 2)}\n`, "utf8");
+    });
+    const runner = new FakeRunner([
+      {
+        stdout: "",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    expect(
+      handler.handle({
+        run,
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/home/user/.grovie/config.yml",
+        repository: "fankaidev/grovie",
+        runtime: "pi",
+        execution: fakeExecution(),
+      }),
+    ).toEqual({
+      kind: "issue-comment",
+      status: "",
+      validationSummary: "No validation output captured.",
+      comment: {
+        id: 1,
+        body: [
+          '<!-- grovie:agent-comment {"agentId":"coder@fankai-mac"} -->',
+          "coder@fankai-mac:",
+          "",
+          "3",
+        ].join("\n"),
+        url: "https://github.com/fankaidev/grovie/issues/9#issuecomment-1",
+      },
+    });
+    expect(github.comments[0]).toContain("3");
+    expect(github.pullRequests).toHaveLength(0);
+  });
+
   it("[UC-RUN-03-S07] honors an explicit no-op result with a human-readable reason", () => {
     const run = fakeRunWithResult({
       schemaVersion: 1,

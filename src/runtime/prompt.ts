@@ -15,8 +15,6 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
 
   if (!firstRun) {
     return buildContinuationPrompt({
-      issue: input.issue,
-      run: input.run,
       issueCommentFile,
       resultFile,
       previousHandledThrough,
@@ -97,39 +95,22 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
 }
 
 function buildContinuationPrompt(input: {
-  issue: GitHubIssue;
-  run: PreparedRun;
   issueCommentFile: string;
   resultFile: string;
   previousHandledThrough: string;
   recentComments: GitHubIssue["comments"];
 }): string {
   return [
-    "You are Grovie resuming a local Codex issue-agent session.",
+    "Use recent activity as the primary input. Read `.grovie/task.json` only if needed.",
     "",
-    "Run context:",
-    fencedJson({
-      repository: `${input.issue.reference.owner}/${input.issue.reference.repo}`,
-      issueNumber: input.issue.reference.number,
-      runId: input.run.runId,
-      taskFile: ".grovie/task.json",
-      issueCommentFile: input.issueCommentFile,
-      resultFile: input.resultFile,
-    }),
+    `Comment file: ${input.issueCommentFile}`,
+    `Result file: ${input.resultFile}`,
+    "Full snapshot if needed: .grovie/task.json",
     "",
-    "Instructions:",
-    "- Use prior runtime history plus the recent activity below as the primary input for this run.",
-    "- Read `.grovie/task.json` only if this prompt does not contain enough context.",
-    `- To publish an issue comment, write only the desired comment body to \`${input.issueCommentFile}\`; do not call GitHub directly.`,
-    `- To report no action, write \`{"schemaVersion":1,"action":"no-op","reason":"Not my turn yet."}\` to \`${input.resultFile}\`.`,
-    "- Do not commit `.grovie/` handoff files.",
-    "",
-    "Issue:",
-    `# ${input.issue.title}`,
-    `Repository: ${input.issue.reference.owner}/${input.issue.reference.repo}`,
-    `Issue: #${input.issue.reference.number}`,
-    `State: ${input.issue.state}`,
-    `Labels: ${input.issue.labels.length > 0 ? input.issue.labels.join(", ") : "(none)"}`,
+    "To comment, write only the body to the comment file; do not call GitHub directly.",
+    'To no-op, write {"schemaVersion":1,"action":"no-op","reason":"..."} to the result file.',
+    "Allowed result actions: no-op, comment, code-change, review, request-human, handoff.",
+    "Do not commit `.grovie/` handoff files.",
     "",
     `Previous handled cursor: ${input.previousHandledThrough}`,
     "",
