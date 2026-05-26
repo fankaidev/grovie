@@ -210,6 +210,44 @@ export class GhGitHubGateway implements GitHubGateway {
     };
   }
 
+  minimizeComment(commentNodeId: string, classifier: "OUTDATED" | "RESOLVED" = "OUTDATED"): Result<void> {
+    const query = [
+      "mutation($subjectId: ID!, $classifier: ReportedContentClassifiers!) {",
+      "  minimizeComment(input: {subjectId: $subjectId, classifier: $classifier}) {",
+      "    minimizedComment { isMinimized minimizedReason }",
+      "  }",
+      "}",
+    ].join("\n");
+    const result = this.runner.run("gh", [
+      "api",
+      "graphql",
+      "-f",
+      `subjectId=${commentNodeId}`,
+      "-f",
+      `classifier=${classifier}`,
+      "-f",
+      `query=${query}`,
+    ]);
+
+    if (result.exitCode !== 0) {
+      return {
+        ok: false,
+        error: {
+          code: "gh_failed",
+          message: result.stderr.trim() || `gh api graphql failed with exit code ${result.exitCode}.`,
+          command: "gh api graphql",
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      value: undefined,
+    };
+  }
+
   createPullRequest(input: CreatePullRequestInput): Result<CreatedPullRequest> {
     const result = this.api.json<GitHubPullRequestResponse>(`repos/${input.repository}/pulls`, {
       method: "POST",

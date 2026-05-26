@@ -138,6 +138,7 @@ export type GitHubIssueSummary = {
 
 export type CreatedComment = {
   id: number;
+  nodeId?: string;
   body: string;
   url: string;
   createdAt?: string;
@@ -171,6 +172,7 @@ export type GitHubGateway = {
   removeLabel(reference: IssueReference, label: string): Result<void>;
   createIssueComment(reference: IssueReference, body: string): Result<CreatedComment>;
   updateIssueComment(repository: string, commentId: number, body: string): Result<CreatedComment>;
+  minimizeComment?(commentNodeId: string, classifier?: "OUTDATED" | "RESOLVED"): Result<void>;
   createPullRequest(input: CreatePullRequestInput): Result<CreatedPullRequest>;
   readRelatedPullRequests?(reference: IssueReference): Result<GitHubRelatedPullRequest[]>;
   listRepositoryEvents?(repository: string, options?: { ifNoneMatch?: string }): Result<GitHubRepositoryEventsResult>;

@@ -114,6 +114,23 @@ export function finishRun(input: {
     url: commentResult.value.url,
   });
 
+  if (commentResult.value.nodeId !== undefined && input.github.minimizeComment !== undefined) {
+    const minimizeResult = input.github.minimizeComment(commentResult.value.nodeId, "OUTDATED");
+
+    if (!minimizeResult.ok) {
+      input.localState.appendEvent(input.run, "comment.hide_failed", {
+        id: commentResult.value.id,
+        url: commentResult.value.url,
+        message: minimizeResult.error.message,
+      });
+    } else {
+      input.localState.appendEvent(input.run, "comment.hidden", {
+        id: commentResult.value.id,
+        url: commentResult.value.url,
+      });
+    }
+  }
+
   return {
     exitCode: summary.status === "failed" ? 1 : 0,
     stdout: renderCliRunOutput({ ...summaryWithStateRepo, comment: commentResult.value }),
