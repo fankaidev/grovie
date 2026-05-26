@@ -14,7 +14,7 @@ export function renderAgentIssueComment(input: {
 }): string {
   return [
     `<!-- ${AGENT_COMMENT_MARKER} ${JSON.stringify({ agentId: input.agentId })} -->`,
-    `_Grovie agent: \`${input.agentId}\`_`,
+    `- Agent: \`${input.agentId}\``,
     "",
     input.body.trim(),
   ].join("\n");
