@@ -12,6 +12,7 @@ export function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
         "--ask-for-approval",
         "never",
         "exec",
+        ...modelArgs(input.model),
         "--json",
         "--cd",
         input.run.worktreePath,
@@ -19,12 +20,13 @@ export function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
         "danger-full-access",
         "-",
       ],
-      resumeCommand: (sessionId) => [
+      resumeCommand: (sessionId, input) => [
         "codex",
         "--ask-for-approval",
         "never",
         "exec",
         "resume",
+        ...modelArgs(input.model),
         "--json",
         sessionId,
         "-",
@@ -37,8 +39,8 @@ export function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
       runtime,
       command: "claude",
       availabilityArgs: ["--version"],
-      startCommand: () => ["claude", "--permission-mode", "bypassPermissions", "--print"],
-      resumeCommand: (sessionId) => ["claude", "--permission-mode", "bypassPermissions", "--resume", sessionId, "--print"],
+      startCommand: (input) => ["claude", "--permission-mode", "bypassPermissions", ...modelArgs(input.model), "--print"],
+      resumeCommand: (sessionId, input) => ["claude", "--permission-mode", "bypassPermissions", ...modelArgs(input.model), "--resume", sessionId, "--print"],
     };
   }
 
@@ -46,9 +48,13 @@ export function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
     runtime,
     command: "pi",
     availabilityArgs: ["--version"],
-    startCommand: () => ["pi", "-"],
-    resumeCommand: (sessionId) => ["pi", "resume", sessionId, "-"],
+    startCommand: (input) => ["pi", ...modelArgs(input.model), "-"],
+    resumeCommand: (sessionId, input) => ["pi", ...modelArgs(input.model), "resume", sessionId, "-"],
   };
+}
+
+function modelArgs(model: string | undefined): string[] {
+  return model === undefined ? [] : ["--model", model];
 }
 
 export function checkCliAvailability(adapter: RuntimeAdapter, runner: CommandRunner): RuntimeAvailability {

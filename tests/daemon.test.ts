@@ -1245,6 +1245,46 @@ describe("runDaemonCycle", () => {
     });
   });
 
+  it("[UC-RUN-02-S11] passes configured agent model into the runtime handoff", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localAgents: [
+        {
+          ...configuredCodexAgent("coder", machineId),
+          model: "gpt-5",
+        },
+      ],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "coder ran",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs[0]).toMatchObject({
+      agent: "codex",
+      agentId: `coder@${machineId}`,
+      agentModel: "gpt-5",
+    });
+  });
+
   it("[UC-DAEMON-02-S17] skips automatic queue runs when the issue creator is not trusted", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
