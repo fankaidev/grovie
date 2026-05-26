@@ -1,6 +1,6 @@
 import type { GrovieConfig, StateRepoConfig } from "../config.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../github.js";
-import type { DaemonLock, ExecutionLock, HandledCursor, LocalStatePaths, LockResult, PreparedRun, ResumableRun, RunCancellation, RunRequest } from "../local-state.js";
+import type { DaemonLock, ExecutionLock, HandledCursor, LocalStatePaths, LockResult, PreparedRun, ResumableRun, RunCancellation, RunRequestMetadata } from "../local-state.js";
 import type { IssueActivity } from "../queue.js";
 import type { HandleRunResultResult, ResultHandler } from "../result.js";
 import type { AgentRuntime, RuntimeMonitor, RuntimeName } from "../runtime.js";
@@ -21,15 +21,12 @@ export type RunIssueInput = {
   agentInstructions?: string;
   agentModel?: string;
   agentEnvKeys?: string[];
-  runRequest?: {
-    sourceRunId?: string;
-    reason?: RunRequest["reason"];
-  };
+  runRequest?: RunRequestMetadata;
   triggerContext?: RunTriggerContext;
 };
 
 export type RunTriggerContext = {
-  source: "daemon" | "manual" | "run-request";
+  source: "daemon" | "manual";
   activity: IssueActivity;
   previousHandledCursor?: HandledCursor;
 };
@@ -54,8 +51,6 @@ export type RunLocalState = {
   acquireExecutionLock?(input: { repository: string; issueNumber: number; agentId: string; now?: Date }): LockResult<ExecutionLock>;
   hasExecutionLock?(input: { repository: string; issueNumber: number; agentId: string }): boolean;
   releaseExecutionLock?(lock: ExecutionLock): void;
-  enqueueRunRequest?(input: { repository: string; issueNumber: number; agentId: string; now?: Date; sourceRunId?: string; reason?: RunRequest["reason"] }): RunRequest;
-  takeRunRequest?(repository: string): RunRequest | undefined;
   interruptActiveRuns?(input: { now?: Date; reason: string }): ResumableRun[];
   takeResumableRun?(input: { repository: string; now?: Date }): ResumableRun | undefined;
   markSessionResuming?(input: { sourceRunId: string; now?: Date; reason: string }): void;

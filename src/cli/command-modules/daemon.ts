@@ -24,9 +24,7 @@ import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail
 import { initStateRepository } from "../../state-repo.js";
 import {
   checkRuntimeAvailability,
-  enqueueDaemonRunRequest,
   errorResult,
-  formatIssueRepository,
   githubErrorResult,
   readNumberOption,
   readStringOption,
@@ -34,7 +32,6 @@ import {
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,
-  resolveManualRunAgent,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
 } from "../command-support.js";

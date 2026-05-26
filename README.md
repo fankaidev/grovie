@@ -24,7 +24,6 @@ YAML
 grovie doctor
 grovie watch add owner/repo --label grovie
 grovie daemon start
-grovie run owner/repo#123 --agent coder@your-machine-id
 ```
 
 ## Why Grovie?
@@ -100,10 +99,11 @@ grovie daemon start
 grovie daemon status
 ```
 
-Request one issue run from the daemon:
+Trigger issue work through GitHub:
 
 ```sh
-grovie run owner/repo#123 --agent coder@your-machine-id
+# Add the queue label and an agent assignment label on the GitHub issue,
+# then create or update a visible issue comment when you want the agent to act.
 ```
 
 Run the local daemon in the foreground instead:
@@ -122,7 +122,7 @@ grovie daemon --once
 
 1. Create a GitHub issue, such as `Fix failing login test`.
 2. Add the queue label, usually `grovie`.
-3. Add an assignment label, such as `agent:coder@your-machine-id`, or request an explicit run with `--agent`.
+3. Add an assignment label, such as `agent:coder@your-machine-id`.
 4. Grovie sees the issue from the local daemon schedule.
 5. Grovie prepares an isolated worktree under `~/.grovie/`.
 6. The configured local agent receives the issue context and works in that worktree.
@@ -130,11 +130,7 @@ grovie daemon --once
 8. Grovie comments back on the issue with the run id, local log paths, branch, and pull request link.
 9. Humans review, merge, or ask the agent to continue using normal GitHub workflow.
 
-An explicit run request follows the same execution path and requires a running daemon:
-
-```sh
-grovie run owner/repo#123 --agent coder@your-machine-id
-```
+When you want the assigned agent to act again, add a normal GitHub issue comment asking it to continue. The daemon picks that visible activity up through polling and handled cursors.
 
 ## How It Works
 
@@ -175,8 +171,6 @@ The loop has two durable boundaries:
 - GitHub holds shared coordination state: issues, labels, comments, pull requests, reviews, and CI.
 - The local machine owns execution state: daemon locks, isolated worktrees, runtime handoff files, stdout/stderr logs, events, and result metadata.
 
-An explicit `grovie run owner/repo#123 --agent coder@your-machine-id` request uses the same daemon-owned execution path. It asks the running daemon to start one run now; it does not bypass local state, logs, worktrees, or safe publishing.
-
 Grovie is organized around user-visible areas:
 
 | Area | What it owns |
@@ -184,7 +178,7 @@ Grovie is organized around user-visible areas:
 | Agent | Machine identity, local agents, and assignment labels. |
 | Daemon | Watched repositories, queue polling, daemon lifecycle, and local scheduling. |
 | Session | Long-lived issue-agent context, persistent worktrees, handled cursors, cleanup, and recovery. |
-| Run | Concrete run requests, runtime handoff, logs, cancellation, and safe result publishing. |
+| Run | Concrete daemon-triggered executions, runtime handoff, logs, cancellation, and safe result publishing. |
 | GitHub | Human-visible issue and pull request updates without dumping raw prompts or logs into comments. |
 | State repo | Optional remote sync of local run metadata for observability and recovery. |
 
@@ -206,8 +200,6 @@ This keeps collaboration inspectable: humans and agents coordinate through norma
 
 `grovie doctor` validates the global Grovie config, then confirms the current `gh` login plus CLI runtime availability.
 
-`grovie run owner/repo#123 --agent coder@your-machine-id` requests one explicit issue run from the running daemon. The daemon owns execution, worktree preparation, logging, and publishing.
-
 `grovie daemon` polls watched repositories from `~/.grovie/config.yml`, resolves repository policy from each watched repository entry, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
 
 `grovie daemon service install --platform launchd|systemd` writes an optional user service file for macOS LaunchAgent or Linux systemd user service integration. The generated service runs locally and writes stdout/stderr under `~/.grovie/daemon`.
@@ -220,7 +212,6 @@ This keeps collaboration inspectable: humans and agents coordinate through norma
 
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The safety boundary is intentionally simple:
 
-- `grovie run` derives the target repository from the explicit issue reference and sends the request to a running local daemon.
 - `grovie daemon` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
 - Automatic daemon queue runs require the issue creator to be trusted by watched repository policy; when no trusted authors are configured, the authenticated `gh` user is trusted by default.
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
@@ -244,7 +235,7 @@ Use this checklist before trusting a new machine or repository:
 6. Optionally edit the repository entry in `~/.grovie/config.yml` to set queue label, branch prefix, or trusted authors.
 7. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
 8. Start the daemon with `grovie daemon start`.
-9. Run `grovie run owner/repo#123 --agent coder@your-machine-id` from any directory.
+9. Add an issue comment asking the assigned agent to continue, then wait for the daemon to poll.
 10. Confirm the issue receives a Grovie result comment with a run id and local run directory.
 11. For code-change runs, confirm Grovie publishes a generated branch and links the result from the issue.
 12. Confirm no direct push was made to the default branch.
@@ -253,7 +244,7 @@ Use this checklist before trusting a new machine or repository:
 
 ## Isolated Smoke Validation
 
-For end-to-end smoke tests, run Grovie with a temporary `HOME` so daemon state, locks, request files, repository cache, run files, worktrees, and logs stay separate from your normal `~/.grovie` daemon. Reuse real GitHub authentication through `GH_CONFIG_DIR` when the test should create issues or comments, and put a fake agent CLI earlier in `PATH` when you only need to validate the Grovie CLI, daemon, GitHub, worktree, and result-comment flow without asking a real model to edit code. If the temporary home needs to clone private repositories, configure git in that home to use `gh auth git-credential`. This validates Grovie orchestration, not real agent reasoning or code-generation quality.
+For end-to-end smoke tests, run Grovie with a temporary `HOME` so daemon state, locks, repository cache, run files, worktrees, and logs stay separate from your normal `~/.grovie` daemon. Reuse real GitHub authentication through `GH_CONFIG_DIR` when the test should create issues or comments, and put a fake agent CLI earlier in `PATH` when you only need to validate the Grovie CLI, daemon, GitHub, worktree, and result-comment flow without asking a real model to edit code. If the temporary home needs to clone private repositories, configure git in that home to use `gh auth git-credential`. This validates Grovie orchestration, not real agent reasoning or code-generation quality.
 
 ## Contributing
 

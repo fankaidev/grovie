@@ -9,7 +9,7 @@ import type { DaemonLifecycle, DaemonLifecycleStatus } from "../src/daemon-lifec
 import { resolveMachineId } from "../src/identity.js";
 import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
-import type { HandledCursor, LocalStatePaths, PreparedRun, RunRequest } from "../src/local-state.js";
+import type { HandledCursor, LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import type { RunLocalState } from "../src/run.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeName } from "../src/runtime.js";
 
@@ -23,7 +23,7 @@ afterEach(() => {
 
 describe("CLI command registration", () => {
   it("[UC-AGENT-02-S01] [UC-DAEMON-03-S01] [UC-ADMIN-01-S02] registers issue assignment, queue, daemon, and admin commands", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "state", "admin", "watch"]);
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "queue", "daemon", "state", "admin", "watch"]);
   });
 
   it("[UC-DAEMON-03-S01] [UC-DAEMON-04-S01] [UC-ADMIN-01-S02] renders help with queue, daemon, and admin commands", () => {
@@ -35,7 +35,6 @@ describe("CLI command registration", () => {
     expect(help).toContain("doctor");
     expect(help).toContain("status");
     expect(help).toContain("runs");
-    expect(help).toContain("run");
     expect(help).toContain("queue");
     expect(help).toContain("daemon");
     expect(help).toContain("state");
@@ -54,8 +53,11 @@ describe("CLI command registration", () => {
     expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json]");
 
     const runsHelp = runCli(["runs", "--help"]).stdout;
+    expect(runsHelp).toContain("grovie runs list");
+    expect(runsHelp).toContain("grovie runs show <run-id>");
     expect(runsHelp).toContain("grovie runs cleanup [--dry-run] [--logs] [--older-than 30m|12h|7d]");
-    expect(runsHelp).toContain("grovie runs rerun owner/repo#123 --agent coder@machine");
+    expect(runsHelp).not.toContain("grovie runs retry");
+    expect(runsHelp).not.toContain("grovie runs rerun");
 
     const daemonHelp = runCli(["daemon", "--help"]).stdout;
     expect(daemonHelp).toContain("grovie daemon stop [--force]");
@@ -491,323 +493,21 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(localState.paths.runsDir, "cleanup-run", "events.jsonl"), "utf8")).not.toContain("worktree.cleaned");
   });
 
-  it("[UC-SESSION-01-S09] retries a failed run by enqueuing a new daemon request without deleting history", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
-    writeLocalRun(localState.paths.runsDir, "failed-run", {
-      metadata: {
-        runId: "failed-run",
-        repository: "fankaidev/grovie",
-        issueNumber: 79,
-        agentId: "coder@fankai-mac",
-        branchName: "grovie/issue-79",
-      },
-      events: [
-        {
-          timestamp: "2026-05-23T10:00:00.000Z",
-          type: "runtime.started",
-          data: {
-            runtime: "codex",
-          },
-        },
-        {
-          timestamp: "2026-05-23T10:01:00.000Z",
-          type: "run.failed",
-          data: {
-            exitCode: 1,
-          },
-        },
-      ],
-    });
+  it("[UC-RUN-01-S01] no longer registers the removed run command", () => {
+    const result = runCli(["run", "fankaidev/grovie#2", "--agent", "coder@fankai-mac"]);
 
-    const result = runCli(["runs", "retry", "failed-run"], { cwd, localState });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Retry requested for failed-run.");
-    expect(result.stdout).toContain("Issue: fankaidev/grovie#79");
-    expect(result.stdout).toContain("Source run: failed-run");
-    expect(result.stdout).toContain("reuse the session worktree");
-    expect(localState.requests).toEqual([
-      expect.objectContaining({
-        repository: "fankaidev/grovie",
-        issueNumber: 79,
-        agentId: "coder@fankai-mac",
-        sourceRunId: "failed-run",
-        reason: "retry",
-      }),
-    ]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Unknown command: run");
   });
 
-  it("[UC-SESSION-01-S09] retries a canceled run by enqueuing a new daemon request", () => {
-    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
-    writeLocalRun(localState.paths.runsDir, "canceled-run", {
-      metadata: {
-        runId: "canceled-run",
-        repository: "fankaidev/grovie",
-        issueNumber: 79,
-        agentId: "coder@fankai-mac",
-      },
-      events: [
-        {
-          timestamp: "2026-05-23T10:01:00.000Z",
-          type: "run.canceled",
-        },
-      ],
-    });
-
-    const result = runCli(["runs", "retry", "canceled-run"], { localState });
-
-    expect(result.exitCode).toBe(0);
-    expect(localState.requests[0]).toMatchObject({
-      sourceRunId: "canceled-run",
-      reason: "retry",
-    });
-  });
-
-  it("[UC-SESSION-01-S10] reruns an issue-agent session through the daemon", () => {
-    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
-
-    const result = runCli(["runs", "rerun", "fankaidev/grovie#79", "--agent", "coder@fankai-mac"], { localState });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Rerun requested for fankaidev/grovie#79.");
-    expect(result.stdout).toContain("reuse the session worktree");
-    expect(localState.requests).toEqual([
-      expect.objectContaining({
-        repository: "fankaidev/grovie",
-        issueNumber: 79,
-        agentId: "coder@fankai-mac",
-        reason: "rerun",
-      }),
-    ]);
-  });
-
-  it("[UC-SESSION-01-S11] refuses retry while the same issue-agent execution is active", () => {
-    const localState = new FakeLocalState(createTmpDir(), {
-      daemonRunning: true,
-      lockedAgents: ["coder@fankai-mac"],
-    });
-    writeLocalRun(localState.paths.runsDir, "failed-run", {
-      metadata: {
-        runId: "failed-run",
-        repository: "fankaidev/grovie",
-        issueNumber: 79,
-        agentId: "coder@fankai-mac",
-      },
-      events: [
-        {
-          timestamp: "2026-05-23T10:01:00.000Z",
-          type: "run.failed",
-        },
-      ],
-    });
-
-    expect(runCli(["runs", "retry", "failed-run"], { localState })).toEqual({
+  it("[UC-SESSION-01-S09] no longer supports request-file retry or rerun subcommands", () => {
+    expect(runCli(["runs", "retry", "failed-run"])).toEqual({
       exitCode: 1,
-      stderr: "Grovie execution is already active for fankaidev/grovie#79 and coder@fankai-mac.",
+      stderr: "Missing runs subcommand. Usage: grovie runs <list|show|cleanup>",
     });
-    expect(localState.requests).toEqual([]);
-  });
-
-  it("[UC-SESSION-01-S08] requires a run id for runs show", () => {
-    expect(runCli(["runs", "show"])).toEqual({
+    expect(runCli(["runs", "rerun", "fankaidev/grovie#79", "--agent", "coder@fankai-mac"])).toEqual({
       exitCode: 1,
-      stderr: "Missing run id. Usage: grovie runs show <run-id>",
-    });
-  });
-
-  it("[UC-RUN-01-S01] requires an issue reference for run", () => {
-    expect(runCli(["run"])).toEqual({
-      exitCode: 1,
-      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
-    });
-  });
-
-  it("[UC-RUN-01-S01] does not treat option values as issue references", () => {
-    expect(runCli(["run", "--agent", "codex"])).toEqual({
-      exitCode: 1,
-      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
-    });
-  });
-
-  it("[UC-RUN-01-S01] rejects malformed issue references with extra path segments", () => {
-    expect(runCli(["run", "fankaidev/grovie/extra#2"])).toEqual({
-      exitCode: 1,
-      stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
-    });
-  });
-
-  it("[UC-RUN-01-S01] accepts the issue reference after options without reading cwd repository identity", async () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
-
-    const result = await runCliAsync(["run", "--agent", "coder@fankai-mac", "other/repo#2"], {
-      cwd,
-      localState,
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Requested daemon execution for other/repo#2.");
-    expect(localState.requests).toEqual([
-      expect.objectContaining({
-        repository: "other/repo",
-        issueNumber: 2,
-        agentId: "coder@fankai-mac",
-      }),
-    ]);
-  });
-
-  it("[UC-RUN-01-S01] rejects unsupported run agents", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
-    runCli(["init"], { cwd });
-
-    expect(runCli(["run", "fankaidev/grovie#2", "--agent", "claude"], { cwd, localState })).toEqual({
-      exitCode: 1,
-      stderr: 'Invalid agent id "claude". Expected <agent-slug>@<machine-slug>.',
-    });
-  });
-
-  it("[UC-RUN-01-S01] [UC-AGENT-02-S04] requests manual issue execution for an agent id without adding assignment labels", async () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
-    writeIgnoredRepoLocalConfig(cwd);
-
-    const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "coder@fankai-mac"], {
-      cwd,
-      localState,
-      runtime: {
-        name: "codex",
-        checkAvailability: fakeRuntime().checkAvailability,
-        run: () => {
-          throw new Error("sync runtime path was not expected");
-        },
-        start: () => {
-          throw new Error("runtime start was not expected");
-        },
-        resume: () => {
-          throw new Error("runtime resume was not expected");
-        },
-        runAsync: () => {
-          throw new Error("foreground runtime path was not expected");
-        },
-      },
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Requested daemon execution for fankaidev/grovie#2.");
-    expect(result.stdout).toContain("Agent: coder@fankai-mac");
-    expect(localState.requests).toEqual([
-      expect.objectContaining({
-        repository: "fankaidev/grovie",
-        issueNumber: 2,
-        agentId: "coder@fankai-mac",
-      }),
-    ]);
-  });
-
-  it("[UC-RUN-01-S02] fails clearly when no daemon is running", async () => {
-    const cwd = createTmpDir();
-    const machineId = resolveMachineId(hostname());
-
-    expect(await runCliAsync(["run", "fankaidev/grovie#2", "--agent", `coder@${machineId}`], {
-      cwd,
-      localState: new FakeLocalState(createTmpDir(), { daemonRunning: false }),
-    })).toEqual({
-      exitCode: 1,
-      stderr: `No Grovie daemon is running for machine ${machineId}. Start one with \`grovie daemon\`.`,
-    });
-  });
-
-  it("[UC-RUN-01-S03] infers the only local assigned agent", async () => {
-    const cwd = createTmpDir();
-    const machineId = resolveMachineId(hostname());
-    const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
-
-    const result = await runCliAsync(["run", "fankaidev/grovie#2"], {
-      cwd,
-      github: fakeGitHubGateway({
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            labels: ["grovie", `agent:coder@${machineId}`],
-          },
-        }),
-      }),
-      localState,
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(localState.requests[0]).toEqual(expect.objectContaining({
-      repository: "fankaidev/grovie",
-      issueNumber: 2,
-      agentId: `coder@${machineId}`,
-    }));
-  });
-
-  it("[UC-RUN-01-S04] fails clearly when no local agent is assigned", async () => {
-    const cwd = createTmpDir();
-    const machineId = resolveMachineId(hostname());
-
-    const result = await runCliAsync(["run", "fankaidev/grovie#2"], {
-      cwd,
-      github: fakeGitHubGateway({
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            labels: ["grovie", "agent:coder@other-machine"],
-          },
-        }),
-      }),
-      localState: new FakeLocalState(createTmpDir(), { daemonRunning: true }),
-    });
-
-    expect(result).toEqual({
-      exitCode: 1,
-      stderr: `No local agent assignment found for fankaidev/grovie#2. Pass --agent or add an agent:<name>@${machineId} label.`,
-    });
-  });
-
-  it("[UC-RUN-01-S05] fails clearly when multiple local agents are assigned", async () => {
-    const cwd = createTmpDir();
-    const machineId = resolveMachineId(hostname());
-
-    const result = await runCliAsync(["run", "fankaidev/grovie#2"], {
-      cwd,
-      github: fakeGitHubGateway({
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            labels: ["grovie", `agent:coder@${machineId}`, `agent:reviewer@${machineId}`],
-          },
-        }),
-      }),
-      localState: new FakeLocalState(createTmpDir(), { daemonRunning: true }),
-    });
-
-    expect(result).toEqual({
-      exitCode: 1,
-      stderr: `Multiple local agent assignments found for fankaidev/grovie#2: coder@${machineId}, reviewer@${machineId}. Pass --agent to choose one.`,
-    });
-  });
-
-  it("[UC-RUN-01-S06] reports an active local execution lock", async () => {
-    const cwd = createTmpDir();
-    const machineId = resolveMachineId(hostname());
-    const agentId = `coder@${machineId}`;
-
-    expect(await runCliAsync(["run", "fankaidev/grovie#2", "--agent", agentId], {
-      cwd,
-      localState: new FakeLocalState(createTmpDir(), {
-        daemonRunning: true,
-        lockedAgents: [agentId],
-      }),
-    })).toEqual({
-      exitCode: 1,
-      stderr: `Grovie execution is already active for fankaidev/grovie#2 and ${agentId}.`,
+      stderr: "Missing runs subcommand. Usage: grovie runs <list|show|cleanup>",
     });
   });
 
@@ -1149,7 +849,6 @@ describe("CLI command registration", () => {
         "No assigned issues found.",
       ].join("\n"),
     });
-    expect(localState.requests).toEqual([]);
   });
 
   it("[UC-DAEMON-03-S06] prints queue inspection as JSON", () => {
@@ -1826,7 +1525,6 @@ function configureLocalAgent(localState: FakeLocalState, agentNames = ["coder"])
 
 class FakeLocalState implements RunLocalState {
   readonly paths: LocalStatePaths;
-  readonly requests: RunRequest[] = [];
   readonly run: PreparedRun = {
     sessionId: "fankaidev-grovie-issue-2-codex",
     runId: "fankaidev-grovie-issue-2",
@@ -1853,7 +1551,6 @@ class FakeLocalState implements RunLocalState {
       worktreesDir: `${root}/worktrees`,
       runsDir: `${root}/runs`,
       locksDir: `${root}/locks`,
-      requestsDir: `${root}/requests`,
       sessionsDir: `${root}/sessions`,
     };
   }
@@ -1888,21 +1585,6 @@ class FakeLocalState implements RunLocalState {
     }
 
     return undefined;
-  }
-
-  enqueueRunRequest(input: { repository: string; issueNumber: number; agentId: string; sourceRunId?: string; reason?: RunRequest["reason"] }): RunRequest {
-    const request = {
-      id: `request-${this.requests.length + 1}`,
-      repository: input.repository,
-      issueNumber: input.issueNumber,
-      agentId: input.agentId,
-      createdAt: "2026-05-23T00:00:00.000Z",
-      path: `${this.paths.requestsDir}/request-${this.requests.length + 1}.json`,
-      sourceRunId: input.sourceRunId,
-      reason: input.reason,
-    };
-    this.requests.push(request);
-    return request;
   }
 }
 

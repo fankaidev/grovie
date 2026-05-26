@@ -4,7 +4,7 @@ import { inspectQueue, renderSkippedQueueSummary, selectNextRunnableCandidate, t
 import { runIssueAsync } from "../run.js";
 import { recordActivity } from "./activity.js";
 import { runWithLocalExecutionLock } from "./issue-execution.js";
-import { runRequestedLocalWork } from "./requested-runs.js";
+import { runResumableLocalWork } from "./resumable-runs.js";
 import type { DaemonCycleResult, DaemonInput } from "./types.js";
 import { NO_LOCAL_AGENTS_MESSAGE } from "./types.js";
 
@@ -52,14 +52,14 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
     };
   }
 
-  const requestedWorkResult = await runRequestedLocalWork({
+  const resumableWorkResult = await runResumableLocalWork({
     ...input,
     now,
     issueRunner,
   });
 
-  if (requestedWorkResult !== undefined) {
-    return requestedWorkResult;
+  if (resumableWorkResult !== undefined) {
+    return resumableWorkResult;
   }
 
   const trustedAuthors = resolveTrustedIssueAuthors(input);

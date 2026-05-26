@@ -11,7 +11,6 @@ export function resolvePaths(overrides: Partial<LocalStatePaths> = {}): LocalSta
     worktreesDir: overrides.worktreesDir ?? join(root, "worktrees"),
     runsDir: overrides.runsDir ?? join(root, "runs"),
     locksDir: overrides.locksDir ?? join(root, "locks"),
-    requestsDir: overrides.requestsDir ?? join(root, "requests"),
     sessionsDir: overrides.sessionsDir ?? join(root, "sessions"),
   };
 }

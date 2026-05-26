@@ -21,9 +21,7 @@ import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail
 import { initStateRepository } from "../../state-repo.js";
 import {
   checkRuntimeAvailability,
-  enqueueDaemonRunRequest,
   errorResult,
-  formatIssueRepository,
   githubErrorResult,
   readNumberOption,
   readStringOption,
@@ -31,7 +29,6 @@ import {
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,
-  resolveManualRunAgent,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
 } from "../command-support.js";
@@ -43,8 +40,6 @@ export const runsCommand = {
     usage: [
       "grovie runs list",
       "grovie runs show <run-id>",
-      "grovie runs retry <run-id>",
-      "grovie runs rerun owner/repo#123 --agent coder@machine",
       "grovie runs cleanup [--dry-run] [--logs] [--older-than 30m|12h|7d]",
     ].join("\n"),
     issue: "#36",
@@ -83,89 +78,6 @@ export const runsCommand = {
           };
         }
 
-        if (subcommand === "retry") {
-          if (runId === undefined) {
-            return {
-              exitCode: 1,
-              stderr: "Missing run id. Usage: grovie runs retry <run-id>",
-            };
-          }
-
-          const run = findLocalRun(runsDir, runId);
-
-          if (run === undefined) {
-            return {
-              exitCode: 1,
-              stderr: `Run not found: ${runId}`,
-            };
-          }
-
-          if (run.status !== "failed" && run.status !== "canceled" && run.status !== "stale") {
-            return {
-              exitCode: 1,
-              stderr: `Run ${runId} is ${run.status}; only failed, canceled, or stale runs can be retried.`,
-            };
-          }
-
-          if (run.repository === undefined || run.issueNumber === undefined || run.agentId === undefined) {
-            return {
-              exitCode: 1,
-              stderr: `Run ${runId} is missing repository, issue number, or agent metadata.`,
-            };
-          }
-
-          return enqueueDaemonRunRequest({
-            context,
-            repository: run.repository,
-            issueNumber: run.issueNumber,
-            agentId: run.agentId,
-            sourceRunId: run.runId,
-            reason: "retry",
-            title: "grovie runs retry",
-            action: `Retry requested for ${run.runId}.`,
-            mode: "The daemon will create a new run in the existing issue-agent session and reuse the session worktree.",
-          });
-        }
-
-        if (subcommand === "rerun") {
-          if (runId === undefined) {
-            return {
-              exitCode: 1,
-              stderr: "Missing issue reference. Usage: grovie runs rerun owner/repo#123 --agent coder@machine",
-            };
-          }
-
-          const parsedIssueReference = parseIssueReference(runId);
-
-          if (!parsedIssueReference.ok) {
-            return githubErrorResult(parsedIssueReference.error);
-          }
-
-          const agentOption = readStringOption(args, "--agent");
-
-          if (!agentOption.ok) {
-            return agentOption.result;
-          }
-
-          if (agentOption.value === undefined) {
-            return {
-              exitCode: 1,
-              stderr: "Missing agent. Usage: grovie runs rerun owner/repo#123 --agent coder@machine",
-            };
-          }
-
-          return enqueueDaemonRunRequest({
-            context,
-            repository: formatIssueRepository(parsedIssueReference.value),
-            issueNumber: parsedIssueReference.value.number,
-            agentId: agentOption.value,
-            reason: "rerun",
-            title: "grovie runs rerun",
-            action: `Rerun requested for ${formatIssueReference(parsedIssueReference.value)}.`,
-            mode: "The daemon will create a new run in the existing issue-agent session and reuse the session worktree.",
-          });
-        }
-
         if (subcommand === "cleanup") {
           const olderThanOption = readStringOption(args, "--older-than");
 
@@ -197,7 +109,7 @@ export const runsCommand = {
 
         return {
           exitCode: 1,
-          stderr: "Missing runs subcommand. Usage: grovie runs <list|show|retry|rerun|cleanup>",
+          stderr: "Missing runs subcommand. Usage: grovie runs <list|show|cleanup>",
         };
       } catch (error) {
         return errorResult(error);

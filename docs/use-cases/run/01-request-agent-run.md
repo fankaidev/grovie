@@ -1,21 +1,20 @@
-# UC-RUN-01: Request One Agent Run
+# UC-RUN-01: Trigger One Agent Run
 
-> Users can request one concrete agent execution for a GitHub issue through the local daemon without changing long-lived assignment.
+> Users trigger concrete agent executions through visible GitHub issue activity, while the local daemon owns scheduling and execution.
 
 ## Rules
 
 | ID | Rule |
 |----|------|
-| R1 | `grovie run` requests one run and does not add or remove assignment labels. |
+| R1 | GitHub is the control plane for run triggers: labels, issue comments, pull request activity, and handled cursors decide whether an assigned agent should run. |
 | R2 | The daemon, not the foreground CLI process, owns execution. |
+| R3 | Grovie does not maintain a second local request-file queue for explicit runs. |
 
 ## Scenarios
 
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-RUN-01-S01 | P0 | A manual run for `owner/repo#123 --agent coder@machine` enqueues one daemon execution for that issue and agent without changing issue labels. |
-| UC-RUN-01-S02 | P0 | A manual run when no daemon is running fails clearly and tells the user to start the daemon. |
-| UC-RUN-01-S03 | P0 | A manual run without `--agent` uses the only local agent assigned on the issue. |
-| UC-RUN-01-S04 | P0 | A manual run without `--agent` fails clearly when the issue has no local agent assignment. |
-| UC-RUN-01-S05 | P0 | A manual run without `--agent` fails clearly when multiple local agents are assigned to the issue. |
-| UC-RUN-01-S06 | P1 | A manual run for an agent that is already locked on the same issue reports the active run instead of starting a duplicate. |
+| UC-RUN-01-S01 | P0 | The top-level CLI no longer registers `grovie run`. |
+| UC-RUN-01-S02 | P0 | A user asks an assigned agent to act again by adding visible GitHub issue activity, such as a new issue comment. |
+| UC-RUN-01-S03 | P0 | The daemon picks up visible unhandled GitHub issue activity through the normal queue polling path. |
+| UC-RUN-01-S04 | P1 | Grovie does not write local request files under `~/.grovie/requests`. |
