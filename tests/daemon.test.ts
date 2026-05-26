@@ -68,7 +68,7 @@ describe("runDaemonCycle", () => {
     expect(github.updatedComments).toEqual([]);
   });
 
-  it("[UC-WORKER-01-S04] uses the assigned local agent id as the daemon worker id", async () => {
+  it("[UC-AGENT-01-S04] uses the assigned local agent id as the daemon worker id", async () => {
     const github = new FakeGitHub([fakeIssue()]);
     const machineId = resolveMachineId(hostname());
     const runs: RunIssueAsyncInput[] = [];
@@ -123,7 +123,7 @@ describe("runDaemonCycle", () => {
     expect(runs[0]?.monitor?.heartbeatIntervalMs).toBe(1234);
   });
 
-  it("[UC-WORKER-03-S05] [UC-WORKER-04-S11] reports issues assigned only to another machine as skipped", async () => {
+  it("[UC-AGENT-02-S05] [UC-DAEMON-02-S11] reports issues assigned only to another machine as skipped", async () => {
     const github = new FakeGitHub([
       fakeIssue({
         labels: ["grovie", "agent:coder@other-machine"],
@@ -163,7 +163,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-WORKER-04-S03] skips label-only issues without a local agent assignment", async () => {
+  it("[UC-DAEMON-02-S03] skips label-only issues without a local agent assignment", async () => {
     const github = new FakeGitHub([
       fakeIssue({
         labels: ["grovie"],
@@ -201,7 +201,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-WORKER-04-S11] reports handled assigned issues as skipped", async () => {
+  it("[UC-DAEMON-02-S11] reports handled assigned issues as skipped", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -235,7 +235,7 @@ describe("runDaemonCycle", () => {
     expect(result.stdout).toContain(`- fankaidev/grovie#8 agent=coder@${machineId} reason=no unhandled activity`);
   });
 
-  it("[UC-WORKER-04-S11] reports canceled local assignments as skipped without claiming them", async () => {
+  it("[UC-DAEMON-02-S11] reports canceled local assignments as skipped without claiming them", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -276,7 +276,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-EXECUTION-01-S01] [UC-EXECUTION-02-S09] consumes one manual run request before scheduled issues and preserves request trace", async () => {
+  it("[UC-RUN-01-S01] [UC-SESSION-01-S09] consumes one manual run request before scheduled issues and preserves request trace", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
       fakeIssue({
@@ -326,7 +326,7 @@ describe("runDaemonCycle", () => {
     expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
   });
 
-  it("[UC-EXECUTION-02-S13] rejects a daemon request for an unconfigured local agent before runtime start", async () => {
+  it("[UC-SESSION-01-S13] rejects a daemon request for an unconfigured local agent before runtime start", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.enqueueRunRequest({
@@ -369,7 +369,7 @@ describe("runDaemonCycle", () => {
     expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
   });
 
-  it("[UC-EXECUTION-02-S14] records post-run pull request activity as handled for the same issue-agent", async () => {
+  it("[UC-SESSION-01-S14] records post-run pull request activity as handled for the same issue-agent", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const relatedPullRequests: GitHubRelatedPullRequest[] = [];
@@ -442,7 +442,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-04-S03] creates one run for a locally assigned agent with unhandled activity", async () => {
+  it("[UC-DAEMON-02-S03] creates one run for a locally assigned agent with unhandled activity", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -478,7 +478,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-WORKER-04-S15] inspects only event-affected issues during filtered queue checks", () => {
+  it("[UC-DAEMON-02-S15] inspects only event-affected issues during filtered queue checks", () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -520,7 +520,7 @@ describe("runDaemonCycle", () => {
     expect(github.readIssueCalls.map((reference) => reference.number)).toEqual([8, 9]);
   });
 
-  it("[UC-WORKER-04-S14] skips a machine-local agent label when that agent is not configured", async () => {
+  it("[UC-DAEMON-02-S14] skips a machine-local agent label when that agent is not configured", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -562,7 +562,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-DAEMON-03-S02] resumes an interrupted session before polling new queue items", async () => {
+  it("[UC-SESSION-03-S02] resumes an interrupted session before polling new queue items", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "old-run", {
@@ -644,7 +644,7 @@ describe("runDaemonCycle", () => {
     expect(runs[1]?.runRequest).toBeUndefined();
   });
 
-  it("[UC-EXECUTION-02-S12] rejects a resumable run whose agent is no longer configured locally", async () => {
+  it("[UC-SESSION-01-S12] rejects a resumable run whose agent is no longer configured locally", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "old-run", {
@@ -698,7 +698,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-DAEMON-03-S02] leaves an interrupted run resumable when recovery cannot start", async () => {
+  it("[UC-SESSION-03-S02] leaves an interrupted run resumable when recovery cannot start", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "old-run", {
@@ -735,7 +735,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-DAEMON-03-S05] does not auto-resume terminal runs even when metadata still looks active", async () => {
+  it("[UC-SESSION-03-S05] does not auto-resume terminal runs even when metadata still looks active", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "succeeded-run", {
@@ -769,7 +769,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-DAEMON-03-S03] recovers active-looking runs left by a force stop", async () => {
+  it("[UC-SESSION-03-S03] recovers active-looking runs left by a force stop", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "active-run", {
@@ -817,7 +817,7 @@ describe("runDaemonCycle", () => {
     })).toBe(false);
   });
 
-  it("[UC-DAEMON-03-S01] lets interrupted state win over stop-time runtime failure events", async () => {
+  it("[UC-SESSION-03-S01] lets interrupted state win over stop-time runtime failure events", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "interrupted-run", {
@@ -871,7 +871,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-DAEMON-03-S03] does not recover a run while its runtime pid is still live", async () => {
+  it("[UC-SESSION-03-S03] does not recover a run while its runtime pid is still live", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "active-run", {
@@ -901,7 +901,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-DAEMON-03-S04] does not auto-resume canceled runs", async () => {
+  it("[UC-SESSION-03-S04] does not auto-resume canceled runs", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "canceled-run", {
@@ -935,7 +935,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-DAEMON-03-S05] does not auto-resume failed runs without an explicit retry or rerun", async () => {
+  it("[UC-SESSION-03-S05] does not auto-resume failed runs without an explicit retry or rerun", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "failed-run", {
@@ -964,7 +964,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-WORKER-04-S09] picks runnable assigned issues by priority before GitHub list order", async () => {
+  it("[UC-DAEMON-02-S09] picks runnable assigned issues by priority before GitHub list order", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1007,7 +1007,7 @@ describe("runDaemonCycle", () => {
     expect(runs[0]?.issueReference.number).toBe(10);
   });
 
-  it("[UC-WORKER-04-S09] uses older activity first within the same priority", async () => {
+  it("[UC-DAEMON-02-S09] uses older activity first within the same priority", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1044,7 +1044,7 @@ describe("runDaemonCycle", () => {
     expect(runs[0]?.issueReference.number).toBe(9);
   });
 
-  it("[UC-WORKER-04-S10] skips a blocked high-priority issue and runs a lower-priority candidate", async () => {
+  it("[UC-DAEMON-02-S10] skips a blocked high-priority issue and runs a lower-priority candidate", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.acquireExecutionLock({
@@ -1087,7 +1087,7 @@ describe("runDaemonCycle", () => {
     expect(runs[0]?.issueReference.number).toBe(9);
   });
 
-  it("[UC-EXECUTION-03-S02] skips assigned runs when Codex is unavailable", async () => {
+  it("[UC-RUN-02-S02] skips assigned runs when Codex is unavailable", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1129,7 +1129,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-WORKER-04-S07] creates a reviewer run before a related pull request exists", async () => {
+  it("[UC-DAEMON-02-S07] creates a reviewer run before a related pull request exists", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1165,7 +1165,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-EXECUTION-03-S08] passes configured agent instructions into the runtime handoff", async () => {
+  it("[UC-RUN-02-S08] passes configured agent instructions into the runtime handoff", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1205,7 +1205,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-EXECUTION-03-S10] passes configured agent env keys into the runtime handoff", async () => {
+  it("[UC-RUN-02-S10] passes configured agent env keys into the runtime handoff", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1245,7 +1245,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-04-S17] skips automatic queue runs when the issue creator is not trusted", async () => {
+  it("[UC-DAEMON-02-S17] skips automatic queue runs when the issue creator is not trusted", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1282,7 +1282,7 @@ describe("runDaemonCycle", () => {
     expect(runs).toEqual([]);
   });
 
-  it("[UC-WORKER-04-S17] uses configured trusted authors instead of the authenticated gh login", async () => {
+  it("[UC-DAEMON-02-S17] uses configured trusted authors instead of the authenticated gh login", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1319,7 +1319,7 @@ describe("runDaemonCycle", () => {
     expect(runs[0]?.issueReference.number).toBe(8);
   });
 
-  it("[UC-WORKER-04-S01] refuses to start when a live daemon lock exists", async () => {
+  it("[UC-DAEMON-02-S01] refuses to start when a live daemon lock exists", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const existingLock = localState.acquireDaemonLock(resolveMachineId(hostname()), NOW);
 
@@ -1340,7 +1340,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-04-S15] uses repository events for single-repository long-running daemon cycles", async () => {
+  it("[UC-DAEMON-02-S15] uses repository events for single-repository long-running daemon cycles", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const events = [fakeRepositoryEvent("event-1")];
     const github = new FakeGitHub([], { repositoryEvents: events });
@@ -1372,7 +1372,7 @@ describe("runDaemonCycle", () => {
     expect(github.listOpenIssueCalls).toEqual([]);
   });
 
-  it("[UC-WORKER-04-S05] [UC-WORKER-04-S11] reports an assigned issue skipped by a local execution lock", async () => {
+  it("[UC-DAEMON-02-S05] [UC-DAEMON-02-S11] reports an assigned issue skipped by a local execution lock", async () => {
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.acquireExecutionLock({
@@ -1416,7 +1416,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-EXECUTION-02-S03] creates a run when issue activity is newer than the handled cursor", async () => {
+  it("[UC-SESSION-01-S03] creates a run when issue activity is newer than the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -1518,7 +1518,7 @@ describe("runDaemonCycle", () => {
     })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
   });
 
-  it("[UC-WORKER-04-S16] reruns a handled issue when a linked open pull request becomes unmergeable", async () => {
+  it("[UC-DAEMON-02-S16] reruns a handled issue when a linked open pull request becomes unmergeable", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const relatedPullRequests = [
@@ -1602,7 +1602,7 @@ describe("runDaemonCycle", () => {
       .toContain("pull request #20 merge state DIRTY requires branch update work");
   });
 
-  it("[UC-EXECUTION-02-S03] creates a run when the issue itself is updated after the handled cursor", async () => {
+  it("[UC-SESSION-01-S03] creates a run when the issue itself is updated after the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -1645,7 +1645,7 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(1);
   });
 
-  it("[UC-EXECUTION-02-S04] [UC-WORKER-04-S11] reports unchanged issue activity skipped by the handled cursor", async () => {
+  it("[UC-SESSION-01-S04] [UC-DAEMON-02-S11] reports unchanged issue activity skipped by the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -1701,7 +1701,7 @@ describe("runDaemonCycle", () => {
     expect(readFileSync(join(localState.getPaths().root, "daemon", "activity.jsonl"), "utf8")).toContain("No queued issues found for fankaidev/grovie with label grovie.");
   });
 
-  it("[UC-WORKER-04-S03] updates the handled cursor after terminal run completion", async () => {
+  it("[UC-DAEMON-02-S03] updates the handled cursor after terminal run completion", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
@@ -1735,7 +1735,7 @@ describe("runDaemonCycle", () => {
     })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
   });
 
-  it("[UC-EXECUTION-05-S06] advances the handled cursor through issue comments created by the same agent", async () => {
+  it("[UC-RUN-03-S06] advances the handled cursor through issue comments created by the same agent", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
@@ -1770,7 +1770,7 @@ describe("runDaemonCycle", () => {
     })?.handledThrough).toBe("2026-05-22T00:00:05.000Z");
   });
 
-  it("[UC-EXECUTION-02-S04] [UC-WORKER-04-S04] ignores Grovie claim comments when checking the handled cursor", async () => {
+  it("[UC-SESSION-01-S04] [UC-DAEMON-02-S04] ignores Grovie claim comments when checking the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
@@ -1876,7 +1876,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-EXECUTION-02-S03] creates another run when a user comment arrives during execution", async () => {
+  it("[UC-SESSION-01-S03] creates another run when a user comment arrives during execution", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const issue = fakeIssue({
@@ -1947,7 +1947,7 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(2);
   });
 
-  it("[UC-EXECUTION-02-S03] creates another run when the issue is edited during execution", async () => {
+  it("[UC-SESSION-01-S03] creates another run when the issue is edited during execution", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const issue = fakeIssue({
@@ -2054,7 +2054,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-WORKER-04-S06] uses independent local agent locks for assigned agents on one issue", async () => {
+  it("[UC-DAEMON-02-S06] uses independent local agent locks for assigned agents on one issue", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.acquireExecutionLock({
@@ -2098,7 +2098,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-WORKER-04-S11] skips canceled assignments without writing advisory claim comments", async () => {
+  it("[UC-DAEMON-02-S11] skips canceled assignments without writing advisory claim comments", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -2255,7 +2255,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-WORKER-06-S14] daemon run owns the enabled admin console in the same daemon process", async () => {
+  it("[UC-DAEMON-04-S14] daemon run owns the enabled admin console in the same daemon process", async () => {
     const port = await getAvailablePort();
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });
@@ -2304,7 +2304,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-06-S15] daemon run stops the admin console when the daemon stops", async () => {
+  it("[UC-DAEMON-04-S15] daemon run stops the admin console when the daemon stops", async () => {
     const port = await getAvailablePort();
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });
@@ -2416,7 +2416,7 @@ describe("runDaemonCycle", () => {
     }
   });
 
-  it("[UC-WORKER-04-S08] checks multiple watched repositories sequentially until it finds queued work", async () => {
+  it("[UC-DAEMON-02-S08] checks multiple watched repositories sequentially until it finds queued work", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -2468,7 +2468,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-02-S04] [UC-WORKER-04-S12] uses watched repository daemon policy for queue label and run config", async () => {
+  it("[UC-DAEMON-01-S04] [UC-DAEMON-02-S12] uses watched repository daemon policy for queue label and run config", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({

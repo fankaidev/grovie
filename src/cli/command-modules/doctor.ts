@@ -39,7 +39,7 @@ import type { CliCommand, CliContext } from "../types.js";
 
 export const doctorCommand = {
     name: "doctor",
-    description: "Check global worker config and local prerequisites.",
+    description: "Check global Grovie config and local prerequisites.",
     usage: "grovie doctor",
     issue: "#3",
     run: (_args: string[], context: CliContext) => {

@@ -21,11 +21,11 @@ afterEach(() => {
 });
 
 describe("CLI command registration", () => {
-  it("[UC-WORKER-03-S01] [UC-WORKER-05-S01] [UC-ADMIN-01-S02] registers issue assignment, queue, daemon, and admin commands", () => {
+  it("[UC-AGENT-02-S01] [UC-DAEMON-03-S01] [UC-ADMIN-01-S02] registers issue assignment, queue, daemon, and admin commands", () => {
     expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "run", "queue", "daemon", "state", "admin", "watch"]);
   });
 
-  it("[UC-WORKER-05-S01] [UC-WORKER-06-S01] [UC-ADMIN-01-S02] renders help with queue, daemon, and admin commands", () => {
+  it("[UC-DAEMON-03-S01] [UC-DAEMON-04-S01] [UC-ADMIN-01-S02] renders help with queue, daemon, and admin commands", () => {
     const help = renderHelp();
 
     expect(help).toContain("grovie <command>");
@@ -42,14 +42,14 @@ describe("CLI command registration", () => {
     expect(help).toContain("watch");
   });
 
-  it("[UC-WORKER-06-S01] accepts pnpm script argument separators", () => {
+  it("[UC-DAEMON-04-S01] accepts pnpm script argument separators", () => {
     expect(runCli(["--", "--help"])).toEqual({
       exitCode: 0,
       stdout: renderHelp(),
     });
   });
 
-  it("[UC-WORKER-06-S01] renders command-specific usage with supported subcommand options", () => {
+  it("[UC-DAEMON-04-S01] renders command-specific usage with supported subcommand options", () => {
     expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json]");
 
     const runsHelp = runCli(["runs", "--help"]).stdout;
@@ -67,7 +67,7 @@ describe("CLI command registration", () => {
     expect(watchHelp).toContain("grovie watch remove owner/repo");
   });
 
-  it("[UC-WORKER-06-S01] reports the package version through long and short flags", () => {
+  it("[UC-DAEMON-04-S01] reports the package version through long and short flags", () => {
     const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 
     expect(GROVIE_VERSION).toBe(packageVersion.version);
@@ -81,7 +81,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-02-S04] writes the default global worker config", () => {
+  it("[UC-DAEMON-01-S04] writes the default global Grovie config", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -99,7 +99,7 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("watchedRepositories: []");
   });
 
-  it("[UC-WORKER-02-S06] reports invalid global config fields through doctor", () => {
+  it("[UC-DAEMON-01-S06] reports invalid global config fields through doctor", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -111,7 +111,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-02-S06] rejects unknown global config fields through doctor", () => {
+  it("[UC-DAEMON-01-S06] rejects unknown global config fields through doctor", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -123,7 +123,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-01-S04] reports explicitly configured local agents through doctor", () => {
+  it("[UC-AGENT-01-S04] reports explicitly configured local agents through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
 
@@ -156,7 +156,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-01-S04] [UC-WORKER-01-S06] reports unavailable configured agents through doctor", () => {
+  it("[UC-AGENT-01-S04] [UC-AGENT-01-S06] reports unavailable configured agents through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
 
@@ -240,7 +240,7 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(root, "config.yml"), "utf8")).toContain("stateRepo:");
   });
 
-  it("[UC-WORKER-01-S04] [UC-EXECUTION-03-S02] reports unavailable runtime inventory through doctor", () => {
+  it("[UC-AGENT-01-S04] [UC-RUN-02-S02] reports unavailable runtime inventory through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
     const globalRoot = createTmpDir();
@@ -277,7 +277,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-01-S06] reports GitHub authentication errors through doctor", () => {
+  it("[UC-AGENT-01-S06] reports GitHub authentication errors through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
 
@@ -310,7 +310,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S08] shows daemon state, admin console lifecycle, watched repositories, useful paths, active runs, and failures through status", () => {
+  it("[UC-DAEMON-04-S08] shows daemon state, admin console lifecycle, watched repositories, useful paths, active runs, and failures through status", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -359,7 +359,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("active-run fankaidev/grovie#36 status=running");
   });
 
-  it("[UC-EXECUTION-02-S07] [UC-EXECUTION-02-S08] lists and shows local runs through runs subcommands", () => {
+  it("[UC-SESSION-01-S07] [UC-SESSION-01-S08] lists and shows local runs through runs subcommands", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -417,7 +417,7 @@ describe("CLI command registration", () => {
     expect(detail.stdout).toContain('run.failed {"exitCode":1}');
   });
 
-  it("[UC-EXECUTION-04-S08] runs local cleanup in dry-run mode from the CLI", () => {
+  it("[UC-SESSION-02-S08] runs local cleanup in dry-run mode from the CLI", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const worktreePath = join(localState.paths.worktreesDir, "cleanup-session");
@@ -451,7 +451,7 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(localState.paths.runsDir, "cleanup-run", "events.jsonl"), "utf8")).not.toContain("worktree.cleaned");
   });
 
-  it("[UC-EXECUTION-02-S09] retries a failed run by enqueuing a new daemon request without deleting history", () => {
+  it("[UC-SESSION-01-S09] retries a failed run by enqueuing a new daemon request without deleting history", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     writeLocalRun(localState.paths.runsDir, "failed-run", {
@@ -498,7 +498,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-EXECUTION-02-S09] retries a canceled run by enqueuing a new daemon request", () => {
+  it("[UC-SESSION-01-S09] retries a canceled run by enqueuing a new daemon request", () => {
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     writeLocalRun(localState.paths.runsDir, "canceled-run", {
       metadata: {
@@ -524,7 +524,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-EXECUTION-02-S10] reruns an issue-agent session through the daemon", () => {
+  it("[UC-SESSION-01-S10] reruns an issue-agent session through the daemon", () => {
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
 
     const result = runCli(["runs", "rerun", "fankaidev/grovie#79", "--agent", "coder@fankai-mac"], { localState });
@@ -542,7 +542,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-EXECUTION-02-S11] refuses retry while the same issue-agent execution is active", () => {
+  it("[UC-SESSION-01-S11] refuses retry while the same issue-agent execution is active", () => {
     const localState = new FakeLocalState(createTmpDir(), {
       daemonRunning: true,
       lockedAgents: ["coder@fankai-mac"],
@@ -569,35 +569,35 @@ describe("CLI command registration", () => {
     expect(localState.requests).toEqual([]);
   });
 
-  it("[UC-EXECUTION-02-S08] requires a run id for runs show", () => {
+  it("[UC-SESSION-01-S08] requires a run id for runs show", () => {
     expect(runCli(["runs", "show"])).toEqual({
       exitCode: 1,
       stderr: "Missing run id. Usage: grovie runs show <run-id>",
     });
   });
 
-  it("[UC-EXECUTION-01-S01] requires an issue reference for run", () => {
+  it("[UC-RUN-01-S01] requires an issue reference for run", () => {
     expect(runCli(["run"])).toEqual({
       exitCode: 1,
       stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
     });
   });
 
-  it("[UC-EXECUTION-01-S01] does not treat option values as issue references", () => {
+  it("[UC-RUN-01-S01] does not treat option values as issue references", () => {
     expect(runCli(["run", "--agent", "codex"])).toEqual({
       exitCode: 1,
       stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
     });
   });
 
-  it("[UC-EXECUTION-01-S01] rejects malformed issue references with extra path segments", () => {
+  it("[UC-RUN-01-S01] rejects malformed issue references with extra path segments", () => {
     expect(runCli(["run", "fankaidev/grovie/extra#2"])).toEqual({
       exitCode: 1,
       stderr: "Missing issue reference. Usage: grovie run owner/repo#123 [--agent coder@machine]",
     });
   });
 
-  it("[UC-EXECUTION-01-S01] accepts the issue reference after options without reading cwd repository identity", async () => {
+  it("[UC-RUN-01-S01] accepts the issue reference after options without reading cwd repository identity", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
 
@@ -617,7 +617,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-EXECUTION-01-S01] rejects unsupported run agents", () => {
+  it("[UC-RUN-01-S01] rejects unsupported run agents", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     runCli(["init"], { cwd });
@@ -628,7 +628,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-EXECUTION-01-S01] [UC-WORKER-03-S04] requests manual issue execution for an agent id without adding assignment labels", async () => {
+  it("[UC-RUN-01-S01] [UC-AGENT-02-S04] requests manual issue execution for an agent id without adding assignment labels", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     writeIgnoredRepoLocalConfig(cwd);
@@ -666,7 +666,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-EXECUTION-01-S02] fails clearly when no daemon is running", async () => {
+  it("[UC-RUN-01-S02] fails clearly when no daemon is running", async () => {
     const cwd = createTmpDir();
     const machineId = resolveMachineId(hostname());
 
@@ -679,7 +679,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-EXECUTION-01-S03] infers the only local assigned agent", async () => {
+  it("[UC-RUN-01-S03] infers the only local assigned agent", async () => {
     const cwd = createTmpDir();
     const machineId = resolveMachineId(hostname());
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
@@ -706,7 +706,7 @@ describe("CLI command registration", () => {
     }));
   });
 
-  it("[UC-EXECUTION-01-S04] fails clearly when no local agent is assigned", async () => {
+  it("[UC-RUN-01-S04] fails clearly when no local agent is assigned", async () => {
     const cwd = createTmpDir();
     const machineId = resolveMachineId(hostname());
 
@@ -730,7 +730,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-EXECUTION-01-S05] fails clearly when multiple local agents are assigned", async () => {
+  it("[UC-RUN-01-S05] fails clearly when multiple local agents are assigned", async () => {
     const cwd = createTmpDir();
     const machineId = resolveMachineId(hostname());
 
@@ -754,7 +754,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-EXECUTION-01-S06] reports an active local execution lock", async () => {
+  it("[UC-RUN-01-S06] reports an active local execution lock", async () => {
     const cwd = createTmpDir();
     const machineId = resolveMachineId(hostname());
     const agentId = `coder@${machineId}`;
@@ -771,7 +771,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-01-S05] runs one daemon polling cycle from global watched repositories with explicit agent config", async () => {
+  it("[UC-AGENT-01-S05] runs one daemon polling cycle from global watched repositories with explicit agent config", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
@@ -805,7 +805,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-05-S01] [UC-WORKER-05-S03] lists global watched assigned issues in daemon pick order", async () => {
+  it("[UC-DAEMON-03-S01] [UC-DAEMON-03-S03] lists global watched assigned issues in daemon pick order", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
@@ -862,7 +862,7 @@ describe("CLI command registration", () => {
     expect(result.stdout?.indexOf("fankaidev/grovie#9")).toBeLessThan(result.stdout?.indexOf("fankaidev/grovie#8") ?? 0);
   });
 
-  it("[UC-WORKER-04-S17] shows untrusted issue creators as skipped in queue inspection", () => {
+  it("[UC-DAEMON-02-S17] shows untrusted issue creators as skipped in queue inspection", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
@@ -899,7 +899,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("reason=untrusted issue creator external-user");
   });
 
-  it("[UC-WORKER-05-S02] inspects an explicit repository without global watched repositories", () => {
+  it("[UC-DAEMON-03-S02] inspects an explicit repository without global watched repositories", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
@@ -947,7 +947,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain(`#1 fankaidev/other#3 agent=coder@${machineId}`);
   });
 
-  it("[UC-WORKER-05-S04] lists skipped assigned issues with clear reasons", () => {
+  it("[UC-DAEMON-03-S04] lists skipped assigned issues with clear reasons", () => {
     const cwd = createTmpDir();
     const machineId = resolveMachineId(hostname());
     const lockedAgent = `locked@${machineId}`;
@@ -1022,7 +1022,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("reason=canceled");
   });
 
-  it("[UC-WORKER-05-S04] does not read related pull requests for cheap skipped candidates", () => {
+  it("[UC-DAEMON-03-S04] does not read related pull requests for cheap skipped candidates", () => {
     const cwd = createTmpDir();
     const machineId = resolveMachineId(hostname());
     const lockedAgent = `locked@${machineId}`;
@@ -1080,7 +1080,7 @@ describe("CLI command registration", () => {
     expect(relatedReads).toEqual([8]);
   });
 
-  it("[UC-WORKER-05-S05] queue inspection does not mutate GitHub state or enqueue runs", () => {
+  it("[UC-DAEMON-03-S05] queue inspection does not mutate GitHub state or enqueue runs", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
 
@@ -1112,7 +1112,7 @@ describe("CLI command registration", () => {
     expect(localState.requests).toEqual([]);
   });
 
-  it("[UC-WORKER-05-S06] prints queue inspection as JSON", () => {
+  it("[UC-DAEMON-03-S06] prints queue inspection as JSON", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
@@ -1161,7 +1161,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-WORKER-05-S07] skips machine-local agent labels that are not configured locally", () => {
+  it("[UC-DAEMON-03-S07] skips machine-local agent labels that are not configured locally", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
@@ -1197,7 +1197,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("reason=agent not configured locally");
   });
 
-  it("[UC-WORKER-03-S01] assigns an issue to an agent label", () => {
+  it("[UC-AGENT-02-S01] assigns an issue to an agent label", () => {
     const addedLabels: Array<{ reference: IssueReference; labels: string[] }> = [];
 
     expect(
@@ -1232,7 +1232,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-WORKER-03-S02] unassigns only the matching agent label", () => {
+  it("[UC-AGENT-02-S02] unassigns only the matching agent label", () => {
     const removedLabels: Array<{ reference: IssueReference; label: string }> = [];
 
     expect(
@@ -1267,7 +1267,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-WORKER-02-S03] uses built-in queue defaults for global daemon without reading cwd policy config", async () => {
+  it("[UC-DAEMON-01-S03] uses built-in queue defaults for global daemon without reading cwd policy config", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
@@ -1301,7 +1301,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S01] runs the daemon foreground subcommand with built-in defaults", async () => {
+  it("[UC-DAEMON-04-S01] runs the daemon foreground subcommand with built-in defaults", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
@@ -1335,7 +1335,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-02-S07] exits clearly when the daemon has no configured local agents", async () => {
+  it("[UC-DAEMON-01-S07] exits clearly when the daemon has no configured local agents", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
@@ -1355,7 +1355,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S02] starts a detached background daemon and reports local state", () => {
+  it("[UC-DAEMON-04-S02] starts a detached background daemon and reports local state", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     configureLocalAgent(localState);
@@ -1384,7 +1384,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-02-S07] refuses detached daemon start when no local agents are configured", () => {
+  it("[UC-DAEMON-01-S07] refuses detached daemon start when no local agents are configured", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({
       start: () => {
@@ -1435,7 +1435,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S02] refuses to start another live background daemon", () => {
+  it("[UC-DAEMON-04-S02] refuses to start another live background daemon", () => {
     const localState = new FakeLocalState(createTmpDir());
     configureLocalAgent(localState);
     const daemonLifecycle = fakeDaemonLifecycle({
@@ -1451,7 +1451,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S03] stops the recorded background daemon", () => {
+  it("[UC-DAEMON-04-S03] stops the recorded background daemon", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({
       stop: ({ root }) => {
@@ -1474,7 +1474,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S13] passes force stop requests to the daemon lifecycle", () => {
+  it("[UC-DAEMON-04-S13] passes force stop requests to the daemon lifecycle", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({
       stop: ({ root, force }) => {
@@ -1491,7 +1491,7 @@ describe("CLI command registration", () => {
     expect(runCli(["daemon", "stop", "--force"], { localState, daemonLifecycle }).exitCode).toBe(0);
   });
 
-  it("[UC-WORKER-06-S04] reports background daemon status", () => {
+  it("[UC-DAEMON-04-S04] reports background daemon status", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({
       status: () => ({
@@ -1508,7 +1508,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain(`Stdout log: ${localState.paths.root}/daemon/stdout.log`);
   });
 
-  it("[UC-WORKER-06-S05] prints recent daemon logs from local daemon state", () => {
+  it("[UC-DAEMON-04-S05] prints recent daemon logs from local daemon state", () => {
     const localState = new FakeLocalState(createTmpDir());
     writeDaemonLogs(localState.paths.root, {
       stdout: "stdout old\nstdout new\n",
@@ -1529,7 +1529,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S06] selects a daemon log stream through the CLI", () => {
+  it("[UC-DAEMON-04-S06] selects a daemon log stream through the CLI", () => {
     const localState = new FakeLocalState(createTmpDir());
     writeDaemonLogs(localState.paths.root, {
       stdout: "daemon stdout\n",
@@ -1544,7 +1544,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).not.toContain("daemon stdout");
   });
 
-  it("[UC-WORKER-06-S12] reports daemon service paths through the CLI", () => {
+  it("[UC-DAEMON-04-S12] reports daemon service paths through the CLI", () => {
     const localState = new FakeLocalState(createTmpDir());
 
     const result = runCli(["daemon", "service", "path", "--platform", "systemd"], { localState });
@@ -1555,7 +1555,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain(".config/systemd/user/grovie.service");
   });
 
-  it("[UC-WORKER-06-S07] reports missing daemon logs through the CLI", () => {
+  it("[UC-DAEMON-04-S07] reports missing daemon logs through the CLI", () => {
     const localState = new FakeLocalState(createTmpDir());
 
     expect(runCli(["daemon", "logs"], { localState })).toEqual({
@@ -1564,7 +1564,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-06-S01] runs an explicit daemon repository without reading the current checkout repository", async () => {
+  it("[UC-DAEMON-04-S01] runs an explicit daemon repository without reading the current checkout repository", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
@@ -1597,7 +1597,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-02-S01] [UC-WORKER-02-S02] manages watched repositories in the global config", () => {
+  it("[UC-DAEMON-01-S01] [UC-DAEMON-01-S02] manages watched repositories in the global config", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);

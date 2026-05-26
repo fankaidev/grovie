@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GhGitHubGateway, type CommandResult, type CommandRunner, parseIssueReference } from "../src/github.js";
 
 describe("parseIssueReference", () => {
-  it("[UC-EXECUTION-01-S01] parses owner/repo issue references", () => {
+  it("[UC-RUN-01-S01] parses owner/repo issue references", () => {
     expect(parseIssueReference("fankaidev/grovie#123")).toEqual({
       ok: true,
       value: {
@@ -13,7 +13,7 @@ describe("parseIssueReference", () => {
     });
   });
 
-  it("[UC-EXECUTION-01-S01] rejects invalid issue references with structured errors", () => {
+  it("[UC-RUN-01-S01] rejects invalid issue references with structured errors", () => {
     expect(parseIssueReference("fankaidev/grovie/extra#123")).toEqual({
       ok: false,
       error: {
@@ -23,7 +23,7 @@ describe("parseIssueReference", () => {
     });
   });
 
-  it("[UC-EXECUTION-01-S01] rejects zero, missing, and non-numeric issue numbers", () => {
+  it("[UC-RUN-01-S01] rejects zero, missing, and non-numeric issue numbers", () => {
     for (const value of ["fankaidev/grovie#0", "fankaidev/grovie#", "fankaidev/grovie#abc"]) {
       expect(parseIssueReference(value)).toEqual({
         ok: false,
@@ -37,7 +37,7 @@ describe("parseIssueReference", () => {
 });
 
 describe("GhGitHubGateway", () => {
-  it("[UC-WORKER-04-S17] detects the authenticated GitHub user through gh", () => {
+  it("[UC-DAEMON-02-S17] detects the authenticated GitHub user through gh", () => {
     const runner = new FakeRunner([
       {
         stdout: JSON.stringify({ login: "fankaidev" }),
@@ -60,7 +60,7 @@ describe("GhGitHubGateway", () => {
     ]);
   });
 
-  it("[UC-EXECUTION-03-S03] reads issue details, default branch, and comments", () => {
+  it("[UC-RUN-02-S03] reads issue details, default branch, and comments", () => {
     const runner = new FakeRunner([
       {
         stdout: JSON.stringify({
@@ -126,7 +126,7 @@ describe("GhGitHubGateway", () => {
     ]);
   });
 
-  it("[UC-WORKER-04-S03] lists open issues by label and skips pull requests", () => {
+  it("[UC-DAEMON-02-S03] lists open issues by label and skips pull requests", () => {
     const runner = new FakeRunner([
       {
         stdout: JSON.stringify([
@@ -171,7 +171,7 @@ describe("GhGitHubGateway", () => {
     ]);
   });
 
-  it("[UC-WORKER-04-S13] rejects invalid repository names when listing issues", () => {
+  it("[UC-DAEMON-02-S13] rejects invalid repository names when listing issues", () => {
     const gateway = new GhGitHubGateway(new FakeRunner([]));
 
     expect(gateway.listOpenIssues("fankaidev/grovie/extra", "grovie")).toEqual({
@@ -183,7 +183,7 @@ describe("GhGitHubGateway", () => {
     });
   });
 
-  it("[UC-WORKER-03-S01] [UC-WORKER-03-S02] adds and removes labels through gh api", () => {
+  it("[UC-AGENT-02-S01] [UC-AGENT-02-S02] adds and removes labels through gh api", () => {
     const runner = new FakeRunner([{ stdout: "[]" }, { stdout: "" }]);
     const gateway = new GhGitHubGateway(runner);
 
@@ -246,7 +246,7 @@ describe("GhGitHubGateway", () => {
     });
   });
 
-  it("[UC-EXECUTION-05-S02] creates pull requests through gh api", () => {
+  it("[UC-RUN-03-S02] creates pull requests through gh api", () => {
     const runner = new FakeRunner([
       {
         stdout: JSON.stringify({ number: 14, html_url: "https://github.com/fankaidev/grovie/pull/14" }),
@@ -434,7 +434,7 @@ describe("GhGitHubGateway", () => {
     ]);
   });
 
-  it("[UC-WORKER-04-S15] lists repository events through gh", () => {
+  it("[UC-DAEMON-02-S15] lists repository events through gh", () => {
     const runner = new FakeRunner([
       {
         stdout: JSON.stringify([
@@ -479,7 +479,7 @@ describe("GhGitHubGateway", () => {
     ]);
   });
 
-  it("[UC-WORKER-04-S15] resolves pull request issue links from closing references, body, and branch", () => {
+  it("[UC-DAEMON-02-S15] resolves pull request issue links from closing references, body, and branch", () => {
     const runner = new FakeRunner([
       {
         stdout: JSON.stringify({
@@ -511,7 +511,7 @@ describe("GhGitHubGateway", () => {
     expect(runner.calls[0]?.args.slice(0, 2)).toEqual(["api", "graphql"]);
   });
 
-  it("[UC-WORKER-01-S06] returns structured errors when gh fails", () => {
+  it("[UC-AGENT-01-S06] returns structured errors when gh fails", () => {
     const gateway = new GhGitHubGateway(
       new FakeRunner([
         {

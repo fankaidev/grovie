@@ -39,7 +39,7 @@ import type { CliCommand, CliContext } from "../types.js";
 
 export const initCommand = {
     name: "init",
-    description: "Create the minimal Grovie global worker config.",
+    description: "Create the minimal global Grovie config.",
     usage: "grovie init",
     issue: "#3",
     run: (_args: string[], context: CliContext) => {

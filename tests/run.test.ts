@@ -16,7 +16,7 @@ import type { HandleRunResultInput, HandleRunResultResult, ResultHandler } from 
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeRunResult } from "../src/runtime.js";
 
 describe("runIssue", () => {
-  it("[UC-GITHUB-01-S01] [UC-GITHUB-02-S04] [UC-EXECUTION-05-S01] runs an allowed issue and posts a concise success comment", () => {
+  it("[UC-GITHUB-01-S01] [UC-GITHUB-02-S04] [UC-RUN-03-S01] runs an allowed issue and posts a concise success comment", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -137,7 +137,7 @@ describe("runIssue", () => {
     }));
   });
 
-  it("[UC-EXECUTION-06-S02] uses the selected non-Codex agent runtime for run handoff and result metadata", () => {
+  it("[UC-RUN-04-S02] uses the selected non-Codex agent runtime for run handoff and result metadata", () => {
     const root = mkdtempSync(join(tmpdir(), "grovie-run-"));
     const binDir = join(root, "bin");
     const piPath = join(binDir, "pi");
@@ -229,7 +229,7 @@ describe("runIssue", () => {
     expect(localState.events.map((event) => event.type)).toEqual(["run.started", "progress_comment.created", "run.failed", "comment.updated"]);
   });
 
-  it("[UC-EXECUTION-05-S05] posts reviewer no-change output without opening a PR", () => {
+  it("[UC-RUN-03-S05] posts reviewer no-change output without opening a PR", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -267,7 +267,7 @@ describe("runIssue", () => {
     expect(github.comments[0]).not.toContain("- Pull request:");
   });
 
-  it("[UC-EXECUTION-05-S07] includes explicit result action and reason in visible summaries", () => {
+  it("[UC-RUN-03-S07] includes explicit result action and reason in visible summaries", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -349,7 +349,7 @@ describe("runIssue", () => {
     ]);
   });
 
-  it("[UC-EXECUTION-02-S09] includes retry trace metadata in the prepared run context", () => {
+  it("[UC-SESSION-01-S09] includes retry trace metadata in the prepared run context", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -520,7 +520,7 @@ describe("runIssue", () => {
     });
   });
 
-  it("[UC-EXECUTION-03-S09] includes trigger context in the local handoff", () => {
+  it("[UC-RUN-02-S09] includes trigger context in the local handoff", () => {
     const github = new FakeGitHub({
       relatedPullRequests: [
         fakeRelatedPullRequest(),
@@ -732,7 +732,7 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 
-  it("[UC-EXECUTION-01-S01] rejects issue references that do not match the runner repository before reading from GitHub", () => {
+  it("[UC-RUN-01-S01] rejects issue references that do not match the runner repository before reading from GitHub", () => {
     const github = new FakeGitHub();
 
     const result = runIssue({

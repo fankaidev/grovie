@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("LocalDaemonLifecycle", () => {
-  it("[UC-WORKER-06-S03] refuses to stop a live pid that does not match the recorded Grovie daemon token", () => {
+  it("[UC-DAEMON-04-S03] refuses to stop a live pid that does not match the recorded Grovie daemon token", () => {
     const root = createTmpDir();
     let verifiedState: DaemonLifecycleState | undefined;
     const lifecycle = new LocalDaemonLifecycle((state) => {
@@ -45,7 +45,7 @@ describe("LocalDaemonLifecycle", () => {
     }
   });
 
-  it("[UC-DAEMON-03-S01] marks active runs interrupted and resumable before stopping", () => {
+  it("[UC-SESSION-03-S01] marks active runs interrupted and resumable before stopping", () => {
     const root = createTmpDir();
     const lifecycle = new LocalDaemonLifecycle(() => true);
     const startResult = lifecycle.start({

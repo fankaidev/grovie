@@ -22,17 +22,17 @@ afterEach(() => {
 });
 
 describe("config helpers", () => {
-  it("[UC-EXECUTION-01-S01] parses supported GitHub origin URL formats", () => {
+  it("[UC-RUN-01-S01] parses supported GitHub origin URL formats", () => {
     expect(parseGitHubRemote("git@github.com:fankaidev/grovie.git")).toBe("fankaidev/grovie");
     expect(parseGitHubRemote("https://github.com/fankaidev/grovie.git")).toBe("fankaidev/grovie");
     expect(parseGitHubRemote("ssh://git@github.com/fankaidev/grovie.git")).toBe("fankaidev/grovie");
   });
 
-  it("[UC-EXECUTION-01-S01] ignores non-GitHub remotes", () => {
+  it("[UC-RUN-01-S01] ignores non-GitHub remotes", () => {
     expect(parseGitHubRemote("git@example.com:fankaidev/grovie.git")).toBeUndefined();
   });
 
-  it("[UC-WORKER-04-S12] resolves repository policy from watchedRepositories", () => {
+  it("[UC-DAEMON-02-S12] resolves repository policy from watchedRepositories", () => {
     const config = resolveWatchedRepositoryConfig({
       repository: "fankaidev/grovie",
       label: "ready",
@@ -60,7 +60,7 @@ describe("config helpers", () => {
     });
   });
 
-  it("[UC-WORKER-04-S12] uses safe repository policy defaults for unconfigured repositories", () => {
+  it("[UC-DAEMON-02-S12] uses safe repository policy defaults for unconfigured repositories", () => {
     const root = createTmpDir();
     const globalConfig = loadGlobalConfig(root);
     const loaded = resolveRepositoryConfig("fankaidev/grovie", globalConfig);
@@ -70,7 +70,7 @@ describe("config helpers", () => {
     expect(loaded.config.safety.allowDefaultBranchPush).toBe(false);
   });
 
-  it("[UC-WORKER-04-S12] allows watched repositories to omit trust policy", () => {
+  it("[UC-DAEMON-02-S12] allows watched repositories to omit trust policy", () => {
     const root = createTmpDir();
     writeFileSync(
       join(root, "config.yml"),
@@ -91,7 +91,7 @@ describe("config helpers", () => {
     ]);
   });
 
-  it("[UC-ADMIN-01-S01] loads an empty global worker config with the admin console disabled when config.yml is absent", () => {
+  it("[UC-ADMIN-01-S01] loads an empty global Grovie config with the admin console disabled when config.yml is absent", () => {
     const root = createTmpDir();
 
     expect(loadGlobalConfig(root)).toEqual({
@@ -134,7 +134,7 @@ describe("config helpers", () => {
     expect(() => loadGlobalConfig(root)).toThrow("adminConsole.host: Invalid input: expected \"127.0.0.1\"");
   });
 
-  it("[UC-WORKER-01-S04] requires explicit agents in config.yml", () => {
+  it("[UC-AGENT-01-S04] requires explicit agents in config.yml", () => {
     const root = createTmpDir();
     writeFileSync(
       join(root, "config.yml"),
@@ -149,7 +149,7 @@ describe("config helpers", () => {
     expect(() => loadGlobalConfig(root)).toThrow("agents: Invalid input: expected array");
   });
 
-  it("[UC-WORKER-02-S01] [UC-WORKER-02-S02] [UC-ADMIN-01-S01] saves watched repositories without enabling the admin console", () => {
+  it("[UC-DAEMON-01-S01] [UC-DAEMON-01-S02] [UC-ADMIN-01-S01] saves watched repositories without enabling the admin console", () => {
     const root = createTmpDir();
     const added = addWatchedRepository(loadGlobalConfig(root).config, {
       repository: "fankaidev/grovie",
@@ -176,7 +176,7 @@ describe("config helpers", () => {
     expect(removed.watchedRepositories).toEqual([]);
   });
 
-  it("[UC-WORKER-02-S01] renders global config as a scheduling list, not an allowlist", () => {
+  it("[UC-DAEMON-01-S01] renders global config as a scheduling list, not an allowlist", () => {
     const config = renderGlobalConfig({
       version: 1,
       agents: [],
@@ -201,7 +201,7 @@ describe("config helpers", () => {
     expect(config).toContain("Redaction is best-effort");
   });
 
-  it("[UC-WORKER-02-S01] round-trips schema-valid global config strings through rendered YAML", () => {
+  it("[UC-DAEMON-01-S01] round-trips schema-valid global config strings through rendered YAML", () => {
     const root = createTmpDir();
     const rendered = renderGlobalConfig({
       version: 1,
@@ -266,7 +266,7 @@ describe("config helpers", () => {
     });
   });
 
-  it("[UC-WORKER-01-S05] validates explicit global agent config without environment values", () => {
+  it("[UC-AGENT-01-S05] validates explicit global agent config without environment values", () => {
     const root = createTmpDir();
     writeFileSync(
       join(root, "config.yml"),
@@ -294,7 +294,7 @@ describe("config helpers", () => {
     ]);
   });
 
-  it("[UC-EXECUTION-06-S04] accepts supported runtime names and rejects retired runtime names", () => {
+  it("[UC-RUN-04-S04] accepts supported runtime names and rejects retired runtime names", () => {
     const root = createTmpDir();
 
     for (const runtime of ["codex", "claude-code", "pi"]) {
@@ -336,7 +336,7 @@ describe("config helpers", () => {
     }
   });
 
-  it("[UC-WORKER-02-S05] validates optional global state repository config", () => {
+  it("[UC-DAEMON-01-S05] validates optional global state repository config", () => {
     const root = createTmpDir();
     writeFileSync(
       join(root, "config.yml"),

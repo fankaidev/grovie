@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("local state cleanup", () => {
-  it("[UC-EXECUTION-04-S08] renders a dry-run cleanup plan without deleting artifacts", () => {
+  it("[UC-SESSION-02-S08] renders a dry-run cleanup plan without deleting artifacts", () => {
     const paths = createPaths();
     const worktreePath = join(paths.worktreesDir, "session-1");
     writeRun(paths, "run-1", {
@@ -38,7 +38,7 @@ describe("local state cleanup", () => {
     expect(renderCleanupResult(result)).toContain(worktreePath);
   });
 
-  it("[UC-EXECUTION-04-S07] removes succeeded session worktrees while preserving run history", () => {
+  it("[UC-SESSION-02-S07] removes succeeded session worktrees while preserving run history", () => {
     const paths = createPaths();
     const worktreePath = join(paths.worktreesDir, "session-1");
     writeRun(paths, "run-1", {
@@ -61,7 +61,7 @@ describe("local state cleanup", () => {
     expect(readFileSync(join(paths.runsDir, "run-1", "events.jsonl"), "utf8")).toContain('"type":"worktree.cleaned"');
   });
 
-  it("[UC-EXECUTION-04-S09] skips failed, canceled, active, and stale session worktrees by default", () => {
+  it("[UC-SESSION-02-S09] skips failed, canceled, active, and stale session worktrees by default", () => {
     const paths = createPaths();
     const failedWorktree = join(paths.worktreesDir, "failed");
     const canceledWorktree = join(paths.worktreesDir, "canceled");
@@ -101,7 +101,7 @@ describe("local state cleanup", () => {
     expect(existsSync(staleWorktree)).toBe(true);
   });
 
-  it("[UC-EXECUTION-04-S09] refuses to remove metadata worktree paths outside Grovie worktrees", () => {
+  it("[UC-SESSION-02-S09] refuses to remove metadata worktree paths outside Grovie worktrees", () => {
     const paths = createPaths();
     const outsideDir = mkdtempSync(join(tmpdir(), "grovie-outside-"));
     tmpDirs.push(outsideDir);
@@ -126,7 +126,7 @@ describe("local state cleanup", () => {
     expect(existsSync(outsideDir)).toBe(true);
   });
 
-  it("[UC-EXECUTION-04-S10] removes terminal run directories only when logs are explicitly included", () => {
+  it("[UC-SESSION-02-S10] removes terminal run directories only when logs are explicitly included", () => {
     const paths = createPaths();
     writeRun(paths, "succeeded-run", {
       status: "succeeded",
@@ -156,7 +156,7 @@ describe("local state cleanup", () => {
     expect(existsSync(join(paths.runsDir, "active-run"))).toBe(true);
   });
 
-  it("[UC-EXECUTION-04-S08] parses cleanup retention windows", () => {
+  it("[UC-SESSION-02-S08] parses cleanup retention windows", () => {
     expect(parseOlderThan("30m")).toBe(30 * 60 * 1000);
     expect(parseOlderThan("12h")).toBe(12 * 60 * 60 * 1000);
     expect(parseOlderThan("7d")).toBe(7 * 24 * 60 * 60 * 1000);

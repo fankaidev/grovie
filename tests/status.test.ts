@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("local run status", () => {
-  it("[UC-EXECUTION-02-S07] lists runs with issue, agent, runtime, result links, times, and logs newest first", () => {
+  it("[UC-SESSION-01-S07] lists runs with issue, agent, runtime, result links, times, and logs newest first", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "finished-run", {
       metadata: {
@@ -60,7 +60,7 @@ describe("local run status", () => {
     expect(renderRunsList(runs)).toContain(`Logs: stdout=${join(runsDir, "active-run", "stdout.log")}`);
   });
 
-  it("[UC-WORKER-06-S08] surfaces stale-looking active runs as recent failures in local status", () => {
+  it("[UC-DAEMON-04-S08] surfaces stale-looking active runs as recent failures in local status", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "stale-run", {
       metadata: {
@@ -81,7 +81,7 @@ describe("local run status", () => {
     expect(renderRunsList(run === undefined ? [] : [run])).toContain("Status: stale");
   });
 
-  it("[UC-DAEMON-03-S01] reports interrupted runs as interrupted even when stop-time failure events follow", () => {
+  it("[UC-SESSION-03-S01] reports interrupted runs as interrupted even when stop-time failure events follow", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "interrupted-run", {
       metadata: {
@@ -105,7 +105,7 @@ describe("local run status", () => {
     expect(run?.status).toBe("interrupted");
   });
 
-  it("[UC-DAEMON-03-S02] normalizes legacy source runs stuck in resuming state as interrupted", () => {
+  it("[UC-SESSION-03-S02] normalizes legacy source runs stuck in resuming state as interrupted", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "legacy-resuming-source-run", {
       metadata: {
@@ -129,7 +129,7 @@ describe("local run status", () => {
     expect(renderRunsList(run === undefined ? [] : [run])).toContain("Status: interrupted");
   });
 
-  it("[UC-WORKER-06-S16] reports rejected runs as rejected recent failures", () => {
+  it("[UC-DAEMON-04-S16] reports rejected runs as rejected recent failures", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "rejected-run", {
       metadata: {
@@ -172,7 +172,7 @@ describe("local run status", () => {
     expect(output).toContain("rejected-run fankaidev/grovie#9 status=rejected");
   });
 
-  it("[UC-EXECUTION-02-S08] renders detailed paths, GitHub result links, and recent events for one run", () => {
+  it("[UC-SESSION-01-S08] renders detailed paths, GitHub result links, and recent events for one run", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "detail-run", {
       metadata: {
@@ -206,7 +206,7 @@ describe("local run status", () => {
     expect(renderRunDetail(run!)).toContain("2026-05-23T10:03:00.000Z run.failed");
   });
 
-  it("[UC-WORKER-06-S08] renders local status with daemon state, watched repositories, paths, active runs, and failures", () => {
+  it("[UC-DAEMON-04-S08] renders local status with daemon state, watched repositories, paths, active runs, and failures", () => {
     const root = mkTmpDir();
     const runsDir = join(root, "runs");
     mkdirSync(runsDir, { recursive: true });
