@@ -55,10 +55,9 @@ function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter, opti
   const handoffDir = join(input.run.worktreePath, ".grovie");
   const worktreeTaskPath = join(handoffDir, "task.json");
   const worktreePromptPath = join(handoffDir, "prompt.md");
-  const shouldResume = options.mode === "resume" || (options.mode !== "start" && shouldResumeRuntimeSession(task));
-  const existingSessionRef = shouldResume
-    ? options.runtimeSessionRef ?? readRuntimeSessionRef(input.run.sessionDir, adapter.runtime)
-    : undefined;
+  const existingSessionRef = options.mode === "start"
+    ? undefined
+    : options.runtimeSessionRef ?? readRuntimeSessionRef(input.run.sessionDir, adapter.runtime);
   const command = existingSessionRef === undefined
     ? adapter.startCommand(input)
     : adapter.resumeCommand(existingSessionRef.sessionId, input);
@@ -160,18 +159,6 @@ function finishCliRun(
             : result.stderr.trim() || result.stdout.trim() || `${preparedInput.runtime} failed with exit code ${result.exitCode}.`,
       },
     };
-}
-
-function shouldResumeRuntimeSession(task: unknown): boolean {
-  if (task === null || typeof task !== "object") {
-    return false;
-  }
-
-  const runRequest = (task as { runRequest?: unknown }).runRequest;
-
-  return runRequest !== null
-    && typeof runRequest === "object"
-    && (runRequest as { reason?: unknown }).reason === "resume";
 }
 
 function runStreamingCommand(input: AgentRunInput, preparedInput: PreparedRuntimeInput): Promise<RuntimeCommandResult> {
