@@ -9,6 +9,7 @@
 | R1 | GitHub issues own collaboration state: labels, comments, branches, PRs, reviews, and CI state. |
 | R2 | GitHub comments are human-visible summaries or cancellation input, not execution locks. |
 | R3 | Full logs and prompts are not dumped into issue comments by default. |
+| R4 | GitHub-visible comments and pull request descriptions that Grovie writes on behalf of an agent include visible agent attribution. |
 
 ## Scenarios
 
@@ -20,3 +21,4 @@
 | UC-GITHUB-01-S04 | P1 | A runtime failure with stdout or stderr keeps raw logs out of the issue comment and points to local or synced state instead. |
 | UC-GITHUB-01-S05 | P1 | A daemon uses local execution locks for coordination and does not create or update advisory claim comments. |
 | UC-GITHUB-01-S06 | P1 | A starting run posts or updates one lifecycle comment per agent on the issue with start timestamp, run id, run status, runtime, agent id, local machine id, branch, and run directory. |
+| UC-GITHUB-01-S07 | P1 | A Grovie-created pull request description identifies the agent that produced the change. |

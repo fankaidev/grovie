@@ -11,6 +11,7 @@ import {
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
 import type { PreparedRun } from "./local-state.js";
 import type { RuntimeExecution, RuntimeName } from "./runtime.js";
+import { renderAgentIssueComment } from "./run/comments.js";
 
 export type ResultHandler = {
   handle(input: HandleRunResultInput): HandleRunResultResult;
@@ -100,7 +101,10 @@ export class GitResultHandler implements ResultHandler {
         throw new Error("Issue comment artifact cannot be combined with worktree changes. Remove the artifact or commit the changes through a pull request.");
       }
 
-      const commentResult = this.github.createIssueComment(input.issue.reference, commentBody);
+      const commentResult = this.github.createIssueComment(input.issue.reference, renderAgentIssueComment({
+        agentId: input.run.agentId,
+        body: commentBody,
+      }));
 
       if (!commentResult.ok) {
         throw new Error(commentResult.error.message);
@@ -219,6 +223,7 @@ function renderPullRequestBody(input: {
     `- Source issue: ${formatIssueReference(input.issue.reference)}`,
     `- Run id: ${input.run.runId}`,
     `- Runtime: ${input.runtime}`,
+    `- Agent: \`${input.run.agentId}\``,
     `- Branch: ${input.run.branchName}`,
   ];
 

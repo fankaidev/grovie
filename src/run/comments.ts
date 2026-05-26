@@ -6,6 +6,19 @@ import type { RunSummary } from "./types.js";
 import { isReviewerRun } from "./helpers.js";
 
 const RUN_MARKER = "grovie:run";
+const AGENT_COMMENT_MARKER = "grovie:agent-comment";
+
+export function renderAgentIssueComment(input: {
+  agentId: string;
+  body: string;
+}): string {
+  return [
+    `<!-- ${AGENT_COMMENT_MARKER} ${JSON.stringify({ agentId: input.agentId })} -->`,
+    `- Agent: \`${input.agentId}\``,
+    "",
+    input.body.trim(),
+  ].join("\n");
+}
 
 export function upsertRunProgressComment(input: {
   issue: GitHubIssue;
