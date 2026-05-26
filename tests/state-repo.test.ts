@@ -241,7 +241,6 @@ function createPaths(root: string): LocalStatePaths {
     worktreesDir: join(root, "worktrees"),
     runsDir: join(root, "runs"),
     locksDir: join(root, "locks"),
-    requestsDir: join(root, "requests"),
     sessionsDir: join(root, "sessions"),
   };
 }

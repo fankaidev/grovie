@@ -1,8 +1,6 @@
 import type { AgentHealth } from "../agent-health.js";
-import { getAssignedAgentIds, parseAgentId } from "../assignment.js";
 import type { GrovieConfig } from "../config.js";
-import { formatIssueReference, type GitHubGateway, parseIssueReference } from "../github.js";
-import { resolveLocalIdentity } from "../identity.js";
+import type { GitHubGateway } from "../github.js";
 import { createRuntime, type RuntimeAvailability, type RuntimeName } from "../runtime.js";
 import type { CliContext, CliResult } from "./types.js";
 
@@ -69,56 +67,6 @@ export function renderUnavailableAgents(unavailableAgents: AgentHealth[]): strin
   ].join("\n");
 }
 
-export function formatIssueRepository(reference: { owner: string; repo: string }): string {
-  return `${reference.owner}/${reference.repo}`;
-}
-
-export function resolveManualRunAgent(input: {
-  explicitAgentId: string | undefined;
-  issueReference: { owner: string; repo: string; number: number };
-  github: GitHubGateway;
-  machineId: string;
-}): { ok: true; agentId: string } | { ok: false; message: string } {
-  if (input.explicitAgentId !== undefined) {
-    parseAgentId(input.explicitAgentId);
-    return {
-      ok: true,
-      agentId: input.explicitAgentId,
-    };
-  }
-
-  const issueResult = input.github.readIssue(input.issueReference);
-
-  if (!issueResult.ok) {
-    return {
-      ok: false,
-      message: issueResult.error.message,
-    };
-  }
-
-  const localAgentIds = getAssignedAgentIds(issueResult.value.labels)
-    .filter((agentId) => agentId.endsWith(`@${input.machineId}`));
-
-  if (localAgentIds.length === 0) {
-    return {
-      ok: false,
-      message: `No local agent assignment found for ${formatIssueReference(input.issueReference)}. Pass --agent or add an agent:<name>@${input.machineId} label.`,
-    };
-  }
-
-  if (localAgentIds.length > 1) {
-    return {
-      ok: false,
-      message: `Multiple local agent assignments found for ${formatIssueReference(input.issueReference)}: ${localAgentIds.join(", ")}. Pass --agent to choose one.`,
-    };
-  }
-
-  return {
-    ok: true,
-    agentId: localAgentIds[0] ?? "",
-  };
-}
-
 export function renderGlobalConfigSource(path: string, watchedRepositoryCount: number): string {
   const repositoryText = watchedRepositoryCount === 1 ? "1 watched repository" : `${watchedRepositoryCount} watched repositories`;
   return `${path} (${repositoryText}).`;
@@ -146,72 +94,6 @@ export function resolveQueueTrustedAuthors(config: GrovieConfig, github: GitHubG
   return {
     ok: true,
     value: [authenticated.value.login],
-  };
-}
-
-export function enqueueDaemonRunRequest(input: {
-  context: CliContext;
-  repository: string;
-  issueNumber: number;
-  agentId: string;
-  sourceRunId?: string;
-  reason: "retry" | "rerun";
-  title: string;
-  action: string;
-  mode: string;
-}): CliResult {
-  const identity = resolveLocalIdentity();
-  const issueReference = parseIssueReference(`${input.repository}#${input.issueNumber}`);
-
-  if (!issueReference.ok) {
-    return githubErrorResult(issueReference.error);
-  }
-
-  if (input.context.localState.isDaemonRunning?.(identity.machineId) !== true) {
-    return {
-      exitCode: 1,
-      stderr: `No Grovie daemon is running for machine ${identity.machineId}. Start one with \`grovie daemon start\`.`,
-    };
-  }
-
-  if (input.context.localState.hasExecutionLock?.({
-    repository: input.repository,
-    issueNumber: input.issueNumber,
-    agentId: input.agentId,
-  }) === true) {
-    return {
-      exitCode: 1,
-      stderr: `Grovie execution is already active for ${formatIssueReference(issueReference.value)} and ${input.agentId}.`,
-    };
-  }
-
-  const request = input.context.localState.enqueueRunRequest?.({
-    repository: input.repository,
-    issueNumber: input.issueNumber,
-    agentId: input.agentId,
-    sourceRunId: input.sourceRunId,
-    reason: input.reason,
-  });
-
-  if (request === undefined) {
-    return {
-      exitCode: 1,
-      stderr: "Local state does not support daemon run requests.",
-    };
-  }
-
-  return {
-    exitCode: 0,
-    stdout: [
-      input.title,
-      "",
-      input.action,
-      `Issue: ${formatIssueReference(issueReference.value)}`,
-      `Agent: ${input.agentId}`,
-      `Mode: ${input.mode}`,
-      input.sourceRunId === undefined ? undefined : `Source run: ${input.sourceRunId}`,
-      `Request: ${request.path}`,
-    ].filter((line): line is string => line !== undefined).join("\n"),
   };
 }
 

@@ -19,5 +19,5 @@
 | UC-ADMIN-02-S04 | P2 | `GET /api/runs` returns recent local runs with issue, status, branch, log paths, and result links. |
 | UC-ADMIN-02-S05 | P2 | `GET /api/runs/:runId` returns a single run detail or a clear 404. |
 | UC-ADMIN-02-S06 | P2 | `GET /api/runs/:runId/events` returns local run events or a clear 404. |
-| UC-ADMIN-02-S07 | P1 | `GET /api/activity` returns recent daemon activity such as repository polls, received run requests, skipped queue candidates, and started or completed local actions. |
+| UC-ADMIN-02-S07 | P1 | `GET /api/activity` returns recent daemon activity such as repository polls, skipped queue candidates, resumed runs, and started or completed local actions. |
 | UC-ADMIN-02-S08 | P1 | The admin console server and React admin web client use the same exported TypeScript contracts for admin API response shapes. |

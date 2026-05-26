@@ -48,7 +48,7 @@ describe("runIssue", () => {
     expect(result).toEqual({
       exitCode: 0,
       stdout: [
-        "grovie run",
+        "grovie daemon run",
         "",
         "Run status: succeeded",
         "Issue: fankaidev/grovie#7",
@@ -381,7 +381,7 @@ describe("runIssue", () => {
     ]);
   });
 
-  it("[UC-SESSION-01-S09] includes retry trace metadata in the prepared run context", () => {
+  it("[UC-SESSION-01-S09] includes resume trace metadata in the prepared run context", () => {
     const github = new FakeGitHub();
     const localState = new FakeLocalState();
     const runtime = new FakeRuntime({
@@ -403,8 +403,8 @@ describe("runIssue", () => {
       localState,
       runtime,
       runRequest: {
-        sourceRunId: "failed-run",
-        reason: "retry",
+        sourceRunId: "interrupted-run",
+        reason: "resume",
       },
       resultHandler: new FakeResultHandler({
         kind: "no-changes",
@@ -415,13 +415,13 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(0);
     expect(localState.prepareInput?.runRequest).toEqual({
-      sourceRunId: "failed-run",
-      reason: "retry",
+      sourceRunId: "interrupted-run",
+      reason: "resume",
     });
     expect(localState.prepareInput?.task).toMatchObject({
       runRequest: {
-        sourceRunId: "failed-run",
-        reason: "retry",
+        sourceRunId: "interrupted-run",
+        reason: "resume",
       },
     });
   });
@@ -890,7 +890,6 @@ class FakeLocalState implements RunLocalState {
       worktreesDir: join(root, "worktrees"),
       runsDir: join(root, "runs"),
       locksDir: join(root, "locks"),
-      requestsDir: join(root, "requests"),
       sessionsDir: join(root, "sessions"),
     };
     this.run = {

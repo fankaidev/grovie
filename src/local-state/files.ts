@@ -1,13 +1,5 @@
 import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
-export function readdirRequestFiles(path: string): string[] {
-  try {
-    return readdirSync(path).filter((entry) => entry.endsWith(".json")).sort();
-  } catch {
-    return [];
-  }
-}
-
 export function readdirDirectoryNames(path: string): string[] {
   try {
     return readdirSync(path, { withFileTypes: true })
