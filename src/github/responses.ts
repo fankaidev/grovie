@@ -41,6 +41,7 @@ export type GitHubCommentResponse = {
 
 export type GitHubCommentMutationResponse = {
   id: number;
+  node_id?: string;
   body: string;
   html_url: string;
   created_at?: string;

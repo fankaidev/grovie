@@ -26,12 +26,18 @@ export function toComment(comment: GitHubCommentResponse): GitHubComment {
 }
 
 export function toCreatedComment(comment: GitHubCommentMutationResponse): CreatedComment {
-  return {
+  const createdComment: CreatedComment = {
     id: comment.id,
     body: comment.body,
     url: comment.html_url,
     createdAt: comment.created_at,
   };
+
+  if (comment.node_id !== undefined) {
+    createdComment.nodeId = comment.node_id;
+  }
+
+  return createdComment;
 }
 
 export function toPullRequestReview(review: GitHubPullRequestReviewResponse): GitHubPullRequestReview {

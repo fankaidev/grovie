@@ -144,14 +144,14 @@ describe("GitResultHandler", () => {
         id: 1,
         body: [
           '<!-- grovie:agent-comment {"agentId":"coder@fankai-mac"} -->',
-          "- Agent: `coder@fankai-mac`",
+          "coder@fankai-mac:",
           "",
           "My debugger and I broke up because it kept stopping at every little issue.",
         ].join("\n"),
         url: "https://github.com/fankaidev/grovie/issues/9#issuecomment-1",
       },
     });
-    expect(github.comments[0]).toContain("- Agent: `coder@fankai-mac`");
+    expect(github.comments[0]).toContain("coder@fankai-mac:");
     expect(github.comments[0]).toContain("My debugger and I broke up because it kept stopping at every little issue.");
     expect(github.pullRequests).toHaveLength(0);
   });
@@ -271,7 +271,7 @@ describe("GitResultHandler", () => {
         id: 1,
         body: [
           '<!-- grovie:agent-comment {"agentId":"coder@fankai-mac"} -->',
-          "- Agent: `coder@fankai-mac`",
+          "coder@fankai-mac:",
           "",
           "Please confirm which runtime should own this behavior.",
         ].join("\n"),
@@ -280,7 +280,7 @@ describe("GitResultHandler", () => {
       action: "comment",
       reason: "The issue needs a maintainer decision.",
     });
-    expect(github.comments[0]).toContain("- Agent: `coder@fankai-mac`");
+    expect(github.comments[0]).toContain("coder@fankai-mac:");
     expect(github.comments[0]).toContain("Please confirm which runtime should own this behavior.");
     expect(github.pullRequests).toHaveLength(0);
   });

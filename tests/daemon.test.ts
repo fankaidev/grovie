@@ -1925,7 +1925,7 @@ describe("runDaemonCycle", () => {
         comments: [
           fakeComment({
             id: 10,
-            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n- Agent: \`${agentId}\`\n\n1`,
+            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n${agentId}:\n\n1`,
             updatedAt: "2026-05-22T00:00:02.000Z",
           }),
         ],
@@ -1979,12 +1979,12 @@ describe("runDaemonCycle", () => {
         comments: [
           fakeComment({
             id: 10,
-            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n- Agent: \`${agentId}\`\n\n1`,
+            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n${agentId}:\n\n1`,
             updatedAt: "2026-05-22T00:00:02.000Z",
           }),
           fakeComment({
             id: 11,
-            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId: otherAgentId })} -->\n- Agent: \`${otherAgentId}\`\n\n2`,
+            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId: otherAgentId })} -->\n${otherAgentId}:\n\n2`,
             updatedAt: "2026-05-22T00:00:03.000Z",
           }),
         ],
@@ -2037,7 +2037,7 @@ describe("runDaemonCycle", () => {
         comments: [
           fakeComment({
             id: 10,
-            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n- Agent: \`${agentId}\`\n\n1`,
+            body: `<!-- grovie:agent-comment ${JSON.stringify({ agentId })} -->\n${agentId}:\n\n1`,
             updatedAt: "2026-05-22T00:00:02.000Z",
           }),
         ],
