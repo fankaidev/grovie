@@ -10,6 +10,7 @@ import {
 } from "./github.js";
 import { SpawnCommandRunner, type CommandRunner } from "./github.js";
 import type { PreparedRun } from "./local-state.js";
+import { getIssueCommentArtifactPath, getResultArtifactPath } from "./run-artifacts.js";
 import type { RuntimeExecution, RuntimeName } from "./runtime.js";
 import { renderAgentIssueComment } from "./run/comments.js";
 
@@ -128,6 +129,12 @@ export class GitResultHandler implements ResultHandler {
     }
 
     if (status.stdout.trim().length === 0) {
+      const runtimeToolFailure = detectRuntimeToolFailure(input.run);
+
+      if (runtimeToolFailure !== undefined && agentResult === undefined && issueComment === undefined) {
+        throw new Error(runtimeToolFailure);
+      }
+
       return {
         kind: "no-changes",
         status: "",
@@ -256,7 +263,7 @@ function summarizeValidation(run: PreparedRun): string {
 }
 
 function readIssueCommentArtifact(run: PreparedRun): string | undefined {
-  const path = `${run.runDir}/issue-comment.md`;
+  const path = getIssueCommentArtifactPath(run);
 
   if (!existsSync(path)) {
     return undefined;
@@ -268,7 +275,7 @@ function readIssueCommentArtifact(run: PreparedRun): string | undefined {
 }
 
 function readAgentResultArtifact(run: PreparedRun): AgentResultArtifact | undefined {
-  const path = `${run.runDir}/result.json`;
+  const path = getResultArtifactPath(run);
 
   if (!existsSync(path)) {
     return undefined;
@@ -327,6 +334,22 @@ function readText(path: string): string {
   } catch {
     return "";
   }
+}
+
+function detectRuntimeToolFailure(run: PreparedRun): string | undefined {
+  const stderr = readText(run.stderrPath);
+  const stdout = readText(run.stdoutPath);
+  const combined = `${stderr}\n${stdout}`;
+
+  if (combined.includes("patch rejected: writing outside of the project")) {
+    return "Runtime reported a tool write rejection outside the project and produced no result artifact.";
+  }
+
+  if (combined.includes("rejected by user approval settings")) {
+    return "Runtime reported a tool approval rejection and produced no result artifact.";
+  }
+
+  return undefined;
 }
 
 function truncate(value: string): string {

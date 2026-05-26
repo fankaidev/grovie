@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CommandRunner } from "../github.js";
+import { getRunHandoffDir } from "../run-artifacts.js";
 import { buildRuntimeEnvironment } from "./environment.js";
 import { appendRuntimeEvent } from "./events.js";
 import { buildCodexPrompt } from "./prompt.js";
@@ -53,6 +54,7 @@ function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter, opti
     task,
   });
   const handoffDir = join(input.run.worktreePath, ".grovie");
+  const runHandoffDir = getRunHandoffDir(input.run);
   const worktreeTaskPath = join(handoffDir, "task.json");
   const worktreePromptPath = join(handoffDir, "prompt.md");
   const existingSessionRef = options.mode === "start"
@@ -65,6 +67,7 @@ function prepareRuntimeInput(input: AgentRunInput, adapter: RuntimeAdapter, opti
   const startedAt = new Date().toISOString();
 
   mkdirSync(handoffDir, { recursive: true });
+  mkdirSync(runHandoffDir, { recursive: true });
   writeFileSync(input.run.promptPath, prompt, "utf8");
   writeFileSync(worktreePromptPath, prompt, "utf8");
   writeFileSync(worktreeTaskPath, `${JSON.stringify(task, null, 2)}\n`, "utf8");
