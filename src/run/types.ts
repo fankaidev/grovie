@@ -1,4 +1,4 @@
-import type { GrovieConfig, RepositoryFileResult, StateRepoConfig } from "../config.js";
+import type { GrovieConfig, StateRepoConfig } from "../config.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../github.js";
 import type { DaemonLock, ExecutionLock, HandledCursor, LocalStatePaths, LockResult, PreparedRun, ResumableRun, RunCancellation, RunRequest } from "../local-state.js";
 import type { IssueActivity } from "../queue.js";
@@ -47,7 +47,6 @@ export type RunIssueAsyncInput = RunIssueInput & {
 
 export type RunLocalState = {
   getPaths(): LocalStatePaths;
-  readRepositoryFile?(input: { repository: string; path: string }): RepositoryFileResult;
   acquireDaemonLock?(machineId: string, now?: Date): LockResult<DaemonLock>;
   releaseDaemonLock?(lock: DaemonLock): void;
   isDaemonRunning?(machineId: string): boolean;

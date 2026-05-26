@@ -42,7 +42,6 @@ export type StateRepoInitInput = {
   owner?: string;
   repository?: string;
   branch?: string;
-  localPath?: string;
   syncIntervalSeconds?: number;
   now?: Date;
 };
@@ -63,7 +62,7 @@ const PENDING_FILE_NAME = ".grovie-sync-pending.json";
 export function initStateRepository(input: StateRepoInitInput): StateRepoInitResult {
   const repository = input.repository ?? resolveDefaultStateRepository(input);
   const branch = input.branch ?? DEFAULT_STATE_REPO_BRANCH;
-  const localPath = input.localPath ?? join(input.root, "state-repo");
+  const localPath = join(input.root, "state-repo");
   const syncIntervalSeconds = input.syncIntervalSeconds ?? DEFAULT_SYNC_INTERVAL_SECONDS;
   let created = false;
 
@@ -234,7 +233,7 @@ export function redactStateRepoText(value: string): string {
 }
 
 export function resolveStateRepoPath(paths: LocalStatePaths, config: StateRepoConfig | undefined): string {
-  return config?.localPath ?? join(paths.root, "state-repo");
+  return join(paths.root, "state-repo");
 }
 
 function resolveDefaultStateRepository(input: StateRepoInitInput): string {

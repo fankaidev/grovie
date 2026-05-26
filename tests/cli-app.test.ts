@@ -63,38 +63,43 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-WORKER-02-S04] writes the default policy config", () => {
+  it("[UC-WORKER-02-S04] writes the default global worker config", () => {
     const cwd = createTmpDir();
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
 
-    expect(runCli(["init"], { cwd })).toEqual({
+    expect(runCli(["init"], { cwd, localState })).toEqual({
       exitCode: 0,
       stdout: [
         "grovie init",
         "",
-        "Created .grovie.yml.",
+        `Wrote global config: ${join(globalRoot, "config.yml")}`,
         "Run `grovie doctor` to validate it.",
       ].join("\n"),
     });
 
-    expect(readFileSync(join(cwd, ".grovie.yml"), "utf8")).not.toContain("repository:");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("watchedRepositories: []");
   });
 
-  it("[UC-WORKER-02-S06] reports invalid config fields through doctor", () => {
+  it("[UC-WORKER-02-S06] reports invalid global config fields through doctor", () => {
     const cwd = createTmpDir();
-    writeFileSync(join(cwd, ".grovie.yml"), "version: 1\nsafety:\n  allowDefaultBranchPush: true\n", "utf8");
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    writeFileSync(join(globalRoot, "config.yml"), "version: 1\nwatchedRepositories: []\nadminConsole:\n  enabled: true\n  host: 0.0.0.0\n", "utf8");
 
-    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState: new FakeLocalState(createTmpDir()) })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState })).toEqual({
       exitCode: 1,
-      stderr: expect.stringContaining("Invalid .grovie.yml:"),
+      stderr: expect.stringContaining("adminConsole.host: Invalid input: expected \"127.0.0.1\""),
     });
   });
 
-  it("[UC-WORKER-02-S06] rejects unknown config fields through doctor", () => {
+  it("[UC-WORKER-02-S06] rejects unknown global config fields through doctor", () => {
     const cwd = createTmpDir();
-    runCli(["init"], { cwd });
-    writeFileSync(join(cwd, ".grovie.yml"), `${readFileSync(join(cwd, ".grovie.yml"), "utf8")}unsupported: true\n`, "utf8");
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    writeFileSync(join(globalRoot, "config.yml"), "version: 1\nwatchedRepositories: []\nunsupported: true\n", "utf8");
 
-    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState: new FakeLocalState(createTmpDir()) })).toEqual({
+    expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState })).toEqual({
       exitCode: 1,
       stderr: expect.stringContaining("Unrecognized key: \"unsupported\""),
     });
@@ -121,7 +126,6 @@ describe("CLI command registration", () => {
         "grovie doctor",
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
-        `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
         "Runtimes:",
         "- codex command=codex: available (codex-cli 0.133.0)",
@@ -129,7 +133,6 @@ describe("CLI command registration", () => {
         "- pi command=pi: pi command not found",
         "Configured agents:",
         `- coder@${machineId} (codex, command=codex): available (codex-cli 0.133.0)`,
-        "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
       ].join("\n"),
     });
@@ -145,8 +148,8 @@ describe("CLI command registration", () => {
     saveGlobalConfig(globalRoot, {
       version: 1,
       agents: [
-        { name: "codex", runtime: "codex", args: [], envKeys: [] },
-        { name: "pi", runtime: "pi", args: [], envKeys: [] },
+        { name: "codex", runtime: "codex", envKeys: [] },
+        { name: "pi", runtime: "pi", envKeys: [] },
       ],
       watchedRepositories: [],
       adminConsole: { enabled: false },
@@ -163,7 +166,6 @@ describe("CLI command registration", () => {
         "grovie doctor",
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
-        `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
         "Runtimes:",
         "- codex command=codex: available (codex-cli 0.133.0)",
@@ -172,7 +174,6 @@ describe("CLI command registration", () => {
         "Configured agents:",
         `- codex@${machineId} (codex, command=codex): available (codex-cli 0.133.0)`,
         `- pi@${machineId} (pi, command=pi): pi command not found`,
-        "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
       ].join("\n"),
       stderr: [
@@ -247,14 +248,12 @@ describe("CLI command registration", () => {
         "grovie doctor",
         "",
         `Global config: ${join(globalRoot, "config.yml")} (0 watched repositories).`,
-        `Local policy config: ${join(cwd, ".grovie.yml")} is valid.`,
         `Machine id: ${machineId}`,
         "Runtimes:",
         "- codex command=codex: codex command not found",
         "- claude-code command=claude: available (2.1.142 (Claude Code))",
         "- pi command=pi: pi command not found",
         "Configured agents: none",
-        "Queue label: grovie",
         "GitHub: authenticated as fankaidev.",
       ].join("\n"),
     });
@@ -614,7 +613,7 @@ describe("CLI command registration", () => {
   it("[UC-EXECUTION-01-S01] [UC-WORKER-03-S04] requests manual issue execution for an agent id without adding assignment labels", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
-    writeInvalidPolicyConfig(cwd);
+    writeIgnoredRepoLocalConfig(cwd);
 
     const result = await runCliAsync(["run", "fankaidev/grovie#2", "--agent", "coder@fankai-mac"], {
       cwd,
@@ -757,7 +756,7 @@ describe("CLI command registration", () => {
   it("[UC-WORKER-01-S05] runs one daemon polling cycle from global watched repositories with explicit agent config", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
-    writeInvalidPolicyConfig(cwd);
+    writeIgnoredRepoLocalConfig(cwd);
     configureLocalAgent(localState);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
@@ -792,7 +791,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const machineId = resolveMachineId(hostname());
-    writeInvalidPolicyConfig(cwd);
+    writeIgnoredRepoLocalConfig(cwd);
     configureLocalAgent(localState);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
@@ -1253,7 +1252,7 @@ describe("CLI command registration", () => {
   it("[UC-WORKER-02-S03] uses built-in queue defaults for global daemon without reading cwd policy config", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
-    writeInvalidPolicyConfig(cwd);
+    writeIgnoredRepoLocalConfig(cwd);
     configureLocalAgent(localState);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
@@ -1287,7 +1286,7 @@ describe("CLI command registration", () => {
   it("[UC-WORKER-06-S01] runs the daemon foreground subcommand with built-in defaults", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
-    writeInvalidPolicyConfig(cwd);
+    writeIgnoredRepoLocalConfig(cwd);
     configureLocalAgent(localState);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
@@ -1321,7 +1320,7 @@ describe("CLI command registration", () => {
   it("[UC-WORKER-02-S07] exits clearly when the daemon has no configured local agents", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
-    writeInvalidPolicyConfig(cwd);
+    writeIgnoredRepoLocalConfig(cwd);
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
     expect(
@@ -1389,7 +1388,6 @@ describe("CLI command registration", () => {
         {
           name: "coder",
           runtime: "codex",
-          args: [],
           envKeys: ["OPENAI_API_KEY"],
         },
       ],
@@ -1551,7 +1549,7 @@ describe("CLI command registration", () => {
   it("[UC-WORKER-06-S01] runs an explicit daemon repository without reading the current checkout repository", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
-    writeInvalidPolicyConfig(cwd);
+    writeIgnoredRepoLocalConfig(cwd);
     configureLocalAgent(localState);
 
     expect(
@@ -1616,7 +1614,7 @@ function createTmpDir(): string {
   return dir;
 }
 
-function writeInvalidPolicyConfig(cwd: string): void {
+function writeIgnoredRepoLocalConfig(cwd: string): void {
   writeFileSync(join(cwd, ".grovie.yml"), "version: 1\nunsupported: true\n", "utf8");
 }
 
@@ -1758,7 +1756,6 @@ function configureLocalAgent(localState: FakeLocalState, agentNames = ["coder"])
     agents: agentNames.map((name) => ({
       name,
       runtime: "codex" as const,
-      args: [],
       envKeys: ["OPENAI_API_KEY"],
     })),
     watchedRepositories: [],

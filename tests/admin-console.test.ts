@@ -154,8 +154,8 @@ describe("admin console server", () => {
     saveGlobalConfig(root, {
       version: 1,
       agents: [
-        { name: "codex", runtime: "codex", args: [], envKeys: [] },
-        { name: "pi", runtime: "pi", args: [], envKeys: [] },
+        { name: "codex", runtime: "codex", envKeys: [] },
+        { name: "pi", runtime: "pi", envKeys: [] },
       ],
       watchedRepositories: [],
       adminConsole: { enabled: true },
@@ -396,8 +396,8 @@ describe("admin console server", () => {
     saveGlobalConfig(root, {
       version: 1,
       agents: [
-        { name: "codex", runtime: "codex", args: [], envKeys: [] },
-        { name: "pi", runtime: "pi", args: [], envKeys: [] },
+        { name: "codex", runtime: "codex", envKeys: [] },
+        { name: "pi", runtime: "pi", envKeys: [] },
       ],
       watchedRepositories: [{ repository: "fankaidev/grovie", label: "ready" }],
       adminConsole: { enabled: true },

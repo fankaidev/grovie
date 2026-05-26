@@ -4,13 +4,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   addWatchedRepository,
-  loadConfig,
   loadGlobalConfig,
-  loadRepositoryConfig,
   parseGitHubRemote,
   removeWatchedRepository,
-  renderDefaultConfig,
   renderGlobalConfig,
+  resolveRepositoryConfig,
+  resolveWatchedRepositoryConfig,
   saveGlobalConfig,
 } from "../src/config.js";
 
@@ -33,119 +32,56 @@ describe("config helpers", () => {
     expect(parseGitHubRemote("git@example.com:fankaidev/grovie.git")).toBeUndefined();
   });
 
-  it("[UC-WORKER-02-S04] renders safe defaults", () => {
-    const config = renderDefaultConfig();
+  it("[UC-WORKER-04-S12] resolves repository policy from watchedRepositories", () => {
+    const config = resolveWatchedRepositoryConfig({
+      repository: "fankaidev/grovie",
+      label: "ready",
+      branches: {
+        prefix: "ai/",
+      },
+      pullRequests: {
+        create: true,
+        draft: true,
+      },
+      comments: {
+        mode: "concise",
+      },
+      trust: {
+        trustedAuthors: ["fankaidev", "trusted-user"],
+      },
+    });
 
-    expect(config).not.toContain("repository:");
-    expect(config).not.toContain("runtime:");
-    expect(config).toContain("label: grovie");
-    expect(config).toContain("trustedAuthors: []");
-    expect(config).toContain("allowDefaultBranchPush: false");
-  });
-
-  it("[UC-WORKER-02-S04] uses safe defaults when no config file exists", () => {
-    const cwd = createTmpDir();
-
-    const loaded = loadConfig(cwd);
-
-    expect(loaded.path).toBeUndefined();
-    expect(loaded.config).toMatchObject({
-      version: 1,
+    expect(config).toEqual({
       queue: {
-        label: "grovie",
+        label: "ready",
+      },
+      branches: {
+        prefix: "ai/",
+      },
+      pullRequests: {
+        create: true,
+        draft: true,
+      },
+      comments: {
+        mode: "concise",
+      },
+      trust: {
+        trustedAuthors: ["fankaidev", "trusted-user"],
+      },
+      safety: {
+        allowDefaultBranchPush: false,
       },
     });
   });
 
-  it("[UC-WORKER-04-S17] loads repo-local trusted issue authors", () => {
-    const cwd = createTmpDir();
-    writeFileSync(
-      join(cwd, ".grovie.yml"),
-      renderDefaultConfig().replace("trustedAuthors: []", "trustedAuthors:\n    - fankaidev\n    - trusted-user"),
-      "utf8",
-    );
+  it("[UC-WORKER-04-S12] uses safe repository policy defaults for unconfigured repositories", () => {
+    const root = createTmpDir();
+    const globalConfig = loadGlobalConfig(root);
+    const loaded = resolveRepositoryConfig("fankaidev/grovie", globalConfig);
 
-    expect(loadConfig(cwd).config.trust?.trustedAuthors).toEqual(["fankaidev", "trusted-user"]);
-  });
-
-  it("[UC-WORKER-04-S12] loads repo-local policy config through a repository file reader", () => {
-    const loaded = loadRepositoryConfig("fankaidev/grovie", {
-      readRepositoryFile: ({ repository, path }) => ({
-        exists: true,
-        path: `${repository}:${path}`,
-        content: renderDefaultConfig().replace("label: grovie", "label: ready"),
-      }),
-    });
-
-    expect(loaded.path).toBe("fankaidev/grovie:.grovie.yml");
-    expect(loaded.config.queue.label).toBe("ready");
-  });
-
-  it("[UC-WORKER-04-S13] rejects invalid repo-local policy config from a watched repository", () => {
-    expect(() => {
-      loadRepositoryConfig("fankaidev/grovie", {
-        readRepositoryFile: ({ repository, path }) => ({
-          exists: true,
-          path: `${repository}:${path}`,
-          content: `${renderDefaultConfig()}unsupported: true\n`,
-        }),
-      });
-    }).toThrow("Invalid fankaidev/grovie:.grovie.yml:");
-  });
-
-  it("[UC-WORKER-02-S06] rejects unsafe and unknown nested config values", () => {
-    const cwd = createTmpDir();
-    writeFileSync(
-      join(cwd, ".grovie.yml"),
-      [
-        "version: 1",
-        "queue:",
-        "  label: grovie",
-        "branches:",
-        "  prefix: grovie/",
-        "pullRequests:",
-        "  create: true",
-        "  draft: false",
-        "comments:",
-        "  mode: concise",
-        "safety:",
-        "  allowDefaultBranchPush: true",
-        "  forcePush: true",
-        "",
-      ].join("\n"),
-      "utf8",
-    );
-
-    expect(() => loadConfig(cwd)).toThrow("safety.allowDefaultBranchPush: Invalid input: expected false");
-    expect(() => loadConfig(cwd)).toThrow("safety: Unrecognized key: \"forcePush\"");
-  });
-
-  it("[UC-WORKER-02-S06] rejects the old repositories allowlist shape", () => {
-    const cwd = createTmpDir();
-    writeFileSync(
-      join(cwd, ".grovie.yml"),
-      [
-        "version: 1",
-        "repositories:",
-        "  allowed:",
-        "    - fankaidev/grovie",
-        "queue:",
-        "  label: grovie",
-        "branches:",
-        "  prefix: grovie/",
-        "pullRequests:",
-        "  create: true",
-        "  draft: false",
-        "comments:",
-        "  mode: concise",
-        "safety:",
-        "  allowDefaultBranchPush: false",
-        "",
-      ].join("\n"),
-      "utf8",
-    );
-
-    expect(() => loadConfig(cwd)).toThrow("Unrecognized key: \"repositories\"");
+    expect(loaded.path).toBe(join(root, "config.yml"));
+    expect(loaded.config.queue.label).toBe("grovie");
+    expect(loaded.config.safety.allowDefaultBranchPush).toBe(false);
   });
 
   it("[UC-ADMIN-01-S01] loads an empty global worker config with the admin console disabled when config.yml is absent", () => {
@@ -230,7 +166,6 @@ describe("config helpers", () => {
         enabled: true,
         repository: "fankaidev/grovie-state",
         branch: "main",
-        localPath: "/tmp/grovie/state-repo",
         syncIntervalSeconds: 60,
       },
     });
@@ -253,7 +188,6 @@ describe("config helpers", () => {
           runtime: "codex",
           instructions: "Use #tag\nKeep a: b literal.",
           model: "gpt: 5",
-          args: ["--model", "a: b"],
           envKeys: ["OPENAI_API_KEY", "KEY:VALUE"],
         },
       ],
@@ -267,7 +201,6 @@ describe("config helpers", () => {
         enabled: false,
         repository: "fankaidev/grovie-state",
         branch: "main: dev",
-        localPath: "/tmp/grovie/state # repo",
         syncIntervalSeconds: 60,
       },
       adminConsole: {
@@ -287,7 +220,6 @@ describe("config helpers", () => {
           runtime: "codex",
           instructions: "Use #tag\nKeep a: b literal.",
           model: "gpt: 5",
-          args: ["--model", "a: b"],
           envKeys: ["OPENAI_API_KEY", "KEY:VALUE"],
         },
       ],
@@ -301,7 +233,6 @@ describe("config helpers", () => {
         enabled: false,
         repository: "fankaidev/grovie-state",
         branch: "main: dev",
-        localPath: "/tmp/grovie/state # repo",
         syncIntervalSeconds: 60,
       },
       adminConsole: {
@@ -321,9 +252,6 @@ describe("config helpers", () => {
         "agents:",
         "  - name: coder",
         "    runtime: codex",
-        "    args:",
-        "      - --model",
-        "      - gpt-5.3-codex",
         "    envKeys:",
         "      - OPENAI_API_KEY",
         "watchedRepositories: []",
@@ -338,7 +266,6 @@ describe("config helpers", () => {
       {
         name: "coder",
         runtime: "codex",
-        args: ["--model", "gpt-5.3-codex"],
         envKeys: ["OPENAI_API_KEY"],
       },
     ]);

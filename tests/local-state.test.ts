@@ -291,41 +291,6 @@ describe("LocalState", () => {
     ]);
   });
 
-  it("[UC-WORKER-04-S12] reads repo-local policy config from the bare repository cache default branch", () => {
-    const root = createTmpDir();
-    const runner = new FakeRunner({
-      repositoryFiles: {
-        ".grovie.yml": "version: 1\nqueue:\n  label: ready\n",
-      },
-    });
-    const state = new LocalState({ paths: { root }, runner });
-    const result = state.readRepositoryFile({
-      repository: "fankaidev/grovie",
-      path: ".grovie.yml",
-    });
-
-    expect(result).toEqual({
-      exists: true,
-      path: "fankaidev/grovie:.grovie.yml",
-      content: "version: 1\nqueue:\n  label: ready\n",
-    });
-    expect(runner.calls.map((call) => call.args)).toEqual([
-      ["clone", "--bare", "https://github.com/fankaidev/grovie.git", join(root, "repos", "fankaidev-grovie.git")],
-      ["-C", join(root, "repos", "fankaidev-grovie.git"), "ls-remote", "--symref", "origin", "HEAD"],
-      ["-C", join(root, "repos", "fankaidev-grovie.git"), "fetch", "origin", "+refs/heads/main:refs/heads/main"],
-      ["-C", join(root, "repos", "fankaidev-grovie.git"), "show", "main:.grovie.yml"],
-    ]);
-  });
-
-  it("[UC-WORKER-04-S12] treats a missing repo-local policy file as absent", () => {
-    const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
-
-    expect(state.readRepositoryFile({
-      repository: "fankaidev/grovie",
-      path: ".grovie.yml",
-    }).exists).toBe(false);
-  });
-
   it("[UC-EXECUTION-04-S03] creates separate sessions for different agents on one issue", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();

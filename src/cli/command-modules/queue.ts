@@ -3,13 +3,12 @@ import { buildAgentLabel } from "../../assignment.js";
 import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "../../admin-console.js";
 import {
   addWatchedRepository,
-  createConfigFile,
   defaultConfig,
-  loadConfig,
   loadGlobalConfig,
-  loadRepositoryConfig,
   removeWatchedRepository,
   resolveConfiguredAgents,
+  resolveRepositoryConfig,
+  resolveWatchedRepositoryConfig,
   saveGlobalConfig,
 } from "../../config.js";
 import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "../../cleanup.js";
@@ -31,8 +30,6 @@ import {
   readNumberOption,
   readStringOption,
   renderConfiguredAgents,
-  renderConfigPath,
-  renderConfigSource,
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,
@@ -64,24 +61,32 @@ export const queueCommand = {
       }
 
       try {
-        const config = defaultConfig();
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
         const identity = resolveLocalIdentity();
         const localAgents = resolveConfiguredAgents(globalConfig.config, identity.machineId);
         const repositories = repoOption.value === undefined
-          ? globalConfig.config.watchedRepositories.map((watchedRepository) => ({
-            repository: watchedRepository.repository,
-            label: watchedRepository.label ?? config.queue.label,
-          }))
-          : [
-            {
-              repository: repoOption.value,
+          ? globalConfig.config.watchedRepositories.map((watchedRepository) => {
+            const config = resolveWatchedRepositoryConfig(watchedRepository);
+
+            return {
+              repository: watchedRepository.repository,
               label: config.queue.label,
-            },
+              config,
+            };
+          })
+          : [
+            (() => {
+              const resolvedConfig = resolveRepositoryConfig(repoOption.value, globalConfig);
+
+              return {
+                repository: repoOption.value,
+                label: resolvedConfig.config.queue.label,
+                config: resolvedConfig.config,
+              };
+            })(),
           ];
         const queueRepositories = repositories.map((repository) => {
-          const repositoryConfig = loadRepositoryConfig(repository.repository, context.localState);
-          const trustedAuthors = resolveQueueTrustedAuthors(repositoryConfig.config, context.github);
+          const trustedAuthors = resolveQueueTrustedAuthors(repository.config, context.github);
 
           if (!trustedAuthors.ok) {
             throw new Error(trustedAuthors.message);

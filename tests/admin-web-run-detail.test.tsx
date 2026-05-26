@@ -54,7 +54,6 @@ describe("admin web home route", () => {
               name: "codex",
               machineId: "kai-mini",
               runtime: "codex",
-              args: [],
               envKeys: [],
               availability: {
                 runtime: "codex",
@@ -68,7 +67,6 @@ describe("admin web home route", () => {
               name: "pi",
               machineId: "kai-mini",
               runtime: "pi",
-              args: [],
               envKeys: [],
               availability: {
                 runtime: "pi",
@@ -196,7 +194,6 @@ describe("admin web home route", () => {
                 name: "codex",
                 machineId: "kai-mini",
                 runtime: "codex",
-                args: [],
                 envKeys: [],
                 availability: {
                   runtime: "codex",
@@ -210,7 +207,6 @@ describe("admin web home route", () => {
                 name: "pi",
                 machineId: "kai-mini",
                 runtime: "pi",
-                args: [],
                 envKeys: [],
                 availability: {
                   runtime: "pi",

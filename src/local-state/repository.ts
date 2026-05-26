@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { RepositoryFileResult } from "../config.js";
 import type { CommandRunner } from "../github.js";
 import type { LocalStatePaths } from "./types.js";
 import { sanitizeRepository } from "./ids.js";
@@ -38,38 +37,6 @@ export function ensureRepositoryCache(input: {
   return cachePath;
 }
 
-export function ensureRepositoryCacheAtRemoteHead(input: {
-  paths: LocalStatePaths;
-  runner: CommandRunner;
-  repository: string;
-}): { cachePath: string; ref: string } {
-  const cachePath = getRepositoryCachePath(input.paths, input.repository);
-
-  ensureBareRepository({
-    runner: input.runner,
-    repository: input.repository,
-    cachePath,
-  });
-
-  const ref = resolveRepositoryHeadRef(input.runner, cachePath);
-  const fetchResult = input.runner.run("git", [
-    "-C",
-    cachePath,
-    "fetch",
-    "origin",
-    `+refs/heads/${ref}:refs/heads/${ref}`,
-  ]);
-
-  if (fetchResult.exitCode !== 0) {
-    throw new Error(fetchResult.stderr.trim() || `git fetch failed with exit code ${fetchResult.exitCode}.`);
-  }
-
-  return {
-    cachePath,
-    ref,
-  };
-}
-
 export function ensureWorktree(input: {
   runner: CommandRunner;
   repositoryCachePath: string;
@@ -103,42 +70,6 @@ export function ensureWorktree(input: {
   }
 }
 
-export function readRepositoryFile(input: {
-  paths: LocalStatePaths;
-  runner: CommandRunner;
-  repository: string;
-  path: string;
-}): RepositoryFileResult {
-  const { cachePath, ref } = ensureRepositoryCacheAtRemoteHead({
-    paths: input.paths,
-    runner: input.runner,
-    repository: input.repository,
-  });
-  const result = input.runner.run("git", ["-C", cachePath, "show", `${ref}:${input.path}`]);
-  const path = `${input.repository}:${input.path}`;
-
-  if (result.exitCode === 0) {
-    return {
-      exists: true,
-      path,
-      content: result.stdout,
-    };
-  }
-
-  if (
-    result.stderr.includes("exists on disk, but not in") ||
-    result.stderr.includes("Path ") ||
-    result.stderr.includes("does not exist")
-  ) {
-    return {
-      exists: false,
-      path,
-    };
-  }
-
-  throw new Error(result.stderr.trim() || `git show failed with exit code ${result.exitCode}.`);
-}
-
 function ensureBareRepository(input: {
   runner: CommandRunner;
   repository: string;
@@ -154,27 +85,4 @@ function ensureBareRepository(input: {
   if (cloneResult.exitCode !== 0) {
     throw new Error(cloneResult.stderr.trim() || `git clone --bare failed with exit code ${cloneResult.exitCode}.`);
   }
-}
-
-function resolveRepositoryHeadRef(runner: CommandRunner, repositoryCachePath: string): string {
-  const remoteResult = runner.run("git", ["-C", repositoryCachePath, "ls-remote", "--symref", "origin", "HEAD"]);
-
-  if (remoteResult.exitCode === 0) {
-    const headLine = remoteResult.stdout
-      .split("\n")
-      .find((line) => line.startsWith("ref: refs/heads/") && line.endsWith("\tHEAD"));
-    const branch = headLine?.replace(/^ref: refs\/heads\//, "").replace(/\tHEAD$/, "");
-
-    if (branch !== undefined && branch.length > 0) {
-      return branch;
-    }
-  }
-
-  const result = runner.run("git", ["-C", repositoryCachePath, "symbolic-ref", "--short", "HEAD"]);
-
-  if (result.exitCode === 0 && result.stdout.trim().length > 0) {
-    return result.stdout.trim();
-  }
-
-  return "main";
 }

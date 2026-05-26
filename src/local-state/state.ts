@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { RepositoryFileResult } from "../config.js";
 import { SpawnCommandRunner, type CommandRunner } from "../github.js";
 import { getRunCancellationPath, isRunCancellationRequested, writeRunCancellation } from "./cancellation.js";
 import { appendRunEvent, toErrorMessage } from "./events.js";
@@ -10,7 +9,7 @@ import { acquireDaemonLock, acquireExecutionLock, hasExecutionLock, isDaemonRunn
 import { resolvePaths } from "./paths.js";
 import { enqueueRunRequest, takeRunRequest } from "./requests.js";
 import { interruptActiveRuns, markRunRejected, markSessionResuming, takeResumableRun } from "./resume.js";
-import { ensureRepositoryCache, ensureWorktree, getRepositoryCachePath, readRepositoryFile } from "./repository.js";
+import { ensureRepositoryCache, ensureWorktree, getRepositoryCachePath } from "./repository.js";
 import type { DaemonLock, ExecutionLock, HandledCursor, LocalStateOptions, LocalStatePaths, LockResult, PreparedRun, PrepareRunInput, ResumableRun, RunCancellation, RunMetadata, RunRequest } from "./types.js";
 
 export class LocalState {
@@ -268,16 +267,6 @@ export class LocalState {
 
   readTask(run: PreparedRun): unknown {
     return JSON.parse(readFileSync(run.taskPath, "utf8"));
-  }
-
-  readRepositoryFile(input: { repository: string; path: string }): RepositoryFileResult {
-    this.ensureBaseDirectories();
-    return readRepositoryFile({
-      paths: this.paths,
-      runner: this.runner,
-      repository: input.repository,
-      path: input.path,
-    });
   }
 
   private getHandledCursorPath(repository: string, issueNumber: number, agentId: string): string {

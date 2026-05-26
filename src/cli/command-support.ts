@@ -1,6 +1,6 @@
 import type { AgentHealth } from "../agent-health.js";
 import { getAssignedAgentIds, parseAgentId } from "../assignment.js";
-import { CONFIG_FILE_NAME, type LoadedConfig } from "../config.js";
+import type { GrovieConfig } from "../config.js";
 import { formatIssueReference, type GitHubGateway, parseIssueReference } from "../github.js";
 import { resolveLocalIdentity } from "../identity.js";
 import { createRuntime, type RuntimeAvailability, type RuntimeName } from "../runtime.js";
@@ -119,20 +119,12 @@ export function resolveManualRunAgent(input: {
   };
 }
 
-export function renderConfigSource(loaded: LoadedConfig): string {
-  return loaded.path === undefined ? `defaults (no ${CONFIG_FILE_NAME} found)` : `${loaded.path} is valid.`;
-}
-
-export function renderConfigPath(loaded: LoadedConfig): string {
-  return loaded.path ?? "built-in defaults";
-}
-
 export function renderGlobalConfigSource(path: string, watchedRepositoryCount: number): string {
   const repositoryText = watchedRepositoryCount === 1 ? "1 watched repository" : `${watchedRepositoryCount} watched repositories`;
   return `${path} (${repositoryText}).`;
 }
 
-export function resolveQueueTrustedAuthors(config: LoadedConfig["config"], github: GitHubGateway): { ok: true; value: string[] } | { ok: false; message: string } {
+export function resolveQueueTrustedAuthors(config: GrovieConfig, github: GitHubGateway): { ok: true; value: string[] } | { ok: false; message: string } {
   const configured = config.trust?.trustedAuthors.filter((author) => author.trim().length > 0) ?? [];
 
   if (configured.length > 0) {
