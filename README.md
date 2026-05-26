@@ -133,7 +133,7 @@ grovie daemon --once
 5. Grovie prepares an isolated worktree under `~/.grovie/`.
 6. The configured local agent receives the issue context and works in that worktree.
 7. If code changes are produced, Grovie commits them to a generated branch and opens a pull request.
-8. Grovie comments back on the issue with the run id, local log paths, branch, and pull request link.
+8. Grovie comments back on the issue with the run id, local run directory, branch, and pull request link.
 9. Humans review, merge, or ask the agent to continue using normal GitHub workflow.
 
 When you want the assigned agent to act again, add a normal GitHub issue comment asking it to continue. The daemon picks that visible activity up through polling and handled cursors.
