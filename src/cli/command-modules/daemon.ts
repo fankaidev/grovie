@@ -34,6 +34,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -53,6 +54,15 @@ export const daemonCommand = {
       const [subcommand] = args;
 
       if (subcommand === "start") {
+        const argValidation = validateCliArgs(args.slice(1), {
+          valueOptions: ["--repo", "--label"],
+          flags: ["--once"],
+        });
+
+        if (!argValidation.ok) {
+          return argValidation.result;
+        }
+
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
         const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
 
@@ -75,6 +85,14 @@ export const daemonCommand = {
       }
 
       if (subcommand === "stop") {
+        const argValidation = validateCliArgs(args.slice(1), {
+          flags: ["--force"],
+        });
+
+        if (!argValidation.ok) {
+          return argValidation.result;
+        }
+
         const result = context.daemonLifecycle.stop({
           root: context.localState.getPaths().root,
           force: args.includes("--force"),
@@ -96,6 +114,12 @@ export const daemonCommand = {
       }
 
       if (subcommand === "status") {
+        const argValidation = validateCliArgs(args.slice(1));
+
+        if (!argValidation.ok) {
+          return argValidation.result;
+        }
+
         return {
           exitCode: 0,
           stdout: renderDaemonLifecycleStatus(context.daemonLifecycle.status({
@@ -107,6 +131,15 @@ export const daemonCommand = {
       if (subcommand === "logs") {
         try {
           const logArgs = args.slice(1);
+          const argValidation = validateCliArgs(logArgs, {
+            valueOptions: ["--stream", "--lines"],
+            flags: ["--follow"],
+          });
+
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
+
           const streamOption = readStringOption(logArgs, "--stream");
 
           if (!streamOption.ok) {
@@ -164,6 +197,19 @@ export const daemonCommand = {
           };
         }
 
+        const argValidation = validateCliArgs(args.slice(1), {
+          positionals: {
+            min: 1,
+            max: 1,
+            label: "daemon service action",
+          },
+          valueOptions: ["--platform"],
+        });
+
+        if (!argValidation.ok) {
+          return argValidation.result;
+        }
+
         const platformOption = readStringOption(args.slice(2), "--platform");
 
         if (!platformOption.ok) {
@@ -202,6 +248,15 @@ export const daemonCommand = {
       const runArgs = subcommand === "run" ? args.slice(1) : args;
 
       try {
+        const argValidation = validateCliArgs(runArgs, {
+          valueOptions: ["--repo", "--label"],
+          flags: ["--once"],
+        });
+
+        if (!argValidation.ok) {
+          return argValidation.result;
+        }
+
         const normalizedRepoOption = readStringOption(runArgs, "--repo");
 
         if (!normalizedRepoOption.ok) {

@@ -184,6 +184,83 @@ export function readStringOption(
   };
 }
 
+export type CliArgSpec = {
+  positionals?: {
+    min?: number;
+    max?: number;
+    label?: string;
+  };
+  valueOptions?: string[];
+  flags?: string[];
+};
+
+export function validateCliArgs(args: string[], spec: CliArgSpec = {}): { ok: true } | { ok: false; result: CliResult } {
+  const valueOptions = new Set(spec.valueOptions ?? []);
+  const flags = new Set(spec.flags ?? []);
+  const seenOptions = new Set<string>();
+  const positionals: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+
+    if (arg.startsWith("-")) {
+      if (valueOptions.has(arg)) {
+        if (seenOptions.has(arg)) {
+          return invalidArgs(`Duplicate option: ${arg}`);
+        }
+
+        const value = args[index + 1];
+
+        if (value === undefined || value.startsWith("-")) {
+          return invalidArgs(`Missing value for ${arg}.`);
+        }
+
+        seenOptions.add(arg);
+        index += 1;
+        continue;
+      }
+
+      if (flags.has(arg)) {
+        if (seenOptions.has(arg)) {
+          return invalidArgs(`Duplicate option: ${arg}`);
+        }
+
+        seenOptions.add(arg);
+        continue;
+      }
+
+      return invalidArgs(`Unknown option: ${arg}`);
+    }
+
+    positionals.push(arg);
+  }
+
+  const min = spec.positionals?.min ?? 0;
+  const max = spec.positionals?.max ?? min;
+
+  if (positionals.length < min) {
+    return invalidArgs(`Missing ${spec.positionals?.label ?? "argument"}.`);
+  }
+
+  if (positionals.length > max) {
+    return invalidArgs(`Unexpected argument: ${positionals[max]}`);
+  }
+
+  return {
+    ok: true,
+  };
+}
+
+function invalidArgs(message: string): { ok: false; result: CliResult } {
+  return {
+    ok: false,
+    result: {
+      exitCode: 1,
+      stderr: message,
+    },
+  };
+}
+
 export function readNumberOption(
   args: string[],
   name: string,

@@ -31,6 +31,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -39,7 +40,13 @@ export const statusCommand = {
     description: "Show running and recent local Grovie runs.",
     usage: "grovie status",
     issue: "#36",
-    run: (_args: string[], context: CliContext) => {
+    run: (args: string[], context: CliContext) => {
+      const argValidation = validateCliArgs(args);
+
+      if (!argValidation.ok) {
+        return argValidation.result;
+      }
+
       try {
         const runs = listLocalRuns(context.localState.getPaths().runsDir);
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);

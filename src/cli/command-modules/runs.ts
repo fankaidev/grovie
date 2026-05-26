@@ -31,6 +31,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -49,6 +50,12 @@ export const runsCommand = {
 
       try {
         if (subcommand === "list") {
+          const argValidation = validateCliArgs(args.slice(1));
+
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
+
           return {
             exitCode: 0,
             stdout: renderRunsList(listLocalRuns(runsDir)),
@@ -56,6 +63,18 @@ export const runsCommand = {
         }
 
         if (subcommand === "show") {
+          const argValidation = validateCliArgs(args.slice(1), {
+            positionals: {
+              min: 1,
+              max: 1,
+              label: "run id",
+            },
+          });
+
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
+
           if (runId === undefined) {
             return {
               exitCode: 1,
@@ -79,6 +98,15 @@ export const runsCommand = {
         }
 
         if (subcommand === "cleanup") {
+          const argValidation = validateCliArgs(args.slice(1), {
+            valueOptions: ["--older-than"],
+            flags: ["--dry-run", "--logs"],
+          });
+
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
+
           const olderThanOption = readStringOption(args, "--older-than");
 
           if (!olderThanOption.ok) {

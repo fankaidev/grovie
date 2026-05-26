@@ -34,6 +34,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -44,16 +45,15 @@ export const doctorCommand = {
     issue: "#3",
     run: (args: string[], context: CliContext) => {
       try {
-        const verifyAgents = args.includes("--verify-agents");
-        const unknownArgs = args.filter((arg) => arg !== "--verify-agents");
+        const argValidation = validateCliArgs(args, {
+          flags: ["--verify-agents"],
+        });
 
-        if (unknownArgs.length > 0) {
-          return {
-            exitCode: 1,
-            stderr: `Unknown doctor option: ${unknownArgs[0]}`,
-          };
+        if (!argValidation.ok) {
+          return argValidation.result;
         }
 
+        const verifyAgents = args.includes("--verify-agents");
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
         const authenticatedUser = context.github.getAuthenticatedUser();
         const identity = resolveLocalIdentity();

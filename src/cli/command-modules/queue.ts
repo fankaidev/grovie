@@ -33,6 +33,7 @@ import {
   renderUnavailableAgents,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
+  validateCliArgs,
 } from "../command-support.js";
 import type { CliCommand, CliContext } from "../types.js";
 
@@ -49,6 +50,15 @@ export const queueCommand = {
           exitCode: 1,
           stderr: "Missing queue subcommand. Usage: grovie queue list [--repo owner/repo] [--json]",
         };
+      }
+
+      const argValidation = validateCliArgs(args.slice(1), {
+        valueOptions: ["--repo"],
+        flags: ["--json"],
+      });
+
+      if (!argValidation.ok) {
+        return argValidation.result;
       }
 
       const repoOption = readStringOption(args, "--repo");
