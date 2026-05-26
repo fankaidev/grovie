@@ -246,7 +246,7 @@ describe("local run status", () => {
       },
       adminConsole: {
         enabled: true,
-        host: "127.0.0.1",
+        host: "localhost",
         port: 8765,
       },
       watchedRepositories: [{ repository: "fankaidev/grovie", label: "grovie" }],
@@ -263,7 +263,7 @@ describe("local run status", () => {
 
     expect(output).toContain("Status: running");
     expect(output).toContain("Admin console:");
-    expect(output).toContain("URL: http://127.0.0.1:8765");
+    expect(output).toContain("URL: http://localhost:8765");
     expect(output).toContain("Availability: expected available while the daemon is running");
     expect(output).toContain("- fankaidev/grovie label=grovie");
     expect(output).toContain(`Runs: ${runsDir}`);
