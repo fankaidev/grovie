@@ -22,3 +22,4 @@
 | UC-DAEMON-01-S05 | P1 | Global state repo config stores repo, branch, and sync interval for optional remote state sync. |
 | UC-DAEMON-01-S06 | P1 | Unsafe or unknown config shapes fail validation with a clear error. |
 | UC-DAEMON-01-S07 | P0 | A daemon started with no configured local agents exits clearly before polling work. |
+| UC-DAEMON-01-S08 | P1 | Global daemon config accepts `maxConcurrentRuns` as a positive integer and defaults it to `3` when omitted. |

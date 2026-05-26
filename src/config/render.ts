@@ -4,6 +4,9 @@ import type { GlobalGrovieConfig } from "../config.js";
 export function renderGlobalConfig(config: GlobalGrovieConfig): string {
   const renderedConfig = stringify({
     ...config,
+    daemon: {
+      maxConcurrentRuns: config.daemon?.maxConcurrentRuns ?? 3,
+    },
     adminConsole: {
       enabled: config.adminConsole?.enabled ?? false,
       ...(config.adminConsole?.host === undefined ? {} : { host: config.adminConsole.host }),
@@ -13,7 +16,10 @@ export function renderGlobalConfig(config: GlobalGrovieConfig): string {
 
   return `# Grovie global configuration.
 # This file schedules repositories for the local daemon. It is not a security allowlist.
-${renderedConfig.replace(/^stateRepo:/m, [
+${renderedConfig.replace(/^daemon:/m, [
+    "# Local daemon scheduling controls.",
+    "daemon:",
+  ].join("\n")).replace(/^stateRepo:/m, [
     "# Optional state repo sync is for observability and recovery only.",
     "stateRepo:",
   ].join("\n")).replace(/^adminConsole:/m, [
