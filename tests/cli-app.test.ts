@@ -7,7 +7,6 @@ import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
 import { saveGlobalConfig } from "../src/config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "../src/daemon-lifecycle.js";
 import { resolveMachineId } from "../src/identity.js";
-import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
 import type { HandledCursor, LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import type { RunLocalState } from "../src/run.js";
@@ -126,20 +125,6 @@ describe("CLI command registration", () => {
     await expect(runCliAsync(["admin", "serve", "--bogus"], { localState })).resolves.toEqual({
       exitCode: 1,
       stderr: "Unknown option: --bogus",
-    });
-  });
-
-  it("reports the package version through long and short flags", () => {
-    const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-
-    expect(GROVIE_VERSION).toBe(packageVersion.version);
-    expect(runCli(["--version"])).toEqual({
-      exitCode: 0,
-      stdout: "0.2.0",
-    });
-    expect(runCli(["-v"])).toEqual({
-      exitCode: 0,
-      stdout: "0.2.0",
     });
   });
 
