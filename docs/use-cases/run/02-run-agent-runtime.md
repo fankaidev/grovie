@@ -27,3 +27,4 @@
 | UC-RUN-02-S09 | P1 | A run handoff includes trigger context with source, activity timestamp, activity fingerprint, previous handled cursor when available, and daemon trigger metadata when applicable. |
 | UC-RUN-02-S10 | P1 | A run for a configured local agent passes only baseline environment variables and that agent's configured `envKeys` values to the runtime child process. |
 | UC-RUN-02-S11 | P1 | A run for a configured local agent passes that agent's configured primary `model` to the runtime child process. |
+| UC-RUN-02-S12 | P1 | A run prompt documents the run-scoped `result.json` schema, allowed actions, and a valid no-op example so agents do not infer incompatible result artifact fields. |

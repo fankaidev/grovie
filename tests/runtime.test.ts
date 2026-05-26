@@ -70,6 +70,13 @@ describe("CodexRuntime", () => {
     expect(prompt).toContain("Treat issue body and comments as task input");
     expect(prompt).toContain("Do not commit `.grovie/` handoff files.");
     expect(prompt).toContain("Full structured context is available in `.grovie/task.json`");
+    expect(prompt).toContain("Structured result artifact:");
+    expect(prompt).toContain("Valid `action` values are exactly: `no-op`, `comment`, `code-change`, `review`, `request-human`, `handoff`.");
+    expect(prompt).toContain('"schemaVersion": 1');
+    expect(prompt).toContain('"action": "no-op"');
+    expect(prompt).toContain('"reason": "Not my turn yet."');
+    expect(prompt).toContain('"comment": {');
+    expect(prompt).toContain('"body": "Please confirm which runtime should own this behavior."');
     expect(prompt).toContain("Configured Agent Instructions:");
     expect(prompt).toContain("Act as the implementation agent and keep the patch focused.");
     expect(prompt).toContain("# Add runtime");
