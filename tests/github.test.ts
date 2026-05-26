@@ -437,45 +437,84 @@ describe("GhGitHubGateway", () => {
   it("[UC-DAEMON-02-S15] lists repository events through gh", () => {
     const runner = new FakeRunner([
       {
-        stdout: JSON.stringify([
-          {
-            id: "event-1",
-            type: "IssueCommentEvent",
-            created_at: "2026-05-24T12:49:36Z",
-            actor: { login: "fankaidev" },
-            payload: {
-              action: "created",
-              issue: {
-                number: 127,
-                html_url: "https://github.com/fankaidev/grovie/pull/127",
-              },
-              comment: {
-                html_url: "https://github.com/fankaidev/grovie/pull/127#issuecomment-1",
+        stdout: [
+          "HTTP/2.0 200 OK",
+          "Etag: W/\"events-etag\"",
+          "X-Poll-Interval: 60",
+          "",
+          JSON.stringify([
+            {
+              id: "event-1",
+              type: "IssueCommentEvent",
+              created_at: "2026-05-24T12:49:36Z",
+              actor: { login: "fankaidev" },
+              payload: {
+                action: "created",
+                issue: {
+                  number: 127,
+                  html_url: "https://github.com/fankaidev/grovie/pull/127",
+                },
+                comment: {
+                  html_url: "https://github.com/fankaidev/grovie/pull/127#issuecomment-1",
+                },
               },
             },
-          },
-        ]),
+          ]),
+        ].join("\n"),
       },
     ]);
     const gateway = new GhGitHubGateway(runner);
 
     expect(gateway.listRepositoryEvents("fankaidev/grovie")).toEqual({
       ok: true,
-      value: [
-        {
-          id: "event-1",
-          type: "IssueCommentEvent",
-          createdAt: "2026-05-24T12:49:36Z",
-          actor: "fankaidev",
-          action: "created",
-          issueNumber: 127,
-          issueUrl: "https://github.com/fankaidev/grovie/pull/127",
-          commentUrl: "https://github.com/fankaidev/grovie/pull/127#issuecomment-1",
-        },
-      ],
+      value: {
+        status: "modified",
+        etag: "W/\"events-etag\"",
+        pollIntervalSeconds: 60,
+        events: [
+          {
+            id: "event-1",
+            type: "IssueCommentEvent",
+            createdAt: "2026-05-24T12:49:36Z",
+            actor: "fankaidev",
+            action: "created",
+            issueNumber: 127,
+            issueUrl: "https://github.com/fankaidev/grovie/pull/127",
+            commentUrl: "https://github.com/fankaidev/grovie/pull/127#issuecomment-1",
+          },
+        ],
+      },
     });
     expect(runner.calls.map((call) => call.args)).toEqual([
-      ["api", "repos/fankaidev/grovie/events?per_page=100"],
+      ["api", "-i", "repos/fankaidev/grovie/events?per_page=100"],
+    ]);
+  });
+
+  it("[UC-DAEMON-02-S18] sends repository event ETags and handles unmodified responses", () => {
+    const runner = new FakeRunner([
+      {
+        exitCode: 1,
+        stdout: [
+          "HTTP/2.0 304 Not Modified",
+          "Etag: \"events-etag\"",
+          "X-Poll-Interval: 60",
+          "",
+        ].join("\n"),
+        stderr: "gh: HTTP 304",
+      },
+    ]);
+    const gateway = new GhGitHubGateway(runner);
+
+    expect(gateway.listRepositoryEvents("fankaidev/grovie", { ifNoneMatch: "W/\"events-etag\"" })).toEqual({
+      ok: true,
+      value: {
+        status: "not-modified",
+        etag: "\"events-etag\"",
+        pollIntervalSeconds: 60,
+      },
+    });
+    expect(runner.calls.map((call) => call.args)).toEqual([
+      ["api", "-i", "-H", "If-None-Match: W/\"events-etag\"", "repos/fankaidev/grovie/events?per_page=100"],
     ]);
   });
 

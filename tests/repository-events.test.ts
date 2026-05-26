@@ -1,10 +1,10 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { GitHubGateway, GitHubRepositoryEvent } from "../src/github.js";
 import { resolvePaths } from "../src/local-state.js";
-import { planRepositoryEventPolling } from "../src/repository-events.js";
+import { planRepositoryEventPolling, planRepositoryEventRequest, planUnchangedRepositoryEventPolling } from "../src/repository-events.js";
 
 const NOW = new Date("2026-05-24T12:00:00Z");
 const tmpDirs: string[] = [];
@@ -204,6 +204,96 @@ describe("repository event polling", () => {
       reason: "periodic full scan fallback is due",
     });
   });
+
+  it("[UC-DAEMON-02-S18] stores event ETags and poll interval metadata", () => {
+    const paths = resolvePaths({ root: createTmpDir() });
+
+    expect(planRepositoryEventPolling({
+      paths,
+      repository: "fankaidev/grovie",
+      events: [event("event-1")],
+      github: fakeGithub(),
+      etag: "W/\"events-etag\"",
+      pollIntervalSeconds: 60,
+      now: NOW,
+    })).toMatchObject({
+      mode: "full-scan",
+    });
+
+    expect(readCursor(paths.root)).toMatchObject({
+      repository: "fankaidev/grovie",
+      lastSeenEventId: "event-1",
+      etag: "W/\"events-etag\"",
+      pollIntervalSeconds: 60,
+      nextPollAt: "2026-05-24T12:01:00.000Z",
+    });
+  });
+
+  it("[UC-DAEMON-02-S18] skips event requests until the GitHub poll interval elapses", () => {
+    const paths = resolvePaths({ root: createTmpDir() });
+
+    planRepositoryEventPolling({
+      paths,
+      repository: "fankaidev/grovie",
+      events: [event("event-1")],
+      github: fakeGithub(),
+      etag: "W/\"events-etag\"",
+      pollIntervalSeconds: 60,
+      now: NOW,
+    });
+
+    expect(planRepositoryEventRequest({
+      paths,
+      repository: "fankaidev/grovie",
+      now: new Date("2026-05-24T12:00:30Z"),
+    })).toEqual({
+      mode: "skip",
+      reason: "repository event poll interval has not elapsed",
+      eventCount: 0,
+    });
+
+    expect(planRepositoryEventRequest({
+      paths,
+      repository: "fankaidev/grovie",
+      now: new Date("2026-05-24T12:01:00Z"),
+    })).toEqual({
+      mode: "request",
+      ifNoneMatch: "W/\"events-etag\"",
+    });
+  });
+
+  it("[UC-DAEMON-02-S18] treats not-modified repository events as unchanged", () => {
+    const paths = resolvePaths({ root: createTmpDir() });
+
+    planRepositoryEventPolling({
+      paths,
+      repository: "fankaidev/grovie",
+      events: [event("event-1")],
+      github: fakeGithub(),
+      etag: "W/\"events-etag\"",
+      pollIntervalSeconds: 60,
+      now: NOW,
+    });
+
+    expect(planUnchangedRepositoryEventPolling({
+      paths,
+      repository: "fankaidev/grovie",
+      etag: "\"events-etag\"",
+      pollIntervalSeconds: 120,
+      now: new Date("2026-05-24T12:01:00Z"),
+    })).toEqual({
+      mode: "skip",
+      reason: "repository events were not modified",
+      eventCount: 0,
+    });
+
+    expect(readCursor(paths.root)).toMatchObject({
+      lastSeenEventId: "event-1",
+      etag: "\"events-etag\"",
+      pollIntervalSeconds: 120,
+      nextPollAt: "2026-05-24T12:03:00.000Z",
+    });
+  });
 });
 
 function event(id: string, overrides: Partial<GitHubRepositoryEvent> = {}): GitHubRepositoryEvent {
@@ -238,4 +328,8 @@ function createTmpDir(): string {
   writeFileSync(join(dir, ".keep"), "", "utf8");
   tmpDirs.push(dir);
   return dir;
+}
+
+function readCursor(root: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(root, "daemon", "events", "fankaidev-grovie.json"), "utf8")) as Record<string, unknown>;
 }

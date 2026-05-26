@@ -33,3 +33,4 @@
 | UC-DAEMON-02-S15 | P1 | A long-running daemon cycle reads repository events, skips queue inspection when no relevant events changed, resolves pull request events to related issues through GitHub with a local cache, and periodically falls back to a full queue scan. |
 | UC-DAEMON-02-S16 | P1 | A daemon cycle reruns a handled issue when a linked open pull request's merge state changes to `DIRTY` or otherwise requires branch update work, and records daemon activity explaining the mergeability trigger. |
 | UC-DAEMON-02-S17 | P1 | A daemon cycle skips automatic queue runs whose issue creator is not trusted, while configured trusted authors can allow creators other than the authenticated `gh` user. |
+| UC-DAEMON-02-S18 | P1 | A long-running daemon obeys GitHub repository event `X-Poll-Interval` values, sends stored `ETag` values through `If-None-Match`, and treats `304 Not Modified` as unchanged repository events. |
