@@ -5,7 +5,7 @@ import type { LocalStatePaths } from "../../local-state.js";
 
 export type AdminConsoleResolvedConfig = {
   enabled: boolean;
-  host: "127.0.0.1";
+  host: string;
   port: number;
 };
 

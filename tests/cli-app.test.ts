@@ -103,11 +103,11 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
-    writeFileSync(join(globalRoot, "config.yml"), "version: 1\nwatchedRepositories: []\nadminConsole:\n  enabled: true\n  host: 0.0.0.0\n", "utf8");
+    writeFileSync(join(globalRoot, "config.yml"), "version: 1\nwatchedRepositories: []\nadminConsole:\n  enabled: true\n  host: ''\n", "utf8");
 
     expect(runCli(["doctor"], { cwd, github: fakeGitHubGateway(), runtime: fakeRuntime(), localState })).toEqual({
       exitCode: 1,
-      stderr: expect.stringContaining("adminConsole.host: Invalid input: expected \"127.0.0.1\""),
+      stderr: expect.stringContaining("adminConsole.host: must not be empty"),
     });
   });
 

@@ -80,6 +80,22 @@ describe("admin console server", () => {
     });
   });
 
+  it("[UC-ADMIN-01-S05] resolves explicitly configured admin console bind hosts", () => {
+    expect(resolveAdminConsoleConfig({
+      version: 1,
+      agents: [],
+      watchedRepositories: [],
+      adminConsole: {
+        enabled: true,
+        host: "0.0.0.0",
+      },
+    })).toEqual({
+      enabled: true,
+      host: "0.0.0.0",
+      port: 8765,
+    });
+  });
+
   it("[UC-ADMIN-01-S04] fails clearly when the configured port is unavailable", async () => {
     const port = await getAvailablePort();
     const occupied = await startAdminConsoleServer({

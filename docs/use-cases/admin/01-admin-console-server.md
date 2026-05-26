@@ -7,7 +7,7 @@
 | ID | Rule |
 |----|------|
 | R1 | The admin console is disabled by default and does not bind a port unless explicitly enabled. |
-| R2 | The admin console binds only to `127.0.0.1` for the MVP. |
+| R2 | The admin console binds to `127.0.0.1` by default and uses an explicitly configured non-empty host when set. |
 | R3 | The admin console must fail clearly when its configured port is unavailable. |
 | R4 | A long-running daemon keeps the admin console responsive while the daemon polls repositories or runs agents. |
 
@@ -19,6 +19,6 @@
 | UC-ADMIN-01-S02 | P2 | Enabling `adminConsole.enabled` starts a local server bound to `127.0.0.1` on port `8765` by default. |
 | UC-ADMIN-01-S03 | P2 | Setting `adminConsole.port` overrides the default port without silently choosing a random fallback. |
 | UC-ADMIN-01-S04 | P2 | Starting the admin console when the configured port is unavailable fails clearly. |
-| UC-ADMIN-01-S05 | P2 | The admin console does not accept non-local bind hosts in config. |
+| UC-ADMIN-01-S05 | P2 | Setting `adminConsole.host` overrides the default bind host, while empty host values are rejected. |
 | UC-ADMIN-01-S06 | P2 | Starting the daemon with `adminConsole.enabled: false` does not bind the configured admin console web port. |
 | UC-ADMIN-01-S07 | P0 | A long-running daemon serves admin console health checks from a separate worker thread so synchronous daemon polling cannot block `/api/health`. |
