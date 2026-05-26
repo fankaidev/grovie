@@ -402,7 +402,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests[0]?.body).toContain("- Reason: Implemented the requested result protocol.");
   });
 
-  it("[UC-RUN-03-S10] rejects non-code-change result actions when worktree changes exist", () => {
+  it("[UC-RUN-03-S10] allows non-code-change result actions when worktree changes exist", () => {
     const run = fakeRunWithResult({
       schemaVersion: 1,
       action: "request-human",
@@ -412,10 +412,18 @@ describe("GitResultHandler", () => {
       {
         stdout: " M src/result.ts\n",
       },
+      {},
+      {},
+      {},
+      {},
+      {
+        stdout: "abc123\n",
+      },
     ]);
-    const handler = new GitResultHandler(new FakeGitHub(), runner);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
 
-    expect(() =>
+    expect(
       handler.handle({
         run,
         issue: fakeIssue(),
@@ -425,7 +433,68 @@ describe("GitResultHandler", () => {
         runtime: "codex",
         execution: fakeExecution(),
       }),
-    ).toThrow("Agent result action request-human cannot be combined with worktree changes. Use action code-change or remove the changes.");
+    ).toMatchObject({
+      kind: "pull-request",
+      action: "request-human",
+      reason: "The issue needs product input.",
+      pullRequest: {
+        url: "https://github.com/fankaidev/grovie/pull/20",
+      },
+    });
+    expect(github.pullRequests).toHaveLength(1);
+  });
+
+  it("[UC-RUN-03-S14] publishes an issue comment and opens a PR when both artifacts and changes exist", () => {
+    const run = fakeFileBackedRun((preparedRun) => {
+      writeFileSync(getIssueCommentArtifactPath(preparedRun), "I reviewed the change and left a local fix.\n", "utf8");
+    });
+    const runner = new FakeRunner([
+      {
+        stdout: " M fast-sort.py\n",
+      },
+      {},
+      {},
+      {},
+      {},
+      {
+        stdout: "abc123\n",
+      },
+    ]);
+    const github = new FakeGitHub();
+    const handler = new GitResultHandler(github, runner);
+
+    expect(
+      handler.handle({
+        run,
+        issue: fakeIssue(),
+        config: defaultConfig(),
+        configPath: "/home/user/.grovie/config.yml",
+        repository: "fankaidev/grovie",
+        runtime: "codex",
+        execution: fakeExecution(),
+      }),
+    ).toEqual({
+      kind: "pull-request",
+      status: " M fast-sort.py\n",
+      validationSummary: "No validation output captured.",
+      commitSha: "abc123",
+      pullRequest: {
+        number: 20,
+        url: "https://github.com/fankaidev/grovie/pull/20",
+      },
+      comment: {
+        id: 1,
+        body: [
+          '<!-- grovie:agent-comment {"agentId":"coder@fankai-mac"} -->',
+          "coder@fankai-mac:",
+          "",
+          "I reviewed the change and left a local fix.",
+        ].join("\n"),
+        url: "https://github.com/fankaidev/grovie/issues/9#issuecomment-1",
+      },
+    });
+    expect(github.comments[0]).toContain("I reviewed the change and left a local fix.");
+    expect(github.pullRequests).toHaveLength(1);
   });
 
   it("[UC-RUN-03-S03] reports deterministic branch push conflicts without opening a PR", () => {

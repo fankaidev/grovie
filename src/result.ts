@@ -42,6 +42,7 @@ export type HandleRunResultResult =
     validationSummary: string;
     commitSha: string;
     pullRequest: CreatedPullRequest;
+    comment?: CreatedComment;
     action?: AgentResultAction;
     reason?: string;
   }
@@ -97,35 +98,18 @@ export class GitResultHandler implements ResultHandler {
     const agentResult = issueComment === undefined ? readAgentResultArtifact(input.run) : readOptionalAgentResultArtifact(input.run);
     const commentBody = resolveCommentBody(agentResult, issueComment);
 
-    if (commentBody !== undefined) {
-      if (status.stdout.trim().length > 0) {
-        throw new Error("Issue comment artifact cannot be combined with worktree changes. Remove the artifact or commit the changes through a pull request.");
-      }
+    const createdComment = commentBody === undefined
+      ? undefined
+      : this.createAgentComment(input, commentBody);
 
-      const commentResult = this.github.createIssueComment(input.issue.reference, renderAgentIssueComment({
-        agentId: input.run.agentId,
-        body: commentBody,
-      }));
-
-      if (!commentResult.ok) {
-        throw new Error(commentResult.error.message);
-      }
-
+    if (commentBody !== undefined && status.stdout.trim().length === 0) {
       return {
         kind: "issue-comment",
         status: "",
         validationSummary,
-        comment: commentResult.value,
+        comment: createdComment!,
         ...renderResultMetadata(agentResult),
       };
-    }
-
-    if (agentResult !== undefined && agentResult.action !== "code-change" && status.stdout.trim().length > 0) {
-      throw new Error(`Agent result action ${agentResult.action} cannot be combined with worktree changes. Use action code-change or remove the changes.`);
-    }
-
-    if (agentResult?.action === "code-change" && status.stdout.trim().length === 0) {
-      throw new Error("Agent result action code-change requires worktree changes.");
     }
 
     if (status.stdout.trim().length === 0) {
@@ -182,8 +166,22 @@ export class GitResultHandler implements ResultHandler {
       validationSummary,
       commitSha,
       pullRequest: pullRequestResult.value,
+      ...(createdComment === undefined ? {} : { comment: createdComment }),
       ...renderResultMetadata(agentResult),
     };
+  }
+
+  private createAgentComment(input: HandleRunResultInput, body: string): CreatedComment {
+    const commentResult = this.github.createIssueComment(input.issue.reference, renderAgentIssueComment({
+      agentId: input.run.agentId,
+      body,
+    }));
+
+    if (!commentResult.ok) {
+      throw new Error(commentResult.error.message);
+    }
+
+    return commentResult.value;
   }
 
   private git(cwd: string, args: string[], options: { allowFailure?: boolean } = {}) {

@@ -43,7 +43,7 @@ export function finishRun(input: {
         action: result.action,
         reason: result.reason,
         pullRequestUrl: result.kind === "pull-request" ? result.pullRequest.url : undefined,
-        issueCommentUrl: result.kind === "issue-comment" ? result.comment.url : undefined,
+        issueCommentUrl: result.kind === "issue-comment" ? result.comment.url : result.kind === "pull-request" ? result.comment?.url : undefined,
       });
     } catch (error) {
       resultError = toErrorMessage(error);
@@ -136,7 +136,11 @@ export function finishRun(input: {
     stdout: renderCliRunOutput({ ...summaryWithStateRepo, comment: commentResult.value }),
     stderr: summary.error,
     canceled: summary.status === "canceled" ? true : undefined,
-    handledThrough: summary.result?.kind === "issue-comment" ? summary.result.comment.createdAt : undefined,
+    handledThrough: summary.result?.kind === "issue-comment"
+      ? summary.result.comment.createdAt
+      : summary.result?.kind === "pull-request"
+        ? summary.result.comment?.createdAt
+        : undefined,
     ...(isVisibleEffectiveResult(summary.result)
       ? {
         refreshes: [{
