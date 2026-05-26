@@ -305,6 +305,52 @@ describe("CLI command registration", () => {
     ].join("\n"));
   });
 
+  it("[UC-AGENT-01-S07] verifies available agents when another configured runtime is unavailable", () => {
+    const cwd = createTmpDir();
+    runCli(["init"], { cwd });
+
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const machineId = resolveMachineId(hostname());
+    saveGlobalConfig(globalRoot, {
+      version: 1,
+      agents: [
+        { name: "coder", runtime: "codex", envKeys: [] },
+        { name: "pi", runtime: "pi", envKeys: [] },
+      ],
+      watchedRepositories: [],
+      adminConsole: { enabled: false },
+    });
+    const verifiedAgents: string[] = [];
+
+    const result = runCli(["doctor", "--verify-agents"], {
+      cwd,
+      github: fakeGitHubGateway(),
+      localState,
+      runtimeAvailabilityChecker: fakeRuntimeAvailability,
+      agentVerifier: (agent) => {
+        verifiedAgents.push(agent.agentId);
+        return {
+          agent,
+          ok: true,
+          command: ["codex", "exec", "-"],
+          stdout: "GROVIE_AGENT_OK\n",
+          stderr: "",
+          message: "verified",
+        };
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(`- coder@${machineId} (codex): verified`);
+    expect(result.stdout).toContain(`- pi@${machineId} (pi): failed: runtime unavailable: pi command not found`);
+    expect(result.stderr).toBe([
+      "Failed configured agent verifications:",
+      `- pi@${machineId}: runtime unavailable: pi command not found`,
+    ].join("\n"));
+    expect(verifiedAgents).toEqual([`coder@${machineId}`]);
+  });
+
   it("[UC-STATE-REPO-01-S01] configures a private default state repository through state init", () => {
     const root = createTmpDir();
     const created: Array<{ repository: string; private: boolean }> = [];

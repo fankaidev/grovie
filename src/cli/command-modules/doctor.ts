@@ -83,7 +83,7 @@ export const doctorCommand = {
 
         const unavailableAgents = agentHealth.filter((agent) => !agent.availability.available);
 
-        if (unavailableAgents.length > 0) {
+        if (!verifyAgents && unavailableAgents.length > 0) {
           return {
             exitCode: 1,
             stdout: doctorOutput.join("\n"),
@@ -93,7 +93,14 @@ export const doctorCommand = {
 
         if (verifyAgents) {
           const verifier = context.agentVerifier ?? verifyConfiguredAgent;
-          const verificationResults = agentHealth.map((agent) => safelyVerifyAgent(verifier, agent));
+          const verificationResults = agentHealth.map((agent) => agent.availability.available
+            ? safelyVerifyAgent(verifier, agent)
+            : {
+                agent,
+                ok: false,
+                command: [agent.availability.command],
+                message: `runtime unavailable: ${agent.availability.message}`,
+              });
           const failedVerifications = verificationResults.filter((result) => !result.ok);
           const output = [
             ...doctorOutput,
