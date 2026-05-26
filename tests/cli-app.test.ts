@@ -53,7 +53,7 @@ describe("CLI command registration", () => {
     expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json]");
 
     const runsHelp = runCli(["runs", "--help"]).stdout;
-    expect(runsHelp).toContain("grovie runs list");
+    expect(runsHelp).toContain("grovie runs list [--limit 20] [--status status] [--repo owner/repo] [--issue owner/repo#123|123] [--agent agent@machine]");
     expect(runsHelp).toContain("grovie runs show <run-id>");
     expect(runsHelp).toContain("grovie runs cleanup [--dry-run] [--logs] [--older-than 30m|12h|7d]");
     expect(runsHelp).not.toContain("grovie runs retry");
@@ -676,6 +676,96 @@ describe("CLI command registration", () => {
     expect(detail.stdout).toContain(`Stderr log: ${join(localState.paths.runsDir, "failed-run", "stderr.log")}`);
     expect(detail.stdout).toContain("Result links: https://github.com/fankaidev/grovie/issues/37#issuecomment-1");
     expect(detail.stdout).toContain('run.failed {"exitCode":1}');
+  });
+
+  it("[UC-SESSION-01-S15] limits and filters local run history through runs list", () => {
+    const cwd = createTmpDir();
+    const localState = new FakeLocalState(createTmpDir());
+
+    for (let index = 1; index <= 22; index += 1) {
+      writeLocalRun(localState.paths.runsDir, `bulk-run-${index.toString().padStart(2, "0")}`, {
+        metadata: {
+          runId: `bulk-run-${index.toString().padStart(2, "0")}`,
+          repository: "fankaidev/grovie",
+          issueNumber: index,
+          agentId: "bulk@fankai-mac",
+          branchName: `grovie/issue-${index}`,
+        },
+        events: [
+          {
+            timestamp: `2026-05-23T10:${index.toString().padStart(2, "0")}:00.000Z`,
+            type: "run.succeeded",
+            data: {
+              exitCode: 0,
+            },
+          },
+        ],
+      });
+    }
+
+    writeLocalRun(localState.paths.runsDir, "failed-other", {
+      metadata: {
+        runId: "failed-other",
+        repository: "fankaidev/other",
+        issueNumber: 2,
+        agentId: "reviewer@fankai-mac",
+        branchName: "grovie/issue-2",
+      },
+      events: [
+        {
+          timestamp: "2026-05-23T11:00:00.000Z",
+          type: "run.failed",
+          data: {
+            exitCode: 1,
+          },
+        },
+      ],
+    });
+    writeLocalRun(localState.paths.runsDir, "running-grovie", {
+      metadata: {
+        runId: "running-grovie",
+        repository: "fankaidev/grovie",
+        issueNumber: 2,
+        agentId: "coder@fankai-mac",
+        branchName: "grovie/issue-2",
+      },
+      events: [
+        {
+          timestamp: "2026-05-23T11:01:00.000Z",
+          type: "runtime.started",
+          data: {
+            runtime: "codex",
+          },
+        },
+      ],
+    });
+
+    const defaultList = runCli(["runs", "list"], { cwd, localState });
+
+    expect(defaultList.exitCode).toBe(0);
+    expect(defaultList.stdout).toContain("running-grovie");
+    expect(defaultList.stdout).not.toContain("bulk-run-01");
+    expect(defaultList.stdout).not.toContain("bulk-run-02");
+
+    const failedList = runCli(["runs", "list", "--status", "failed"], { cwd, localState });
+
+    expect(failedList.stdout).toContain("failed-other");
+    expect(failedList.stdout).not.toContain("running-grovie");
+
+    const focusedList = runCli(["runs", "list", "--repo", "fankaidev/grovie", "--issue", "2", "--agent", "coder@fankai-mac"], { cwd, localState });
+
+    expect(focusedList.stdout).toContain("running-grovie");
+    expect(focusedList.stdout).not.toContain("failed-other");
+
+    const issueReferenceList = runCli(["runs", "list", "--issue", "fankaidev/other#2"], { cwd, localState });
+
+    expect(issueReferenceList.stdout).toContain("failed-other");
+    expect(issueReferenceList.stdout).not.toContain("running-grovie");
+
+    expect(runCli(["runs", "list", "--status", "done"], { cwd, localState })).toEqual({
+      exitCode: 1,
+      stderr: "Invalid --status value. Use one of: preparing, prepared, running, interrupting, interrupted, resuming, rejected, succeeded, failed, canceled, stale, unknown.",
+    });
   });
 
   it("[UC-SESSION-02-S08] runs local cleanup in dry-run mode from the CLI", () => {

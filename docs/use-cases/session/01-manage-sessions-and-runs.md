@@ -27,3 +27,4 @@
 | UC-SESSION-01-S12 | P0 | A daemon restart rejects a resumable run whose agent id is not configured locally. |
 | UC-SESSION-01-S13 | P0 | A daemon restart rejects a resumable run for an unconfigured local agent before runtime start. |
 | UC-SESSION-01-S14 | P0 | A successful run that creates related pull request activity does not immediately make the same issue-agent runnable again. |
+| UC-SESSION-01-S15 | P1 | `grovie runs list` defaults to a bounded recent history and supports filtering by status, repository, issue, and agent. |
