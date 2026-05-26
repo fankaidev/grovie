@@ -24,6 +24,7 @@ export type CliContext = {
   runtime?: AgentRuntime;
   runtimeAvailabilityChecker?: RuntimeAvailabilityChecker;
   agentVerifier?: AgentVerifier;
+  progressWriter?: (output: string) => void;
   localState: RunLocalState;
   daemonLifecycle: DaemonLifecycle;
   adminConsolePortCheck: AdminConsolePortCheck;

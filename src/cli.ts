@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { runCliAsync } from "./cli-app.js";
 
 export async function main(args: string[]): Promise<number> {
-  const result = await runCliAsync(args);
+  const result = await runCliAsync(args, {
+    progressWriter: (output) => writeOutput(process.stdout, output),
+  });
 
   writeOutput(process.stdout, result.stdout);
   writeOutput(process.stderr, result.stderr);

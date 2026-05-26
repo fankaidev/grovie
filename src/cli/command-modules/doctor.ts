@@ -28,6 +28,7 @@ import {
   readNumberOption,
   readStringOption,
   renderConfiguredAgents,
+  renderAgentVerificationResult,
   renderAgentVerificationResults,
   renderFailedAgentVerifications,
   renderGlobalConfigSource,
@@ -93,14 +94,32 @@ export const doctorCommand = {
 
         if (verifyAgents) {
           const verifier = context.agentVerifier ?? verifyConfiguredAgent;
-          const verificationResults = agentHealth.map((agent) => agent.availability.available
-            ? safelyVerifyAgent(verifier, agent)
-            : {
-                agent,
-                ok: false,
-                command: [agent.availability.command],
-                message: `runtime unavailable: ${agent.availability.message}`,
-              });
+          const streamingOutput = context.progressWriter !== undefined;
+
+          if (streamingOutput) {
+            context.progressWriter([
+              ...doctorOutput,
+              "Agent execution verification:",
+              "This check runs real agent invocations and may use network access or provider credits.",
+            ].join("\n"));
+          }
+
+          const verificationResults = agentHealth.map((agent) => {
+            const result = agent.availability.available
+              ? safelyVerifyAgent(verifier, agent)
+              : {
+                  agent,
+                  ok: false,
+                  command: [agent.availability.command],
+                  message: `runtime unavailable: ${agent.availability.message}`,
+                };
+
+            if (streamingOutput) {
+              context.progressWriter?.(renderAgentVerificationResult(result));
+            }
+
+            return result;
+          });
           const failedVerifications = verificationResults.filter((result) => !result.ok);
           const output = [
             ...doctorOutput,
@@ -110,14 +129,14 @@ export const doctorCommand = {
           if (failedVerifications.length > 0) {
             return {
               exitCode: 1,
-              stdout: output.join("\n"),
+              stdout: streamingOutput ? undefined : output.join("\n"),
               stderr: renderFailedAgentVerifications(verificationResults),
             };
           }
 
           return {
             exitCode: 0,
-            stdout: output.join("\n"),
+            stdout: streamingOutput ? undefined : output.join("\n"),
           };
         }
 

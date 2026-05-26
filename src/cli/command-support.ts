@@ -77,12 +77,16 @@ export function renderAgentVerificationResults(results: AgentVerificationResult[
   return [
     "Agent execution verification:",
     "This check runs real agent invocations and may use network access or provider credits.",
-    ...results.map((result) => [
-      `- ${result.agent.agentId} (${result.agent.runtime}${result.agent.model === undefined ? "" : `, model=${result.agent.model}`}): ${result.ok ? "verified" : `failed: ${redactVerificationMessage(result.message, result.agent.envKeys)}`}`,
-      `  command: ${formatCommandShape(result.command)}`,
-      `  envKeys: ${result.agent.envKeys.length === 0 ? "none" : result.agent.envKeys.join(", ")}`,
-    ].join("\n")),
+    ...results.map((result) => renderAgentVerificationResult(result)),
   ];
+}
+
+export function renderAgentVerificationResult(result: AgentVerificationResult): string {
+  return [
+    `- ${result.agent.agentId} (${result.agent.runtime}${result.agent.model === undefined ? "" : `, model=${result.agent.model}`}): ${result.ok ? "verified" : `failed: ${redactVerificationMessage(result.message, result.agent.envKeys)}`}`,
+    `  command: ${formatCommandShape(result.command)}`,
+    `  envKeys: ${result.agent.envKeys.length === 0 ? "none" : result.agent.envKeys.join(", ")}`,
+  ].join("\n");
 }
 
 export function renderFailedAgentVerifications(results: AgentVerificationResult[]): string {
