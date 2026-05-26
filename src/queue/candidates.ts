@@ -35,9 +35,18 @@ export function compareRunnableCandidates(left: Pick<QueueCandidate, "priority" 
 }
 
 export function selectNextRunnableCandidate(results: { candidates: QueueCandidate[] }[]): QueueCandidate | undefined {
+  return selectRunnableCandidates(results, 1)[0];
+}
+
+export function selectRunnableCandidates(results: { candidates: QueueCandidate[] }[], limit: number): QueueCandidate[] {
+  if (limit < 1) {
+    return [];
+  }
+
   return results.flatMap((result) => result.candidates)
     .filter((candidate) => candidate.status === "runnable")
-    .sort(compareRunnableCandidates)[0];
+    .sort(compareRunnableCandidates)
+    .slice(0, limit);
 }
 
 export function getIssuePriority(labels: string[]): IssuePriority {

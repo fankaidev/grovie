@@ -1,6 +1,6 @@
 import { formatIssueReference } from "../github.js";
 import { resolveLocalIdentity } from "../identity.js";
-import { inspectQueue, renderSkippedQueueSummary, selectNextRunnableCandidate, type IssueActivity, type QueueInspectionResult } from "../queue.js";
+import { inspectQueue, renderSkippedQueueSummary, selectRunnableCandidates, type IssueActivity, type QueueCandidate, type QueueInspectionResult } from "../queue.js";
 import { runIssueAsync } from "../run.js";
 import { recordActivity } from "./activity.js";
 import { runWithLocalExecutionLock } from "./issue-execution.js";
@@ -109,37 +109,20 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
 
   advanceSilentOwnOutputSkips(input, queueResult.value, now());
 
-  const candidate = selectNextRunnableCandidate(queueResult.value);
+  const runnableCandidates = selectRunnableCandidates(queueResult.value, input.maxConcurrentRuns ?? 3);
 
-  if (candidate !== undefined) {
-    const triggerMessage = renderActivityTriggerMessage(candidate.activity.trigger);
+  if (runnableCandidates.length > 0) {
+    const results = await Promise.all(runnableCandidates.map((candidate) =>
+      runRunnableCandidate({
+        input,
+        candidate,
+        localAgents,
+        now,
+        issueRunner,
+      })
+    ));
 
-    recordActivity(input, {
-      type: "queue.runnable_found",
-      message: `Selected ${formatIssueReference(candidate.issueReference)} for ${candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId}${triggerMessage}.`,
-      repository: input.repository,
-      issueNumber: candidate.issueReference.number,
-      agentId: candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId,
-      data: {
-        priority: candidate.priority,
-        activityTimestamp: candidate.activity.timestamp,
-        issueFingerprint: candidate.activity.issueFingerprint,
-        trigger: candidate.activity.trigger,
-      },
-    });
-
-    return runWithLocalExecutionLock({
-      ...input,
-      issueReference: candidate.issueReference,
-      workerId: candidate.agentId ?? input.workerId ?? localAgents[0]!.agentId,
-      issueActivity: candidate.activity,
-      triggerContext: {
-        source: "daemon",
-        activity: candidate.activity,
-      },
-      now,
-      issueRunner,
-    });
+    return combineCycleResults(results);
   }
 
   const skippedSummary = renderSkippedQueueSummary(queueResult.value);
@@ -162,6 +145,61 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
       `No queued issues found for ${input.repository} with label ${input.label}.`,
       ...(skippedSummary === undefined ? [] : ["", skippedSummary]),
     ].join("\n"),
+  };
+}
+
+async function runRunnableCandidate(input: {
+  input: DaemonInput;
+  candidate: QueueCandidate;
+  localAgents: NonNullable<DaemonInput["localAgents"]>;
+  now: () => Date;
+  issueRunner: NonNullable<DaemonInput["issueRunner"]>;
+}): Promise<DaemonCycleResult> {
+  const triggerMessage = renderActivityTriggerMessage(input.candidate.activity.trigger);
+  const agentId = input.candidate.agentId ?? input.input.workerId ?? input.localAgents[0]!.agentId;
+
+  recordActivity(input.input, {
+    type: "queue.runnable_found",
+    message: `Selected ${formatIssueReference(input.candidate.issueReference)} for ${agentId}${triggerMessage}.`,
+    repository: input.input.repository,
+    issueNumber: input.candidate.issueReference.number,
+    agentId,
+    data: {
+      priority: input.candidate.priority,
+      activityTimestamp: input.candidate.activity.timestamp,
+      issueFingerprint: input.candidate.activity.issueFingerprint,
+      trigger: input.candidate.activity.trigger,
+    },
+  });
+
+  return runWithLocalExecutionLock({
+    ...input.input,
+    issueReference: input.candidate.issueReference,
+    workerId: agentId,
+    issueActivity: input.candidate.activity,
+    triggerContext: {
+      source: "daemon",
+      activity: input.candidate.activity,
+    },
+    now: input.now,
+    issueRunner: input.issueRunner,
+  });
+}
+
+function combineCycleResults(results: DaemonCycleResult[]): DaemonCycleResult {
+  if (results.length === 1) {
+    return results[0]!;
+  }
+
+  const failed = results.find((result) => result.exitCode !== 0);
+  const stdout = results.map((result) => result.stdout).filter((value) => value !== undefined && value.length > 0).join("\n\n");
+  const stderr = results.map((result) => result.stderr).filter((value) => value !== undefined && value.length > 0).join("\n\n");
+
+  return {
+    exitCode: failed?.exitCode ?? 0,
+    processed: results.some((result) => result.processed),
+    ...(stdout.length === 0 ? {} : { stdout }),
+    ...(stderr.length === 0 ? {} : { stderr }),
   };
 }
 

@@ -2288,6 +2288,82 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
+  it("[UC-DAEMON-02-S20] fans out runnable work to multiple local agents on one issue", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`, `agent:reviewer@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+    let activeRuns = 0;
+    let maxActiveRuns = 0;
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localState: new LocalState({ paths: { root: createTmpDir() } }),
+      maxConcurrentRuns: 3,
+      now: () => NOW,
+      issueRunner: async (input) => {
+        runs.push(input);
+        activeRuns += 1;
+        maxActiveRuns = Math.max(maxActiveRuns, activeRuns);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        activeRuns -= 1;
+
+        return {
+          exitCode: 0,
+          stdout: `${input.agentId} ran`,
+        };
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.processed).toBe(true);
+    expect(result.stdout).toContain(`coder@${machineId} ran`);
+    expect(result.stdout).toContain(`reviewer@${machineId} ran`);
+    expect(runs.map((run) => run.agentId).sort()).toEqual([`coder@${machineId}`, `reviewer@${machineId}`]);
+    expect(maxActiveRuns).toBe(2);
+  });
+
+  it("[UC-DAEMON-02-S20] caps fan-out by maxConcurrentRuns", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`, `agent:reviewer@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localState: new LocalState({ paths: { root: createTmpDir() } }),
+      maxConcurrentRuns: 1,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: `${input.agentId} ran`,
+        };
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.processed).toBe(true);
+    expect(runs).toHaveLength(1);
+  });
+
   it("[UC-DAEMON-02-S11] skips canceled assignments without writing advisory claim comments", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
@@ -2380,6 +2456,8 @@ describe("runDaemonCycle", () => {
   });
 
   it("[UC-GITHUB-01-S05] reports runner failure without writing advisory claim comments", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([fakeIssue()]);
 
     const result = await runDaemonCycle({
@@ -2389,6 +2467,7 @@ describe("runDaemonCycle", () => {
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
+      localState,
       workerId: "worker-1",
       now: () => NOW,
       issueRunner: () => ({
@@ -2404,6 +2483,11 @@ describe("runDaemonCycle", () => {
     });
     expect(github.createdComments).toEqual([]);
     expect(github.updatedComments).toEqual([]);
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `default@${machineId}`,
+    })?.handledThrough).toBe(NOW.toISOString());
   });
 
   it("[UC-GITHUB-01-S05] treats stale visible claims as non-authoritative summaries", async () => {

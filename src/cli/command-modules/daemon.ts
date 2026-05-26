@@ -231,6 +231,7 @@ export const daemonCommand = {
             stateRepo: resolveEnabledStateRepo(globalConfig.config),
             localAgents,
             once: runArgs.includes("--once"),
+            maxConcurrentRuns: globalConfig.config.daemon?.maxConcurrentRuns ?? 3,
             adminConsole: resolveAdminConsoleConfig(globalConfig.config),
             daemonLifecycle: context.daemonLifecycle,
           });
@@ -255,6 +256,7 @@ export const daemonCommand = {
           stateRepo: resolveEnabledStateRepo(globalConfig.config),
           localAgents,
           once: runArgs.includes("--once"),
+          maxConcurrentRuns: globalConfig.config.daemon?.maxConcurrentRuns ?? 3,
           adminConsole: resolveAdminConsoleConfig(globalConfig.config),
           daemonLifecycle: context.daemonLifecycle,
         });
