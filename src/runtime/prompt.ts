@@ -13,6 +13,17 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
   const issueCommentFile = getRelativeIssueCommentArtifactPath(input.run);
   const resultFile = getRelativeResultArtifactPath(input.run);
 
+  if (!firstRun) {
+    return buildContinuationPrompt({
+      issue: input.issue,
+      run: input.run,
+      issueCommentFile,
+      resultFile,
+      previousHandledThrough,
+      recentComments,
+    });
+  }
+
   return [
     "You are Grovie running a local Codex task.",
     "",
@@ -36,7 +47,7 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
     `- If the task asks only for a GitHub issue comment, write the comment body to \`${issueCommentFile}\` instead of using \`gh\` or other GitHub tools; Grovie will add visible agent attribution when publishing it.`,
     `- If writing a structured agent result, write it to \`${resultFile}\`.`,
     "- Leave logs and run artifacts on disk for Grovie to inspect.",
-    "- Full structured context is available in `.grovie/task.json`; this prompt shows the effective issue context for this run.",
+    "- Full structured task snapshot is available at `.grovie/task.json` if needed; use this prompt as the primary input for this run.",
     "",
     "Structured result artifact:",
     `- Write this JSON only when you need to report a structured result to \`${resultFile}\`.`,
@@ -77,26 +88,53 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
     `State: ${input.issue.state}`,
     `Labels: ${input.issue.labels.length > 0 ? input.issue.labels.join(", ") : "(none)"}`,
     "",
-    ...(firstRun
-      ? [
-          "Body:",
-          input.issue.body.trim().length > 0 ? input.issue.body : "(empty)",
-          "",
-          "Effective comments:",
-          renderComments(effectiveComments),
-        ]
-      : [
-          "Session continuation:",
-          "You are resuming the same Grovie issue-agent session. Use prior runtime history as working context, and use the current task snapshot as the source of truth.",
-          "",
-          "Current body:",
-          "See `.grovie/task.json` for the complete current issue body and full comment history.",
-          "",
-          `Previous handled cursor: ${previousHandledThrough}`,
-          "",
-          "Recent activity since last run:",
-          renderComments(recentComments),
-        ]),
+    "Body:",
+    input.issue.body.trim().length > 0 ? input.issue.body : "(empty)",
+    "",
+    "Effective comments:",
+    renderComments(effectiveComments),
+  ].join("\n");
+}
+
+function buildContinuationPrompt(input: {
+  issue: GitHubIssue;
+  run: PreparedRun;
+  issueCommentFile: string;
+  resultFile: string;
+  previousHandledThrough: string;
+  recentComments: GitHubIssue["comments"];
+}): string {
+  return [
+    "You are Grovie resuming a local Codex issue-agent session.",
+    "",
+    "Run context:",
+    fencedJson({
+      repository: `${input.issue.reference.owner}/${input.issue.reference.repo}`,
+      issueNumber: input.issue.reference.number,
+      runId: input.run.runId,
+      taskFile: ".grovie/task.json",
+      issueCommentFile: input.issueCommentFile,
+      resultFile: input.resultFile,
+    }),
+    "",
+    "Instructions:",
+    "- Use prior runtime history plus the recent activity below as the primary input for this run.",
+    "- Read `.grovie/task.json` only if this prompt does not contain enough context.",
+    `- To publish an issue comment, write only the desired comment body to \`${input.issueCommentFile}\`; do not call GitHub directly.`,
+    `- To report no action, write \`{"schemaVersion":1,"action":"no-op","reason":"Not my turn yet."}\` to \`${input.resultFile}\`.`,
+    "- Do not commit `.grovie/` handoff files.",
+    "",
+    "Issue:",
+    `# ${input.issue.title}`,
+    `Repository: ${input.issue.reference.owner}/${input.issue.reference.repo}`,
+    `Issue: #${input.issue.reference.number}`,
+    `State: ${input.issue.state}`,
+    `Labels: ${input.issue.labels.length > 0 ? input.issue.labels.join(", ") : "(none)"}`,
+    "",
+    `Previous handled cursor: ${input.previousHandledThrough}`,
+    "",
+    "Recent activity since last run:",
+    renderComments(input.recentComments),
   ].join("\n");
 }
 
