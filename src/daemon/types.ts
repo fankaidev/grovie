@@ -34,6 +34,7 @@ export type DaemonRepositoryInput = {
   label?: string;
   config?: GrovieConfig;
   configPath?: string;
+  issueNumbers?: number[];
 };
 
 export type MultiRepositoryDaemonInput = Omit<DaemonInput, "repository" | "label"> & {

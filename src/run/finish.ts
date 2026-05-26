@@ -120,7 +120,19 @@ export function finishRun(input: {
     stderr: summary.error,
     canceled: summary.status === "canceled" ? true : undefined,
     handledThrough: summary.result?.kind === "issue-comment" ? summary.result.comment.createdAt : undefined,
+    ...(isVisibleEffectiveResult(summary.result)
+      ? {
+        refreshes: [{
+          repository,
+          issueNumber: input.issueReference.number,
+        }],
+      }
+      : {}),
   };
+}
+
+function isVisibleEffectiveResult(result: HandleRunResultResult | undefined): boolean {
+  return result?.kind === "issue-comment" || result?.kind === "pull-request";
 }
 
 function runSummaryFromRuntimeResult(input: {

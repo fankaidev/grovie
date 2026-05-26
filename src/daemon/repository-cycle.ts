@@ -106,7 +106,14 @@ export async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput
     });
 
     const config = repository.config ?? input.config;
-    const eventPlan = planRepositoryCycle(input, repository.repository);
+    const eventPlan = repository.issueNumbers === undefined
+      ? planRepositoryCycle(input, repository.repository)
+      : {
+        mode: "full-scan" as const,
+        reason: "immediate issue refresh requested",
+        eventCount: 0,
+        issueNumbers: repository.issueNumbers,
+      };
 
     recordActivity(input, {
       type: `repository.events_${eventPlan.mode}`,

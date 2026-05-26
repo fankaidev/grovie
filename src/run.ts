@@ -3,7 +3,7 @@ import { mergeCancellationMonitor } from "./run/monitor.js";
 import { prepareIssueRun } from "./run/prepare.js";
 import type { RunIssueAsyncInput, RunIssueInput, RunIssueResult } from "./run/types.js";
 
-export type { RunIssueAsyncInput, RunIssueInput, RunIssueResult, RunLocalState, RunTriggerContext } from "./run/types.js";
+export type { IssueRefreshRequest, RunIssueAsyncInput, RunIssueInput, RunIssueResult, RunLocalState, RunTriggerContext } from "./run/types.js";
 
 export function runIssue(input: RunIssueInput): RunIssueResult {
   const prepared = prepareIssueRun(input);

@@ -37,6 +37,12 @@ export type RunIssueResult = {
   stderr?: string;
   canceled?: boolean;
   handledThrough?: string;
+  refreshes?: IssueRefreshRequest[];
+};
+
+export type IssueRefreshRequest = {
+  repository: string;
+  issueNumber: number;
 };
 
 export type RunIssueAsyncInput = RunIssueInput & {

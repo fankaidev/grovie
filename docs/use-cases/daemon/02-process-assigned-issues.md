@@ -36,3 +36,4 @@
 | UC-DAEMON-02-S18 | P1 | A long-running daemon obeys GitHub repository event `X-Poll-Interval` values, sends stored `ETag` values through `If-None-Match`, and treats `304 Not Modified` as unchanged repository events. |
 | UC-DAEMON-02-S19 | P1 | A daemon silently skips and advances handled state when an agent's only new effective activity is that same agent's own visible output, but still runs when the delta includes another agent's output. |
 | UC-DAEMON-02-S20 | P1 | A daemon cycle fans out runnable work to multiple local agents up to the global `maxConcurrentRuns` limit while preserving per `(issue, agent)` execution locks. |
+| UC-DAEMON-02-S21 | P1 | A long-running daemon immediately refreshes an issue after visible local agent output, coalesces duplicate refresh requests, and still waits for normal polling after no-op system output. |
