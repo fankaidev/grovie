@@ -18,6 +18,7 @@ export type DaemonInput = {
   localAgents?: AgentMetadata[];
   once: boolean;
   workerId?: string;
+  maxConcurrentRuns?: number;
   pollIntervalMs?: number;
   now?: () => Date;
   sleep?: (ms: number) => void | Promise<void>;

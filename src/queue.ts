@@ -13,7 +13,7 @@ import {
 import type { RunLocalState } from "./run.js";
 
 export { getIssueActivity } from "./queue/activity.js";
-export { compareRunnableCandidates, getIssuePriority, selectNextRunnableCandidate } from "./queue/candidates.js";
+export { compareRunnableCandidates, getIssuePriority, selectNextRunnableCandidate, selectRunnableCandidates } from "./queue/candidates.js";
 export { renderQueueInspection, renderSkippedQueueSummary } from "./queue/render.js";
 export type { IssueActivity, IssueActivityTrigger } from "./queue/activity.js";
 
@@ -21,6 +21,7 @@ export type QueueRepositoryInput = {
   repository: string;
   label: string;
   trustedAuthors?: string[];
+  issueNumbers?: number[];
 };
 
 export type QueueCandidateStatus = "runnable" | "skipped";
@@ -134,7 +135,9 @@ function readQueueIssues(
   input: QueueInspectionInput,
   repository: QueueRepositoryInput,
 ): { ok: true; value: GitHubIssue[] } | { ok: false; message: string } {
-  if (input.issueNumbers !== undefined) {
+  const issueNumbers = repository.issueNumbers ?? input.issueNumbers;
+
+  if (issueNumbers !== undefined) {
     const parsedRepository = parseRepositoryName(repository.repository);
 
     if (!parsedRepository.ok) {
@@ -146,7 +149,7 @@ function readQueueIssues(
 
     const issues: GitHubIssue[] = [];
 
-    for (const issueNumber of input.issueNumbers) {
+    for (const issueNumber of issueNumbers) {
       const issueResult = input.github.readIssue({
         ...parsedRepository.value,
         number: issueNumber,
