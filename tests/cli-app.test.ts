@@ -1670,6 +1670,7 @@ describe("CLI command registration", () => {
         "",
         "Added fankaidev/grovie.",
         `Config: ${join(globalRoot, "config.yml")}`,
+        "Daemon: not running; changes will apply the next time it starts.",
       ].join("\n"),
     });
 
@@ -1683,7 +1684,45 @@ describe("CLI command registration", () => {
       ].join("\n"),
     });
 
-    expect(runCli(["watch", "remove", "fankaidev/grovie"], { cwd, localState }).stdout).toContain("Removed fankaidev/grovie.");
+    const remove = runCli(["watch", "remove", "fankaidev/grovie"], { cwd, localState });
+
+    expect(remove.stdout).toContain("Removed fankaidev/grovie.");
+    expect(remove.stdout).toContain("Daemon: not running; changes will apply the next time it starts.");
+  });
+
+  it("[UC-DAEMON-01-S09] warns when watch changes require a running daemon restart", () => {
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const daemonLifecycle = fakeDaemonLifecycle({
+      status: () => ({
+        status: "running",
+        state: fakeDaemonState(globalRoot, 1234),
+      }),
+    });
+
+    expect(runCli(["watch", "add", "fankaidev/grovie"], { localState, daemonLifecycle })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie watch add",
+        "",
+        "Added fankaidev/grovie.",
+        `Config: ${join(globalRoot, "config.yml")}`,
+        "Daemon: running; restart it for watch changes to take effect.",
+        "Run `grovie daemon stop && grovie daemon start`.",
+      ].join("\n"),
+    });
+
+    expect(runCli(["watch", "remove", "fankaidev/grovie"], { localState, daemonLifecycle })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie watch remove",
+        "",
+        "Removed fankaidev/grovie.",
+        `Config: ${join(globalRoot, "config.yml")}`,
+        "Daemon: running; restart it for watch changes to take effect.",
+        "Run `grovie daemon stop && grovie daemon start`.",
+      ].join("\n"),
+    });
   });
 });
 

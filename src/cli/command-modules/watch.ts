@@ -114,6 +114,7 @@ export const watchCommand = {
               "",
               `Added ${repository}.`,
               `Config: ${path}`,
+              ...renderDaemonRefreshHint(context),
             ].join("\n"),
           };
         }
@@ -151,6 +152,7 @@ export const watchCommand = {
               "",
               removed ? `Removed ${repository}.` : `${repository} was not watched.`,
               `Config: ${path}`,
+              ...(removed ? renderDaemonRefreshHint(context) : []),
             ].join("\n"),
           };
         }
@@ -164,3 +166,20 @@ export const watchCommand = {
       }
     },
   } satisfies CliCommand;
+
+function renderDaemonRefreshHint(context: CliContext): string[] {
+  const status = context.daemonLifecycle.status({
+    root: context.localState.getPaths().root,
+  });
+
+  if (status.status !== "running") {
+    return [
+      "Daemon: not running; changes will apply the next time it starts.",
+    ];
+  }
+
+  return [
+    "Daemon: running; restart it for watch changes to take effect.",
+    "Run `grovie daemon stop && grovie daemon start`.",
+  ];
+}
