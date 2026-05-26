@@ -25,3 +25,4 @@
 | UC-RUN-03-S11 | P0 | A persistent worktree may contain stale `.grovie/issue-comment.md` or `.grovie/result.json` files from earlier versions, but Grovie ignores those files when handling the current run result. |
 | UC-RUN-03-S10 | P1 | A run writes a structured result action that conflicts with worktree changes, and Grovie rejects the result instead of silently publishing the wrong output. |
 | UC-RUN-03-S12 | P1 | A run that exits zero but records a known runtime tool write rejection and produces no explicit result artifact is rejected instead of being silently reported as a normal no-change run. |
+| UC-RUN-03-S13 | P1 | A run that writes a valid `.grovie/runs/<runId>/issue-comment.md` and an invalid `.grovie/runs/<runId>/result.json` still publishes the explicit comment artifact instead of failing the run on the redundant invalid result artifact. |
