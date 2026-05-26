@@ -35,7 +35,7 @@ grovie daemon start
 - GitHub remains the shared workflow, audit trail, and review surface.
 - Agents run on your machines with your local tools, credentials, prompts, and runtime permissions.
 - Work happens in isolated local worktrees under `~/.grovie/`.
-- Results come back as ordinary GitHub branches, pull requests, comments, reviews, and CI checks.
+- Results come back as ordinary GitHub branches, pull requests, comments, review summaries, and CI checks.
 - Local run state, logs, and worktrees stay inspectable on disk.
 - Safe publishing is the default: no default-branch pushes and no force-pushes over remote work.
 
@@ -107,8 +107,9 @@ grovie daemon status
 Trigger issue work through GitHub:
 
 ```sh
-# Add the queue label and an agent assignment label on the GitHub issue,
-# then create or update a visible issue comment when you want the agent to act.
+gh issue edit 123 --repo owner/repo --add-label grovie
+grovie issue assign owner/repo#123 coder@your-machine-id
+gh issue comment 123 --repo owner/repo --body "Please start."
 ```
 
 Run the local daemon in the foreground instead:
@@ -127,7 +128,7 @@ grovie daemon --once
 
 1. Create a GitHub issue, such as `Fix failing login test`.
 2. Add the queue label, usually `grovie`.
-3. Add an assignment label, such as `agent:coder@your-machine-id`.
+3. Assign the issue to a local agent with `grovie issue assign owner/repo#123 coder@your-machine-id`.
 4. Grovie sees the issue from the local daemon schedule.
 5. Grovie prepares an isolated worktree under `~/.grovie/`.
 6. The configured local agent receives the issue context and works in that worktree.
@@ -205,6 +206,8 @@ This keeps collaboration inspectable: humans and agents coordinate through norma
 
 `grovie doctor` validates the global Grovie config, then confirms the current `gh` login plus CLI runtime availability.
 
+`grovie issue assign owner/repo#123 coder@your-machine-id` adds the matching `agent:...` issue label. `grovie issue unassign owner/repo#123 coder@your-machine-id` removes it.
+
 `grovie daemon` polls watched repositories from `~/.grovie/config.yml`, resolves repository policy from each watched repository entry, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
 
 `grovie daemon service install --platform launchd|systemd` writes an optional user service file for macOS LaunchAgent or Linux systemd user service integration. The generated service runs locally and writes stdout/stderr under `~/.grovie/daemon`.
@@ -240,12 +243,13 @@ Use this checklist before trusting a new machine or repository:
 6. Optionally edit the repository entry in `~/.grovie/config.yml` to set queue label, branch prefix, or trusted authors.
 7. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
 8. Start the daemon with `grovie daemon start`.
-9. Add an issue comment asking the assigned agent to continue, then wait for the daemon to poll.
-10. Confirm the issue receives a Grovie result comment with a run id and local run directory.
-11. For code-change runs, confirm Grovie publishes a generated branch and links the result from the issue.
-12. Confirm no direct push was made to the default branch.
-13. Run `grovie daemon --once` against another labeled issue.
-14. Add `/grovie cancel` to a running issue and confirm the daemon marks it canceled.
+9. Assign the issue with `grovie issue assign owner/repo#123 coder@your-machine-id`.
+10. Add an issue comment asking the assigned agent to continue, then wait for the daemon to poll.
+11. Confirm the issue receives a Grovie result comment with a run id and local run directory.
+12. For code-change runs, confirm Grovie publishes a generated branch and links the result from the issue.
+13. Confirm no direct push was made to the default branch.
+14. Run `grovie daemon --once` against another labeled issue.
+15. Add `/grovie cancel` to a running issue and confirm the daemon marks it canceled.
 
 ## Isolated Smoke Validation
 
