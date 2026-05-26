@@ -48,8 +48,8 @@ export function getRuntimeAdapter(runtime: RuntimeName): RuntimeAdapter {
     runtime,
     command: "pi",
     availabilityArgs: ["--version"],
-    startCommand: (input) => ["pi", ...modelArgs(input.model), "-"],
-    resumeCommand: (sessionId, input) => ["pi", ...modelArgs(input.model), "resume", sessionId, "-"],
+    startCommand: (input) => ["pi", ...modelArgs(input.model), "--print"],
+    resumeCommand: (sessionId, input) => ["pi", ...modelArgs(input.model), "resume", sessionId, "--print"],
   };
 }
 

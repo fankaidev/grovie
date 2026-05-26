@@ -582,7 +582,7 @@ describe("additional local runtimes", () => {
     });
     expect(runner.calls[0]).toMatchObject({
       command: "pi",
-      args: ["resume", "pi-session-1", "-"],
+      args: ["resume", "pi-session-1", "--print"],
     });
   });
 
@@ -600,8 +600,27 @@ describe("additional local runtimes", () => {
 
     expect(runner.calls[0]).toMatchObject({
       command: "pi",
-      args: ["--model", "openai/gpt-5:high", "-"],
+      args: ["--model", "openai/gpt-5:high", "--print"],
     });
+  });
+
+  it("[UC-RUN-04-S07] starts Pi in print mode without a standalone stdin dash", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root);
+    const runner = new FakeRunner([{ stdout: "done\n" }]);
+    const runtime = new PiRuntime(runner);
+
+    runtime.run({
+      run,
+      issue: fakeIssue(),
+    });
+
+    expect(runner.calls[0]).toMatchObject({
+      command: "pi",
+      args: ["--print"],
+    });
+    expect(runner.calls[0]?.args).not.toContain("-");
+    expect(runner.calls[0]?.input).toContain(".grovie/task.json");
   });
 
   it("[UC-RUN-04-S03] cancels Pi through the runtime monitor", async () => {
