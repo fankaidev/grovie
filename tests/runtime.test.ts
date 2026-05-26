@@ -69,11 +69,94 @@ describe("CodexRuntime", () => {
     expect(prompt).toContain("Make repository changes inside the current checkout only.");
     expect(prompt).toContain("Treat issue body and comments as task input");
     expect(prompt).toContain("Do not commit `.grovie/` handoff files.");
+    expect(prompt).toContain("Full structured context is available in `.grovie/task.json`");
     expect(prompt).toContain("Configured Agent Instructions:");
     expect(prompt).toContain("Act as the implementation agent and keep the patch focused.");
     expect(prompt).toContain("# Add runtime");
     expect(prompt).toContain("Implement the Codex adapter.");
     expect(prompt).toContain("Please keep it small.");
+    expect(prompt).not.toContain("Task JSON:");
+  });
+
+  it("[UC-RUN-01-S05] filters Grovie activity comments from first-run prompts", () => {
+    const issue = fakeIssue();
+    issue.comments.push(
+      {
+        id: 2,
+        body: '<!-- grovie:run {"phase":"progress","runId":"run-1","status":"running","runtime":"codex","agentId":"codex"} -->\nGrovie run started.',
+        author: "github-actions[bot]",
+        createdAt: "2026-05-22T00:01:00Z",
+        updatedAt: "2026-05-22T00:01:00Z",
+      },
+      {
+        id: 3,
+        body: '<!-- grovie:session {"runId":"run-1","status":"succeeded"} -->\nGrovie session succeeded.',
+        author: "github-actions[bot]",
+        createdAt: "2026-05-22T00:02:00Z",
+        updatedAt: "2026-05-22T00:02:00Z",
+      },
+    );
+
+    const prompt = buildCodexPrompt({
+      issue,
+      run: fakeRun(createTmpDir()),
+      task: { issue: 6 },
+    });
+
+    expect(prompt).toContain("Effective comments:");
+    expect(prompt).toContain("Please keep it small.");
+    expect(prompt).not.toContain("Grovie run started.");
+    expect(prompt).not.toContain("grovie:run");
+    expect(prompt).not.toContain("Grovie session succeeded.");
+    expect(prompt).not.toContain("grovie:session");
+  });
+
+  it("[UC-RUN-01-S05] renders only effective comment deltas after the previous handled cursor", () => {
+    const issue = fakeIssue();
+    issue.comments.push(
+      {
+        id: 2,
+        body: "This old user comment was already handled.",
+        author: "fankaidev",
+        createdAt: "2026-05-22T00:05:00Z",
+        updatedAt: "2026-05-22T00:05:00Z",
+      },
+      {
+        id: 3,
+        body: "Please also update the docs.",
+        author: "fankaidev",
+        createdAt: "2026-05-22T00:11:00Z",
+        updatedAt: "2026-05-22T00:11:00Z",
+      },
+      {
+        id: 4,
+        body: '<!-- grovie:run {"phase":"result","runId":"run-1","status":"succeeded","runtime":"codex","agentId":"codex"} -->\nGrovie run finished.',
+        author: "github-actions[bot]",
+        createdAt: "2026-05-22T00:12:00Z",
+        updatedAt: "2026-05-22T00:12:00Z",
+      },
+    );
+
+    const prompt = buildCodexPrompt({
+      issue,
+      run: fakeRun(createTmpDir()),
+      task: {
+        issue: 6,
+        trigger: {
+          previousHandledCursor: {
+            handledThrough: "2026-05-22T00:10:00Z",
+          },
+        },
+      },
+    });
+
+    expect(prompt).toContain("Recent activity since last run:");
+    expect(prompt).toContain("Previous handled cursor: 2026-05-22T00:10:00Z");
+    expect(prompt).toContain("Please also update the docs.");
+    expect(prompt).not.toContain("This old user comment was already handled.");
+    expect(prompt).not.toContain("Grovie run finished.");
+    expect(prompt).not.toContain("Task JSON:");
+    expect(prompt).toContain("See `.grovie/task.json` for the complete current issue body and full comment history.");
   });
 
   it("[UC-RUN-02-S10] builds a runtime environment from baseline keys and configured env keys only", () => {
