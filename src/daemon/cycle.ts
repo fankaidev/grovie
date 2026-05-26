@@ -148,7 +148,7 @@ export async function runDaemonCycle(input: DaemonInput): Promise<DaemonCycleRes
   };
 }
 
-async function runRunnableCandidate(input: {
+export async function runRunnableCandidate(input: {
   input: DaemonInput;
   candidate: QueueCandidate;
   localAgents: NonNullable<DaemonInput["localAgents"]>;
@@ -186,7 +186,7 @@ async function runRunnableCandidate(input: {
   });
 }
 
-function combineCycleResults(results: DaemonCycleResult[]): DaemonCycleResult {
+export function combineCycleResults(results: DaemonCycleResult[]): DaemonCycleResult {
   if (results.length === 1) {
     return results[0]!;
   }
@@ -203,8 +203,8 @@ function combineCycleResults(results: DaemonCycleResult[]): DaemonCycleResult {
   };
 }
 
-function advanceSilentOwnOutputSkips(
-  input: DaemonInput,
+export function advanceSilentOwnOutputSkips(
+  input: Pick<DaemonInput, "localState" | "now">,
   results: QueueInspectionResult[],
   now: Date,
 ): void {
@@ -237,7 +237,7 @@ function advanceSilentOwnOutputSkips(
   }
 }
 
-function resolveTrustedIssueAuthors(input: Pick<DaemonInput, "config" | "github">): { ok: true; value: string[] } | { ok: false; message: string } {
+export function resolveTrustedIssueAuthors(input: Pick<DaemonInput, "config" | "github">): { ok: true; value: string[] } | { ok: false; message: string } {
   const configured = input.config.trust?.trustedAuthors.filter((author) => author.trim().length > 0) ?? [];
 
   if (configured.length > 0) {

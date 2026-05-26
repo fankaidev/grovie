@@ -196,10 +196,9 @@ export async function runWithLocalExecutionLock(input: DaemonInput & {
       },
     });
 
-    const postRunPullRequestActivityTimestamp = readPostRunPullRequestActivityTimestamp(input);
     const handledThrough = maxTimestamp(
-      maxTimestamp(input.issueActivity.timestamp, result.handledThrough),
-      postRunPullRequestActivityTimestamp,
+      input.issueActivity.timestamp,
+      result.handledThrough,
     );
 
     input.localState?.writeHandledCursor?.({
@@ -234,29 +233,6 @@ export async function runWithLocalExecutionLock(input: DaemonInput & {
 
 function resolveWorkerAgent(input: Pick<DaemonInput, "localAgents">, agentId: string): AgentMetadata | undefined {
   return input.localAgents?.find((candidate) => candidate.agentId === agentId);
-}
-
-function readPostRunPullRequestActivityTimestamp(input: Pick<DaemonInput, "github"> & {
-  issueReference: IssueReference;
-}): string | undefined {
-  const relatedPullRequestsResult = input.github.readRelatedPullRequests?.(input.issueReference) ?? {
-    ok: true as const,
-    value: [],
-  };
-
-  if (!relatedPullRequestsResult.ok) {
-    return undefined;
-  }
-
-  return relatedPullRequestsResult.value
-    .flatMap((pullRequest) => [
-      pullRequest.updatedAt,
-      ...pullRequest.comments.map((comment) => comment.updatedAt),
-      ...pullRequest.reviewComments.map((comment) => comment.updatedAt),
-      ...pullRequest.reviews.map((review) => review.submittedAt),
-    ])
-    .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)))
-    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
 }
 
 function maxTimestamp(left: string, right: string | undefined): string {

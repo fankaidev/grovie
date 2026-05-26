@@ -308,12 +308,14 @@ describe("runDaemonCycle", () => {
         return {
           exitCode: 0,
           stdout: "created pull request",
+          handledThrough: "2026-05-22T00:00:05.000Z",
         };
       },
     });
 
     expect(result).toEqual({
       exitCode: 0,
+      handledThrough: "2026-05-22T00:00:05.000Z",
       processed: true,
       stdout: "created pull request",
     });
@@ -348,6 +350,73 @@ describe("runDaemonCycle", () => {
         }),
       ],
     });
+  });
+
+  it("[UC-SESSION-01-S03] leaves pull request activity that appears during execution pending", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const relatedPullRequests: GitHubRelatedPullRequest[] = [];
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`],
+        updatedAt: "2026-05-22T00:00:00.000Z",
+      }),
+    ], {
+      relatedPullRequests,
+    });
+    const runs: RunIssueAsyncInput[] = [];
+
+    await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        relatedPullRequests.push(fakeRelatedPullRequest({
+          updatedAt: "2026-05-22T00:00:05.000Z",
+        }));
+
+        return {
+          exitCode: 0,
+          stdout: "created pull request",
+        };
+      },
+    });
+
+    const secondResult = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localState,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "ran pending pull request activity",
+        };
+      },
+    });
+
+    expect(localState.readHandledCursor({
+      repository: "fankaidev/grovie",
+      issueNumber: 8,
+      agentId: `coder@${machineId}`,
+    })?.handledThrough).toBe("2026-05-22T00:00:05.000Z");
+    expect(secondResult).toEqual({
+      exitCode: 0,
+      processed: true,
+      stdout: "ran pending pull request activity",
+    });
+    expect(runs).toHaveLength(2);
   });
 
   it("[UC-DAEMON-02-S03] creates one run for a locally assigned agent with unhandled activity", async () => {
@@ -2740,6 +2809,121 @@ describe("runDaemonCycle", () => {
       repo: "other",
       number: 5,
     });
+  });
+
+  it("[UC-DAEMON-02-S20] fans out runnable work across watched repositories up to maxConcurrentRuns", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: {
+          owner: "fankaidev",
+          repo: "grovie",
+          number: 8,
+        },
+        labels: ["grovie", `agent:default@${machineId}`],
+      }),
+      fakeIssue({
+        reference: {
+          owner: "fankaidev",
+          repo: "other",
+          number: 5,
+        },
+        labels: ["ready", `agent:default@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+    let activeRuns = 0;
+    let maxActiveRuns = 0;
+
+    const result = await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+        {
+          repository: "fankaidev/other",
+          label: "ready",
+        },
+      ],
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github,
+      runtime: fakeRuntime(),
+      once: true,
+      maxConcurrentRuns: 2,
+      now: () => NOW,
+      issueRunner: async (input) => {
+        runs.push(input);
+        activeRuns += 1;
+        maxActiveRuns = Math.max(maxActiveRuns, activeRuns);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        activeRuns -= 1;
+
+        return {
+          exitCode: 0,
+          stdout: `${input.repository} ran`,
+        };
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("fankaidev/grovie ran");
+    expect(result.stdout).toContain("fankaidev/other ran");
+    expect(runs.map((run) => run.repository).sort()).toEqual(["fankaidev/grovie", "fankaidev/other"]);
+    expect(maxActiveRuns).toBe(2);
+  });
+
+  it("[UC-DAEMON-02-S20] applies maxConcurrentRuns across watched repositories", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        reference: {
+          owner: "fankaidev",
+          repo: "grovie",
+          number: 8,
+        },
+        labels: ["grovie", `agent:default@${machineId}`],
+      }),
+      fakeIssue({
+        reference: {
+          owner: "fankaidev",
+          repo: "other",
+          number: 5,
+        },
+        labels: ["ready", `agent:default@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    await runDaemonForRepositories({
+      repositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+        },
+        {
+          repository: "fankaidev/other",
+          label: "ready",
+        },
+      ],
+      config: defaultConfig(),
+      configPath: "built-in defaults",
+      github,
+      runtime: fakeRuntime(),
+      once: true,
+      maxConcurrentRuns: 1,
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: `${input.repository} ran`,
+        };
+      },
+    });
+
+    expect(runs).toHaveLength(1);
   });
 
   it("[UC-DAEMON-01-S04] [UC-DAEMON-02-S12] uses watched repository daemon policy for queue label and run config", async () => {
