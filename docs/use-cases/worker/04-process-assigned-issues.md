@@ -27,7 +27,7 @@
 | UC-WORKER-04-S09 | P1 | Runnable assigned issues are picked by `priority:p0`, then `priority:p1`, then `priority:p2`, then no priority label, with older activity first within the same priority. |
 | UC-WORKER-04-S10 | P1 | A skipped high-priority issue does not block a lower-priority runnable assigned issue. |
 | UC-WORKER-04-S11 | P1 | A daemon cycle with skipped assigned issues reports skipped issue references and reasons instead of only saying no queued issues were found. |
-| UC-WORKER-04-S12 | P1 | A watched repository entry supplies daemon policy defaults such as queue label, branch prefix, pull request behavior, comments mode, and trust policy for runs in that repository. |
+| UC-WORKER-04-S12 | P1 | A watched repository entry supplies daemon policy defaults such as queue label, branch prefix, and trust policy for runs in that repository. |
 | UC-WORKER-04-S13 | P1 | An invalid watched repository entry fails global config validation with a clear error before daemon polling starts. |
 | UC-WORKER-04-S14 | P0 | A daemon cycle skips an issue assigned to an agent id that matches the machine but is not configured locally. |
 | UC-WORKER-04-S15 | P1 | A long-running daemon cycle reads repository events, skips queue inspection when no relevant events changed, resolves pull request events to related issues through GitHub with a local cache, and periodically falls back to a full queue scan. |

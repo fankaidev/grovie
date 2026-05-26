@@ -39,13 +39,6 @@ describe("config helpers", () => {
       branches: {
         prefix: "ai/",
       },
-      pullRequests: {
-        create: true,
-        draft: true,
-      },
-      comments: {
-        mode: "concise",
-      },
       trust: {
         trustedAuthors: ["fankaidev", "trusted-user"],
       },
@@ -57,13 +50,6 @@ describe("config helpers", () => {
       },
       branches: {
         prefix: "ai/",
-      },
-      pullRequests: {
-        create: true,
-        draft: true,
-      },
-      comments: {
-        mode: "concise",
       },
       trust: {
         trustedAuthors: ["fankaidev", "trusted-user"],
@@ -82,6 +68,27 @@ describe("config helpers", () => {
     expect(loaded.path).toBe(join(root, "config.yml"));
     expect(loaded.config.queue.label).toBe("grovie");
     expect(loaded.config.safety.allowDefaultBranchPush).toBe(false);
+  });
+
+  it("[UC-WORKER-04-S12] allows watched repositories to omit trust policy", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "agents: []",
+        "watchedRepositories:",
+        "  - repository: fankaidev/grovie",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(loadGlobalConfig(root).config.watchedRepositories).toEqual([
+      {
+        repository: "fankaidev/grovie",
+      },
+    ]);
   });
 
   it("[UC-ADMIN-01-S01] loads an empty global worker config with the admin console disabled when config.yml is absent", () => {
@@ -114,6 +121,7 @@ describe("config helpers", () => {
       join(root, "config.yml"),
       [
         "version: 1",
+        "agents: []",
         "watchedRepositories: []",
         "adminConsole:",
         "  enabled: true",
@@ -124,6 +132,21 @@ describe("config helpers", () => {
     );
 
     expect(() => loadGlobalConfig(root)).toThrow("adminConsole.host: Invalid input: expected \"127.0.0.1\"");
+  });
+
+  it("[UC-WORKER-01-S04] requires explicit agents in config.yml", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "watchedRepositories: []",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => loadGlobalConfig(root)).toThrow("agents: Invalid input: expected array");
   });
 
   it("[UC-WORKER-02-S01] [UC-WORKER-02-S02] [UC-ADMIN-01-S01] saves watched repositories without enabling the admin console", () => {
@@ -319,6 +342,7 @@ describe("config helpers", () => {
       join(root, "config.yml"),
       [
         "version: 1",
+        "agents: []",
         "watchedRepositories: []",
         "stateRepo:",
         "  enabled: true",
