@@ -133,6 +133,10 @@ export function renderRunResultComment(summary: RunSummary): string {
 
   if (summary.result?.kind === "pull-request") {
     lines.push(`- Pull request: ${summary.result.pullRequest.url}`);
+
+    if (summary.result.comment !== undefined) {
+      lines.push(`- Issue comment: ${summary.result.comment.url}`);
+    }
   }
 
   if (summary.result?.kind === "issue-comment") {
@@ -198,6 +202,10 @@ export function renderCliRunOutput(summary: RunSummary): string {
 
   if (summary.result?.kind === "pull-request") {
     lines.push(`Pull request: ${summary.result.pullRequest.url}`);
+
+    if (summary.result.comment !== undefined) {
+      lines.push(`Issue comment: ${summary.result.comment.url}`);
+    }
   }
 
   if (summary.result?.kind === "issue-comment") {
