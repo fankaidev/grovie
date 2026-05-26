@@ -129,7 +129,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-DAEMON-04-S01] reports the package version through long and short flags", () => {
+  it("reports the package version through long and short flags", () => {
     const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 
     expect(GROVIE_VERSION).toBe(packageVersion.version);
