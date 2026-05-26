@@ -14,7 +14,7 @@
 
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-DAEMON-04-S01 | P1 | `grovie daemon` runs the daemon in the foreground using watched repositories or an explicit `--repo`, and `grovie daemon run` is rejected as an unknown subcommand. |
+| UC-DAEMON-04-S01 | P1 | `grovie daemon` runs the daemon in the foreground using watched repositories or an explicit `--repo`. |
 | UC-DAEMON-04-S02 | P1 | `grovie daemon start` starts a detached background daemon, records pid and log paths, and refuses to start another live daemon. |
 | UC-DAEMON-04-S03 | P1 | `grovie daemon stop` terminates the recorded background daemon only when the pid still matches Grovie daemon state. |
 | UC-DAEMON-04-S04 | P1 | `grovie daemon status` reports running, stopped, or stale background daemon state with pid and log paths when available. |
