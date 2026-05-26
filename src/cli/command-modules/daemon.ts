@@ -42,7 +42,7 @@ export const daemonCommand = {
     name: "daemon",
     description: "Run and control the local Grovie daemon.",
     usage: [
-      "grovie daemon [run] [--repo owner/repo] [--label grovie] [--once]",
+      "grovie daemon [--repo owner/repo] [--label grovie] [--once]",
       "grovie daemon start",
       "grovie daemon stop [--force]",
       "grovie daemon status",
@@ -245,7 +245,14 @@ export const daemonCommand = {
         }
       }
 
-      const runArgs = subcommand === "run" ? args.slice(1) : args;
+      if (subcommand !== undefined && !subcommand.startsWith("-")) {
+        return {
+          exitCode: 1,
+          stderr: `Unknown daemon subcommand: ${subcommand}. Usage: grovie daemon [--repo owner/repo] [--label grovie] [--once]`,
+        };
+      }
+
+      const runArgs = args;
 
       try {
         const argValidation = validateCliArgs(runArgs, {
