@@ -48,7 +48,7 @@ export const daemonCommand = {
       "grovie daemon start",
       "grovie daemon stop [--force]",
       "grovie daemon status",
-      "grovie daemon logs [--stream stdout|stderr] [--lines 100] [--follow]",
+      "grovie daemon logs [--stream combined|stdout|stderr] [--lines 100] [--follow]",
       "grovie daemon service <install|uninstall|path> [--platform launchd|systemd]",
     ].join("\n"),
     issue: "#77",
