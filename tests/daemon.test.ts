@@ -276,7 +276,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-RUN-01-S01] [UC-RUN-02-S09] consumes one manual run request before scheduled issues and preserves request trace", async () => {
+  it("[UC-RUN-01-S01] [UC-SESSION-01-S09] consumes one manual run request before scheduled issues and preserves request trace", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
       fakeIssue({
@@ -326,7 +326,7 @@ describe("runDaemonCycle", () => {
     expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
   });
 
-  it("[UC-RUN-02-S13] rejects a daemon request for an unconfigured local agent before runtime start", async () => {
+  it("[UC-SESSION-01-S13] rejects a daemon request for an unconfigured local agent before runtime start", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.enqueueRunRequest({
@@ -369,7 +369,7 @@ describe("runDaemonCycle", () => {
     expect(localState.takeRunRequest("fankaidev/grovie")).toBeUndefined();
   });
 
-  it("[UC-RUN-02-S14] records post-run pull request activity as handled for the same issue-agent", async () => {
+  it("[UC-SESSION-01-S14] records post-run pull request activity as handled for the same issue-agent", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const relatedPullRequests: GitHubRelatedPullRequest[] = [];
@@ -562,7 +562,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-DAEMON-05-S02] resumes an interrupted session before polling new queue items", async () => {
+  it("[UC-SESSION-03-S02] resumes an interrupted session before polling new queue items", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "old-run", {
@@ -644,7 +644,7 @@ describe("runDaemonCycle", () => {
     expect(runs[1]?.runRequest).toBeUndefined();
   });
 
-  it("[UC-RUN-02-S12] rejects a resumable run whose agent is no longer configured locally", async () => {
+  it("[UC-SESSION-01-S12] rejects a resumable run whose agent is no longer configured locally", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "old-run", {
@@ -698,7 +698,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-DAEMON-05-S02] leaves an interrupted run resumable when recovery cannot start", async () => {
+  it("[UC-SESSION-03-S02] leaves an interrupted run resumable when recovery cannot start", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "old-run", {
@@ -735,7 +735,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-DAEMON-05-S05] does not auto-resume terminal runs even when metadata still looks active", async () => {
+  it("[UC-SESSION-03-S05] does not auto-resume terminal runs even when metadata still looks active", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "succeeded-run", {
@@ -769,7 +769,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-DAEMON-05-S03] recovers active-looking runs left by a force stop", async () => {
+  it("[UC-SESSION-03-S03] recovers active-looking runs left by a force stop", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "active-run", {
@@ -817,7 +817,7 @@ describe("runDaemonCycle", () => {
     })).toBe(false);
   });
 
-  it("[UC-DAEMON-05-S01] lets interrupted state win over stop-time runtime failure events", async () => {
+  it("[UC-SESSION-03-S01] lets interrupted state win over stop-time runtime failure events", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "interrupted-run", {
@@ -871,7 +871,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-DAEMON-05-S03] does not recover a run while its runtime pid is still live", async () => {
+  it("[UC-SESSION-03-S03] does not recover a run while its runtime pid is still live", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "active-run", {
@@ -901,7 +901,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-DAEMON-05-S04] does not auto-resume canceled runs", async () => {
+  it("[UC-SESSION-03-S04] does not auto-resume canceled runs", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "canceled-run", {
@@ -935,7 +935,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-DAEMON-05-S05] does not auto-resume failed runs without an explicit retry or rerun", async () => {
+  it("[UC-SESSION-03-S05] does not auto-resume failed runs without an explicit retry or rerun", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     writeRunMetadata(localState, "failed-run", {
@@ -1087,7 +1087,7 @@ describe("runDaemonCycle", () => {
     expect(runs[0]?.issueReference.number).toBe(9);
   });
 
-  it("[UC-RUN-03-S02] skips assigned runs when Codex is unavailable", async () => {
+  it("[UC-RUN-02-S02] skips assigned runs when Codex is unavailable", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1165,7 +1165,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-RUN-03-S08] passes configured agent instructions into the runtime handoff", async () => {
+  it("[UC-RUN-02-S08] passes configured agent instructions into the runtime handoff", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1205,7 +1205,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-RUN-03-S10] passes configured agent env keys into the runtime handoff", async () => {
+  it("[UC-RUN-02-S10] passes configured agent env keys into the runtime handoff", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1416,7 +1416,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-RUN-02-S03] creates a run when issue activity is newer than the handled cursor", async () => {
+  it("[UC-SESSION-01-S03] creates a run when issue activity is newer than the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -1602,7 +1602,7 @@ describe("runDaemonCycle", () => {
       .toContain("pull request #20 merge state DIRTY requires branch update work");
   });
 
-  it("[UC-RUN-02-S03] creates a run when the issue itself is updated after the handled cursor", async () => {
+  it("[UC-SESSION-01-S03] creates a run when the issue itself is updated after the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -1645,7 +1645,7 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(1);
   });
 
-  it("[UC-RUN-02-S04] [UC-DAEMON-02-S11] reports unchanged issue activity skipped by the handled cursor", async () => {
+  it("[UC-SESSION-01-S04] [UC-DAEMON-02-S11] reports unchanged issue activity skipped by the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     localState.writeHandledCursor({
@@ -1735,7 +1735,7 @@ describe("runDaemonCycle", () => {
     })?.handledThrough).toBe("2026-05-22T00:00:02.000Z");
   });
 
-  it("[UC-RUN-05-S06] advances the handled cursor through issue comments created by the same agent", async () => {
+  it("[UC-RUN-03-S06] advances the handled cursor through issue comments created by the same agent", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
@@ -1770,7 +1770,7 @@ describe("runDaemonCycle", () => {
     })?.handledThrough).toBe("2026-05-22T00:00:05.000Z");
   });
 
-  it("[UC-RUN-02-S04] [UC-DAEMON-02-S04] ignores Grovie claim comments when checking the handled cursor", async () => {
+  it("[UC-SESSION-01-S04] [UC-DAEMON-02-S04] ignores Grovie claim comments when checking the handled cursor", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const github = new FakeGitHub([
@@ -1876,7 +1876,7 @@ describe("runDaemonCycle", () => {
     expect(result.processed).toBe(false);
   });
 
-  it("[UC-RUN-02-S03] creates another run when a user comment arrives during execution", async () => {
+  it("[UC-SESSION-01-S03] creates another run when a user comment arrives during execution", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const issue = fakeIssue({
@@ -1947,7 +1947,7 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(2);
   });
 
-  it("[UC-RUN-02-S03] creates another run when the issue is edited during execution", async () => {
+  it("[UC-SESSION-01-S03] creates another run when the issue is edited during execution", async () => {
     const machineId = resolveMachineId(hostname());
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const issue = fakeIssue({

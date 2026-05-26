@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("local run status", () => {
-  it("[UC-RUN-02-S07] lists runs with issue, agent, runtime, result links, times, and logs newest first", () => {
+  it("[UC-SESSION-01-S07] lists runs with issue, agent, runtime, result links, times, and logs newest first", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "finished-run", {
       metadata: {
@@ -81,7 +81,7 @@ describe("local run status", () => {
     expect(renderRunsList(run === undefined ? [] : [run])).toContain("Status: stale");
   });
 
-  it("[UC-DAEMON-05-S01] reports interrupted runs as interrupted even when stop-time failure events follow", () => {
+  it("[UC-SESSION-03-S01] reports interrupted runs as interrupted even when stop-time failure events follow", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "interrupted-run", {
       metadata: {
@@ -105,7 +105,7 @@ describe("local run status", () => {
     expect(run?.status).toBe("interrupted");
   });
 
-  it("[UC-DAEMON-05-S02] normalizes legacy source runs stuck in resuming state as interrupted", () => {
+  it("[UC-SESSION-03-S02] normalizes legacy source runs stuck in resuming state as interrupted", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "legacy-resuming-source-run", {
       metadata: {
@@ -172,7 +172,7 @@ describe("local run status", () => {
     expect(output).toContain("rejected-run fankaidev/grovie#9 status=rejected");
   });
 
-  it("[UC-RUN-02-S08] renders detailed paths, GitHub result links, and recent events for one run", () => {
+  it("[UC-SESSION-01-S08] renders detailed paths, GitHub result links, and recent events for one run", () => {
     const runsDir = createRunsDir();
     writeRun(runsDir, "detail-run", {
       metadata: {

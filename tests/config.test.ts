@@ -294,7 +294,7 @@ describe("config helpers", () => {
     ]);
   });
 
-  it("[UC-RUN-06-S04] accepts supported runtime names and rejects retired runtime names", () => {
+  it("[UC-RUN-04-S04] accepts supported runtime names and rejects retired runtime names", () => {
     const root = createTmpDir();
 
     for (const runtime of ["codex", "claude-code", "pi"]) {

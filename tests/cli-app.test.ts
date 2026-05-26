@@ -240,7 +240,7 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(root, "config.yml"), "utf8")).toContain("stateRepo:");
   });
 
-  it("[UC-AGENT-01-S04] [UC-RUN-03-S02] reports unavailable runtime inventory through doctor", () => {
+  it("[UC-AGENT-01-S04] [UC-RUN-02-S02] reports unavailable runtime inventory through doctor", () => {
     const cwd = createTmpDir();
     runCli(["init"], { cwd });
     const globalRoot = createTmpDir();
@@ -359,7 +359,7 @@ describe("CLI command registration", () => {
     expect(result.stdout).toContain("active-run fankaidev/grovie#36 status=running");
   });
 
-  it("[UC-RUN-02-S07] [UC-RUN-02-S08] lists and shows local runs through runs subcommands", () => {
+  it("[UC-SESSION-01-S07] [UC-SESSION-01-S08] lists and shows local runs through runs subcommands", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -417,7 +417,7 @@ describe("CLI command registration", () => {
     expect(detail.stdout).toContain('run.failed {"exitCode":1}');
   });
 
-  it("[UC-RUN-04-S08] runs local cleanup in dry-run mode from the CLI", () => {
+  it("[UC-SESSION-02-S08] runs local cleanup in dry-run mode from the CLI", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     const worktreePath = join(localState.paths.worktreesDir, "cleanup-session");
@@ -451,7 +451,7 @@ describe("CLI command registration", () => {
     expect(readFileSync(join(localState.paths.runsDir, "cleanup-run", "events.jsonl"), "utf8")).not.toContain("worktree.cleaned");
   });
 
-  it("[UC-RUN-02-S09] retries a failed run by enqueuing a new daemon request without deleting history", () => {
+  it("[UC-SESSION-01-S09] retries a failed run by enqueuing a new daemon request without deleting history", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     writeLocalRun(localState.paths.runsDir, "failed-run", {
@@ -498,7 +498,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-RUN-02-S09] retries a canceled run by enqueuing a new daemon request", () => {
+  it("[UC-SESSION-01-S09] retries a canceled run by enqueuing a new daemon request", () => {
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
     writeLocalRun(localState.paths.runsDir, "canceled-run", {
       metadata: {
@@ -524,7 +524,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-RUN-02-S10] reruns an issue-agent session through the daemon", () => {
+  it("[UC-SESSION-01-S10] reruns an issue-agent session through the daemon", () => {
     const localState = new FakeLocalState(createTmpDir(), { daemonRunning: true });
 
     const result = runCli(["runs", "rerun", "fankaidev/grovie#79", "--agent", "coder@fankai-mac"], { localState });
@@ -542,7 +542,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-RUN-02-S11] refuses retry while the same issue-agent execution is active", () => {
+  it("[UC-SESSION-01-S11] refuses retry while the same issue-agent execution is active", () => {
     const localState = new FakeLocalState(createTmpDir(), {
       daemonRunning: true,
       lockedAgents: ["coder@fankai-mac"],
@@ -569,7 +569,7 @@ describe("CLI command registration", () => {
     expect(localState.requests).toEqual([]);
   });
 
-  it("[UC-RUN-02-S08] requires a run id for runs show", () => {
+  it("[UC-SESSION-01-S08] requires a run id for runs show", () => {
     expect(runCli(["runs", "show"])).toEqual({
       exitCode: 1,
       stderr: "Missing run id. Usage: grovie runs show <run-id>",

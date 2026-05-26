@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("local state paths", () => {
-  it("[UC-RUN-02-S01] [UC-RUN-02-S02] builds session ids and timestamped run ids", () => {
+  it("[UC-SESSION-01-S01] [UC-SESSION-01-S02] builds session ids and timestamped run ids", () => {
     const sessionId = buildSessionId("fankaidev/grovie", 123, "coder@fankai-mac");
 
     expect(sessionId).toBe("fankaidev-grovie-issue-123-coder-fankai-mac");
@@ -62,7 +62,7 @@ describe("LocalState", () => {
     expect(result.ok ? result.recoveredStale : false).toBe(true);
   });
 
-  it("[UC-RUN-02-S09] preserves retry source metadata in daemon run requests", () => {
+  it("[UC-SESSION-01-S09] preserves retry source metadata in daemon run requests", () => {
     const root = createTmpDir();
     const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
 
@@ -88,7 +88,7 @@ describe("LocalState", () => {
     });
   });
 
-  it("[UC-RUN-02-S09] writes retry trace metadata into prepared run history", () => {
+  it("[UC-SESSION-01-S09] writes retry trace metadata into prepared run history", () => {
     const root = createTmpDir();
     const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
 
@@ -180,7 +180,7 @@ describe("LocalState", () => {
     }).ok).toBe(true);
   });
 
-  it("[UC-RUN-02-S05] keeps handled cursors separate per agent", () => {
+  it("[UC-SESSION-01-S05] keeps handled cursors separate per agent", () => {
     const state = new LocalState({ paths: { root: createTmpDir() }, runner: new FakeRunner() });
 
     state.writeHandledCursor({
@@ -211,7 +211,7 @@ describe("LocalState", () => {
     })).toBeUndefined();
   });
 
-  it("[UC-RUN-04-S01] [UC-RUN-04-S05] creates session worktree and run artifacts without touching the checkout", () => {
+  it("[UC-SESSION-02-S01] [UC-SESSION-02-S05] creates session worktree and run artifacts without touching the checkout", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
     const state = new LocalState({ paths: { root }, runner });
@@ -264,7 +264,7 @@ describe("LocalState", () => {
     ]);
   });
 
-  it("[UC-RUN-04-S02] reuses the existing session worktree and branch", () => {
+  it("[UC-SESSION-02-S02] reuses the existing session worktree and branch", () => {
     const root = createTmpDir();
     const cachePath = join(root, "repos", "fankaidev-grovie.git");
     const sessionId = "fankaidev-grovie-issue-5-coder-fankai-mac";
@@ -291,7 +291,7 @@ describe("LocalState", () => {
     ]);
   });
 
-  it("[UC-RUN-04-S03] creates separate sessions for different agents on one issue", () => {
+  it("[UC-SESSION-02-S03] creates separate sessions for different agents on one issue", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
     const state = new LocalState({ paths: { root }, runner });
@@ -325,7 +325,7 @@ describe("LocalState", () => {
     expect(first.worktreePath).not.toBe(second.worktreePath);
   });
 
-  it("[UC-RUN-04-S04] reuses session state after constructing a new LocalState", () => {
+  it("[UC-SESSION-02-S04] reuses session state after constructing a new LocalState", () => {
     const root = createTmpDir();
     const firstRunner = new FakeRunner();
     const firstState = new LocalState({ paths: { root }, runner: firstRunner });
@@ -376,7 +376,7 @@ describe("LocalState", () => {
     ]);
   });
 
-  it("[UC-RUN-02-S06] fails clearly when a timestamped run id collides", () => {
+  it("[UC-SESSION-01-S06] fails clearly when a timestamped run id collides", () => {
     const root = createTmpDir();
     const runner = new FakeRunner();
     const state = new LocalState({ paths: { root }, runner });
@@ -408,7 +408,7 @@ describe("LocalState", () => {
     );
   });
 
-  it("[UC-RUN-04-S06] preserves run artifacts when worktree preparation fails", () => {
+  it("[UC-SESSION-02-S06] preserves run artifacts when worktree preparation fails", () => {
     const root = createTmpDir();
     const runner = new FakeRunner({ failWorktreeAdd: true });
     const state = new LocalState({ paths: { root }, runner });

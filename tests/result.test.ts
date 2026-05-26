@@ -18,7 +18,7 @@ import { GitResultHandler } from "../src/result.js";
 import type { RuntimeExecution } from "../src/runtime.js";
 
 describe("GitResultHandler", () => {
-  it("[UC-RUN-05-S01] comments no changes without committing or opening a PR", () => {
+  it("[UC-RUN-03-S01] comments no changes without committing or opening a PR", () => {
     const runner = new FakeRunner([
       {
         stdout: "",
@@ -48,7 +48,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
-  it("[UC-RUN-05-S02] commits changed files, pushes the Grovie branch, and opens a PR", () => {
+  it("[UC-RUN-03-S02] commits changed files, pushes the Grovie branch, and opens a PR", () => {
     const runner = new FakeRunner([
       {
         stdout: " M src/index.ts\n",
@@ -115,7 +115,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests[0]?.body).toContain("No validation output captured.");
   });
 
-  it("[UC-RUN-05-S06] publishes an issue comment artifact without relying on runtime GitHub auth", () => {
+  it("[UC-RUN-03-S06] publishes an issue comment artifact without relying on runtime GitHub auth", () => {
     const run = fakeRunWithIssueComment("My debugger and I broke up because it kept stopping at every little issue.");
     const runner = new FakeRunner([
       {
@@ -149,7 +149,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
-  it("[UC-RUN-05-S07] honors an explicit no-op result with a human-readable reason", () => {
+  it("[UC-RUN-03-S07] honors an explicit no-op result with a human-readable reason", () => {
     const run = fakeRunWithResult({
       schemaVersion: 1,
       action: "no-op",
@@ -184,7 +184,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
-  it("[UC-RUN-05-S08] publishes a comment action from result.json", () => {
+  it("[UC-RUN-03-S08] publishes a comment action from result.json", () => {
     const run = fakeRunWithResult({
       schemaVersion: 1,
       action: "comment",
@@ -227,7 +227,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
-  it("[UC-RUN-05-S09] includes an explicit code-change reason in the pull request body", () => {
+  it("[UC-RUN-03-S09] includes an explicit code-change reason in the pull request body", () => {
     const run = fakeRunWithResult({
       schemaVersion: 1,
       action: "code-change",
@@ -266,7 +266,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests[0]?.body).toContain("- Reason: Implemented the requested result protocol.");
   });
 
-  it("[UC-RUN-05-S10] rejects non-code-change result actions when worktree changes exist", () => {
+  it("[UC-RUN-03-S10] rejects non-code-change result actions when worktree changes exist", () => {
     const run = fakeRunWithResult({
       schemaVersion: 1,
       action: "request-human",
@@ -292,7 +292,7 @@ describe("GitResultHandler", () => {
     ).toThrow("Agent result action request-human cannot be combined with worktree changes. Use action code-change or remove the changes.");
   });
 
-  it("[UC-RUN-05-S03] reports deterministic branch push conflicts without opening a PR", () => {
+  it("[UC-RUN-03-S03] reports deterministic branch push conflicts without opening a PR", () => {
     const runner = new FakeRunner([
       {
         stdout: " M src/index.ts\n",
@@ -344,7 +344,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests).toHaveLength(0);
   });
 
-  it("[UC-RUN-05-S04] refuses to push the default branch", () => {
+  it("[UC-RUN-03-S04] refuses to push the default branch", () => {
     const runner = new FakeRunner([]);
     const handler = new GitResultHandler(new FakeGitHub(), runner);
 

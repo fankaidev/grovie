@@ -60,7 +60,7 @@ describe("GhGitHubGateway", () => {
     ]);
   });
 
-  it("[UC-RUN-03-S03] reads issue details, default branch, and comments", () => {
+  it("[UC-RUN-02-S03] reads issue details, default branch, and comments", () => {
     const runner = new FakeRunner([
       {
         stdout: JSON.stringify({
@@ -246,7 +246,7 @@ describe("GhGitHubGateway", () => {
     });
   });
 
-  it("[UC-RUN-05-S02] creates pull requests through gh api", () => {
+  it("[UC-RUN-03-S02] creates pull requests through gh api", () => {
     const runner = new FakeRunner([
       {
         stdout: JSON.stringify({ number: 14, html_url: "https://github.com/fankaidev/grovie/pull/14" }),

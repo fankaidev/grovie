@@ -45,7 +45,7 @@ describe("LocalDaemonLifecycle", () => {
     }
   });
 
-  it("[UC-DAEMON-05-S01] marks active runs interrupted and resumable before stopping", () => {
+  it("[UC-SESSION-03-S01] marks active runs interrupted and resumable before stopping", () => {
     const root = createTmpDir();
     const lifecycle = new LocalDaemonLifecycle(() => true);
     const startResult = lifecycle.start({

@@ -78,7 +78,7 @@ YAML
 
 This starts with one local agent. The agent name is combined with this machine's id to form labels and run targets such as `coder@your-machine-id`.
 
-Check the machine-level worker setup:
+Check the local Grovie setup:
 
 ```sh
 grovie doctor
@@ -177,12 +177,14 @@ The loop has two durable boundaries:
 
 An explicit `grovie run owner/repo#123 --agent coder@your-machine-id` request uses the same daemon-owned execution path. It asks the running daemon to start one run now; it does not bypass local state, logs, worktrees, or safe publishing.
 
-Grovie is organized around four user-visible areas:
+Grovie is organized around user-visible areas:
 
 | Area | What it owns |
 |------|--------------|
-| Worker | Machine identity, local agents, watched repositories, assignment labels, and daemon polling. |
-| Execution | Agent sessions, concrete runs, runtime handoff, logs, cancellation, local state, and safe result classification. |
+| Agent | Machine identity, local agents, and assignment labels. |
+| Daemon | Watched repositories, queue polling, daemon lifecycle, and local scheduling. |
+| Session | Long-lived issue-agent context, persistent worktrees, handled cursors, cleanup, and recovery. |
+| Run | Concrete run requests, runtime handoff, logs, cancellation, and safe result publishing. |
 | GitHub | Human-visible issue and pull request updates without dumping raw prompts or logs into comments. |
 | State repo | Optional remote sync of local run metadata for observability and recovery. |
 
