@@ -162,7 +162,6 @@ describe("local run status", () => {
         worktreesDir: "/tmp/grovie/worktrees",
         reposDir: "/tmp/grovie/repos",
         locksDir: "/tmp/grovie/locks",
-        requestsDir: "/tmp/grovie/requests",
         sessionsDir: "/tmp/grovie/sessions",
       },
     });
@@ -256,7 +255,6 @@ describe("local run status", () => {
         worktreesDir: join(root, "worktrees"),
         runsDir,
         locksDir: join(root, "locks"),
-        requestsDir: join(root, "requests"),
         sessionsDir: join(root, "sessions"),
       },
     });

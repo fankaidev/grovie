@@ -6,8 +6,12 @@ export type LocalStatePaths = {
   worktreesDir: string;
   runsDir: string;
   locksDir: string;
-  requestsDir: string;
   sessionsDir: string;
+};
+
+export type RunRequestMetadata = {
+  sourceRunId?: string;
+  reason?: "resume";
 };
 
 export type PrepareRunInput = {
@@ -19,10 +23,7 @@ export type PrepareRunInput = {
   now?: Date;
   prompt: string;
   task: Record<string, unknown>;
-  runRequest?: {
-    sourceRunId?: string;
-    reason?: RunRequest["reason"];
-  };
+  runRequest?: RunRequestMetadata;
 };
 
 export type PreparedRun = {
@@ -68,17 +69,6 @@ export type HandledCursor = {
   handledThrough: string;
   issueFingerprint?: string;
   updatedAt: string;
-};
-
-export type RunRequest = {
-  id: string;
-  repository: string;
-  issueNumber: number;
-  agentId: string;
-  createdAt: string;
-  path: string;
-  sourceRunId?: string;
-  reason?: "manual" | "retry" | "rerun" | "resume";
 };
 
 export type RunCancellation = {

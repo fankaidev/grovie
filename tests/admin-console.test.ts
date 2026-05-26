@@ -447,8 +447,8 @@ describe("admin console server", () => {
     const root = createTmpDir();
     appendDaemonActivity(pathsForRoot(root), {
       timestamp: "2026-05-23T10:00:01.000Z",
-      type: "run.request_received",
-      message: "Received manual run request request-1 for fankaidev/grovie#124.",
+      type: "run.resume_detected",
+      message: "Found resumable run run-1 for fankaidev/grovie#124.",
       repository: "fankaidev/grovie",
       issueNumber: 124,
       agentId: "coco@kai-mini",
@@ -457,11 +457,11 @@ describe("admin console server", () => {
     const html = await (await fetch(`${started.url}/`)).text();
 
     expect(html).toContain("Recent Activity");
-    expect(html).toContain("run.request_received");
+    expect(html).toContain("run.resume_detected");
     expect(html).toContain("fankaidev/grovie");
     expect(html).toContain("#124");
     expect(html).toContain("coco@kai-mini");
-    expect(html).toContain("Received manual run request request-1");
+    expect(html).toContain("Found resumable run run-1");
   });
 
   it("[UC-ADMIN-03-S02] serves a local run detail view with paths, events, and result links", async () => {
@@ -930,7 +930,6 @@ function pathsForRoot(root: string): LocalStatePaths {
     worktreesDir: join(root, "worktrees"),
     runsDir: join(root, "runs"),
     locksDir: join(root, "locks"),
-    requestsDir: join(root, "requests"),
     sessionsDir: join(root, "sessions"),
   };
 }

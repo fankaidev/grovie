@@ -62,33 +62,7 @@ describe("LocalState", () => {
     expect(result.ok ? result.recoveredStale : false).toBe(true);
   });
 
-  it("[UC-SESSION-01-S09] preserves retry source metadata in daemon run requests", () => {
-    const root = createTmpDir();
-    const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
-
-    const request = state.enqueueRunRequest({
-      repository: "fankaidev/grovie",
-      issueNumber: 79,
-      agentId: "coder@fankai-mac",
-      sourceRunId: "failed-run",
-      reason: "retry",
-      now: new Date("2026-05-23T00:00:00Z"),
-    });
-
-    expect(JSON.parse(readFileSync(request.path, "utf8"))).toMatchObject({
-      repository: "fankaidev/grovie",
-      issueNumber: 79,
-      agentId: "coder@fankai-mac",
-      sourceRunId: "failed-run",
-      reason: "retry",
-    });
-    expect(state.takeRunRequest("fankaidev/grovie")).toMatchObject({
-      sourceRunId: "failed-run",
-      reason: "retry",
-    });
-  });
-
-  it("[UC-SESSION-01-S09] writes retry trace metadata into prepared run history", () => {
+  it("[UC-SESSION-01-S09] writes resume trace metadata into prepared run history", () => {
     const root = createTmpDir();
     const state = new LocalState({ paths: { root }, runner: new FakeRunner() });
 
@@ -102,15 +76,15 @@ describe("LocalState", () => {
       prompt: "Prompt",
       task: {},
       runRequest: {
-        sourceRunId: "failed-run",
-        reason: "retry",
+        sourceRunId: "interrupted-run",
+        reason: "resume",
       },
     });
 
     expect(JSON.parse(readFileSync(join(run.runDir, "metadata.json"), "utf8"))).toMatchObject({
       runRequest: {
-        sourceRunId: "failed-run",
-        reason: "retry",
+        sourceRunId: "interrupted-run",
+        reason: "resume",
       },
     });
   });

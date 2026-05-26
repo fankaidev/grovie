@@ -7,10 +7,9 @@ import { readJsonFile, writeJsonFile } from "./files.js";
 import { buildBranchName, buildRunId, buildRunTimestamp, buildSessionId, sanitizePathPart } from "./ids.js";
 import { acquireDaemonLock, acquireExecutionLock, hasExecutionLock, isDaemonRunning, releaseDaemonLock, releaseExecutionLock } from "./locks.js";
 import { resolvePaths } from "./paths.js";
-import { enqueueRunRequest, takeRunRequest } from "./requests.js";
 import { interruptActiveRuns, markRunRejected, markSessionResuming, takeResumableRun } from "./resume.js";
 import { ensureRepositoryCache, ensureWorktree, getRepositoryCachePath } from "./repository.js";
-import type { DaemonLock, ExecutionLock, HandledCursor, LocalStateOptions, LocalStatePaths, LockResult, PreparedRun, PrepareRunInput, ResumableRun, RunCancellation, RunMetadata, RunRequest } from "./types.js";
+import type { DaemonLock, ExecutionLock, HandledCursor, LocalStateOptions, LocalStatePaths, LockResult, PreparedRun, PrepareRunInput, ResumableRun, RunCancellation } from "./types.js";
 
 export class LocalState {
   private readonly paths: LocalStatePaths;
@@ -31,7 +30,6 @@ export class LocalState {
     mkdirSync(this.paths.worktreesDir, { recursive: true });
     mkdirSync(this.paths.runsDir, { recursive: true });
     mkdirSync(this.paths.locksDir, { recursive: true });
-    mkdirSync(this.paths.requestsDir, { recursive: true });
     mkdirSync(this.paths.sessionsDir, { recursive: true });
   }
   acquireDaemonLock(machineId: string, now = new Date()): LockResult<DaemonLock> {
@@ -81,23 +79,6 @@ export class LocalState {
 
   markRunRejected(input: { runId: string; now?: Date; reason: string }): void {
     markRunRejected(this.paths, input);
-  }
-
-  enqueueRunRequest(input: {
-    repository: string;
-    issueNumber: number;
-    agentId: string;
-    now?: Date;
-    sourceRunId?: string;
-    reason?: RunRequest["reason"];
-  }): RunRequest {
-    this.ensureBaseDirectories();
-    return enqueueRunRequest(this.paths, input);
-  }
-
-  takeRunRequest(repository: string): RunRequest | undefined {
-    this.ensureBaseDirectories();
-    return takeRunRequest(this.paths, repository);
   }
 
   requestRunCancellation(input: { runId: string; reason?: string; now?: Date }): RunCancellation {

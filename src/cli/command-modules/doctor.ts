@@ -21,9 +21,7 @@ import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail
 import { initStateRepository } from "../../state-repo.js";
 import {
   checkRuntimeAvailability,
-  enqueueDaemonRunRequest,
   errorResult,
-  formatIssueRepository,
   githubErrorResult,
   readNumberOption,
   readStringOption,
@@ -34,7 +32,6 @@ import {
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,
-  resolveManualRunAgent,
   resolveQueueTrustedAuthors,
   startDaemonProcess,
 } from "../command-support.js";
@@ -94,10 +91,11 @@ export const doctorCommand = {
 
         if (verifyAgents) {
           const verifier = context.agentVerifier ?? verifyConfiguredAgent;
-          const streamingOutput = context.progressWriter !== undefined;
+          const progressWriter = context.progressWriter;
+          const streamingOutput = progressWriter !== undefined;
 
           if (streamingOutput) {
-            context.progressWriter([
+            progressWriter([
               ...doctorOutput,
               "Agent execution verification:",
               "This check runs real agent invocations and may use network access or provider credits.",
@@ -115,7 +113,7 @@ export const doctorCommand = {
                 };
 
             if (streamingOutput) {
-              context.progressWriter?.(renderAgentVerificationResult(result));
+              progressWriter(renderAgentVerificationResult(result));
             }
 
             return result;

@@ -14,7 +14,7 @@ export function buildTaskContext(input: {
 }): Record<string, unknown> {
   return {
     schemaVersion: 1,
-    source: "grovie run",
+    source: "grovie daemon",
     configPath: input.configPath,
     runtime: input.runtime,
     agentInstructions: input.agentInstructions,
@@ -76,7 +76,7 @@ export function resolveTriggerContext(input: {
 
   return {
     source: input.input.triggerContext?.source
-      ?? (input.input.runRequest === undefined ? "manual" : "run-request"),
+      ?? "manual",
     activity: input.input.triggerContext?.activity
       ?? getIssueActivity(input.issue, input.relatedPullRequests),
     previousHandledCursor,

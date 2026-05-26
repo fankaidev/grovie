@@ -9,7 +9,7 @@ export type {
   PrepareRunInput,
   ResumableRun,
   RunCancellation,
-  RunRequest,
+  RunRequestMetadata,
 } from "./local-state/types.js";
 export { LocalState } from "./local-state/state.js";
 export { resolvePaths } from "./local-state/paths.js";
