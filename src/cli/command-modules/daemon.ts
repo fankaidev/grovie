@@ -43,7 +43,14 @@ import type { CliCommand, CliContext } from "../types.js";
 export const daemonCommand = {
     name: "daemon",
     description: "Run and control the local Grovie daemon.",
-    usage: "grovie daemon <run|start|stop|status|logs|service> [--repo owner/repo] [--label grovie] [--once]",
+    usage: [
+      "grovie daemon [run] [--repo owner/repo] [--label grovie] [--once]",
+      "grovie daemon start",
+      "grovie daemon stop [--force]",
+      "grovie daemon status",
+      "grovie daemon logs [--stream combined|stdout|stderr] [--lines 100] [--follow]",
+      "grovie daemon service <install|uninstall|path> [--platform launchd|systemd]",
+    ].join("\n"),
     issue: "#77",
     run: (args: string[], context: CliContext) => {
       const [subcommand] = args;

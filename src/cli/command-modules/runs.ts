@@ -40,7 +40,13 @@ import type { CliCommand, CliContext } from "../types.js";
 export const runsCommand = {
     name: "runs",
     description: "Inspect local Grovie run history and logs.",
-    usage: "grovie runs <list|show|retry|rerun|cleanup> [run-id|owner/repo#123]",
+    usage: [
+      "grovie runs list",
+      "grovie runs show <run-id>",
+      "grovie runs retry <run-id>",
+      "grovie runs rerun owner/repo#123 --agent coder@machine",
+      "grovie runs cleanup [--dry-run] [--logs] [--older-than 30m|12h|7d]",
+    ].join("\n"),
     issue: "#36",
     run: (args: string[], context: CliContext) => {
       const [subcommand, runId] = args;
@@ -191,7 +197,7 @@ export const runsCommand = {
 
         return {
           exitCode: 1,
-          stderr: "Missing runs subcommand. Usage: grovie runs <list|show|retry|rerun|cleanup> [run-id|owner/repo#123]",
+          stderr: "Missing runs subcommand. Usage: grovie runs <list|show|retry|rerun|cleanup>",
         };
       } catch (error) {
         return errorResult(error);

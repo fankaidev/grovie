@@ -24,13 +24,17 @@ export function renderHelp(commands: readonly CliCommand[]): string {
 }
 
 export function renderCommandHelp(command: CliCommand): string {
+  const usageLines = command.usage
+    .split("\n")
+    .map((line) => "  " + line);
+
   return [
     "grovie " + command.name,
     "",
     command.description,
     "",
     "Usage:",
-    "  " + command.usage,
+    usageLines.join("\n"),
     "",
     "Tracked by " + command.issue + ".",
   ].join("\n");
