@@ -256,7 +256,7 @@ function summarizeValidation(run: PreparedRun): string {
 }
 
 function readIssueCommentArtifact(run: PreparedRun): string | undefined {
-  const path = `${run.worktreePath}/.grovie/issue-comment.md`;
+  const path = `${run.runDir}/issue-comment.md`;
 
   if (!existsSync(path)) {
     return undefined;
@@ -268,7 +268,7 @@ function readIssueCommentArtifact(run: PreparedRun): string | undefined {
 }
 
 function readAgentResultArtifact(run: PreparedRun): AgentResultArtifact | undefined {
-  const path = `${run.worktreePath}/.grovie/result.json`;
+  const path = `${run.runDir}/result.json`;
 
   if (!existsSync(path)) {
     return undefined;
@@ -280,13 +280,13 @@ function readAgentResultArtifact(run: PreparedRun): AgentResultArtifact | undefi
     parsed = JSON.parse(readText(path));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Invalid .grovie/result.json: ${message}`);
+    throw new Error(`Invalid run result.json: ${message}`);
   }
 
   const result = agentResultArtifactSchema.safeParse(parsed);
 
   if (!result.success) {
-    throw new Error(`Invalid .grovie/result.json: ${result.error.issues.map((issue) => issue.message).join("; ")}`);
+    throw new Error(`Invalid run result.json: ${result.error.issues.map((issue) => issue.message).join("; ")}`);
   }
 
   return result.data;
@@ -295,7 +295,7 @@ function readAgentResultArtifact(run: PreparedRun): AgentResultArtifact | undefi
 function resolveCommentBody(agentResult: AgentResultArtifact | undefined, issueComment: string | undefined): string | undefined {
   if (agentResult?.action !== "comment") {
     if (issueComment !== undefined && issueComment.length === 0) {
-      throw new Error("Issue comment artifact .grovie/issue-comment.md is empty.");
+      throw new Error("Issue comment artifact issue-comment.md is empty.");
     }
 
     return issueComment;
@@ -304,7 +304,7 @@ function resolveCommentBody(agentResult: AgentResultArtifact | undefined, issueC
   const body = agentResult.comment?.body ?? issueComment;
 
   if (body === undefined || body.length === 0) {
-    throw new Error("Agent result action comment requires comment.body or .grovie/issue-comment.md.");
+    throw new Error("Agent result action comment requires comment.body or issue-comment.md.");
   }
 
   return body;
