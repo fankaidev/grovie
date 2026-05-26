@@ -111,6 +111,7 @@ describe("GitResultHandler", () => {
     expect(github.pullRequests[0]?.body).toContain("- Source issue: fankaidev/grovie#9");
     expect(github.pullRequests[0]?.body).toContain("- Run id: fankaidev-grovie-issue-9");
     expect(github.pullRequests[0]?.body).toContain("- Runtime: codex");
+    expect(github.pullRequests[0]?.body).toContain("- Agent: `coder@fankai-mac`");
     expect(github.pullRequests[0]?.body).toContain("## Validation");
     expect(github.pullRequests[0]?.body).toContain("No validation output captured.");
   });
@@ -141,11 +142,17 @@ describe("GitResultHandler", () => {
       validationSummary: "No validation output captured.",
       comment: {
         id: 1,
-        body: "My debugger and I broke up because it kept stopping at every little issue.",
+        body: [
+          '<!-- grovie:agent-comment {"agentId":"coder@fankai-mac"} -->',
+          "_Grovie agent: `coder@fankai-mac`_",
+          "",
+          "My debugger and I broke up because it kept stopping at every little issue.",
+        ].join("\n"),
         url: "https://github.com/fankaidev/grovie/issues/9#issuecomment-1",
       },
     });
-    expect(github.comments).toEqual(["My debugger and I broke up because it kept stopping at every little issue."]);
+    expect(github.comments[0]).toContain("_Grovie agent: `coder@fankai-mac`_");
+    expect(github.comments[0]).toContain("My debugger and I broke up because it kept stopping at every little issue.");
     expect(github.pullRequests).toHaveLength(0);
   });
 
@@ -217,13 +224,19 @@ describe("GitResultHandler", () => {
       validationSummary: "No validation output captured.",
       comment: {
         id: 1,
-        body: "Please confirm which runtime should own this behavior.",
+        body: [
+          '<!-- grovie:agent-comment {"agentId":"coder@fankai-mac"} -->',
+          "_Grovie agent: `coder@fankai-mac`_",
+          "",
+          "Please confirm which runtime should own this behavior.",
+        ].join("\n"),
         url: "https://github.com/fankaidev/grovie/issues/9#issuecomment-1",
       },
       action: "comment",
       reason: "The issue needs a maintainer decision.",
     });
-    expect(github.comments).toEqual(["Please confirm which runtime should own this behavior."]);
+    expect(github.comments[0]).toContain("_Grovie agent: `coder@fankai-mac`_");
+    expect(github.comments[0]).toContain("Please confirm which runtime should own this behavior.");
     expect(github.pullRequests).toHaveLength(0);
   });
 
@@ -465,7 +478,7 @@ function fakeRun(): PreparedRun {
   return {
     sessionId: "fankaidev-grovie-issue-9-codex",
     runId: "fankaidev-grovie-issue-9",
-    agentId: "codex",
+    agentId: "coder@fankai-mac",
     branchName: "grovie/issue-9",
     sessionDir: "/tmp/grovie/sessions/fankaidev-grovie-issue-9-codex",
     repositoryCachePath: "/tmp/grovie/repos/fankaidev-grovie.git",
