@@ -8,7 +8,7 @@
 |----|------|
 | R1 | Assignment labels use `agent:<agent-id>`. |
 | R2 | An issue can have multiple agent labels. |
-| R3 | Assignment is long-lived issue state; manual runs do not change it by default. |
+| R3 | Assignment is long-lived issue state; follow-up execution requests come from visible GitHub issue activity rather than hidden local request files. |
 
 ## Scenarios
 
