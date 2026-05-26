@@ -3,11 +3,8 @@ import { buildAgentLabel } from "../../assignment.js";
 import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "../../admin-console.js";
 import {
   addWatchedRepository,
-  createConfigFile,
   defaultConfig,
-  loadConfig,
   loadGlobalConfig,
-  loadRepositoryConfig,
   removeWatchedRepository,
   resolveConfiguredAgents,
   saveGlobalConfig,
@@ -31,8 +28,6 @@ import {
   readNumberOption,
   readStringOption,
   renderConfiguredAgents,
-  renderConfigPath,
-  renderConfigSource,
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,

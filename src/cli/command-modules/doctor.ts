@@ -3,11 +3,8 @@ import { buildAgentLabel } from "../../assignment.js";
 import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "../../admin-console.js";
 import {
   addWatchedRepository,
-  createConfigFile,
   defaultConfig,
-  loadConfig,
   loadGlobalConfig,
-  loadRepositoryConfig,
   removeWatchedRepository,
   resolveConfiguredAgents,
   saveGlobalConfig,
@@ -31,8 +28,6 @@ import {
   readNumberOption,
   readStringOption,
   renderConfiguredAgents,
-  renderConfigPath,
-  renderConfigSource,
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,
@@ -50,7 +45,6 @@ export const doctorCommand = {
     run: (_args: string[], context: CliContext) => {
       try {
         const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
-        const loaded = loadConfig(context.cwd);
         const authenticatedUser = context.github.getAuthenticatedUser();
         const identity = resolveLocalIdentity();
 
@@ -68,11 +62,9 @@ export const doctorCommand = {
           "grovie doctor",
           "",
           `Global config: ${renderGlobalConfigSource(globalConfig.path, globalConfig.config.watchedRepositories.length)}`,
-          `Local policy config: ${renderConfigSource(loaded)}`,
           `Machine id: ${identity.machineId}`,
           ...renderRuntimeHealth(runtimeHealth),
           ...renderConfiguredAgents(agentHealth),
-          `Queue label: ${loaded.config.queue.label}`,
           `GitHub: authenticated as ${authenticatedUser.value.login}.`,
         ];
 

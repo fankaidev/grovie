@@ -3,11 +3,8 @@ import { buildAgentLabel } from "../../assignment.js";
 import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "../../admin-console.js";
 import {
   addWatchedRepository,
-  createConfigFile,
   defaultConfig,
-  loadConfig,
   loadGlobalConfig,
-  loadRepositoryConfig,
   removeWatchedRepository,
   resolveConfiguredAgents,
   saveGlobalConfig,
@@ -31,8 +28,6 @@ import {
   readNumberOption,
   readStringOption,
   renderConfiguredAgents,
-  renderConfigPath,
-  renderConfigSource,
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,
@@ -45,7 +40,7 @@ import type { CliCommand, CliContext } from "../types.js";
 export const stateCommand = {
     name: "state",
     description: "Configure optional private state repository sync.",
-    usage: "grovie state init [--owner owner|--repo owner/grovie-state] [--branch main] [--path ~/.grovie/state-repo] [--sync-interval 60]",
+    usage: "grovie state init [--owner owner|--repo owner/grovie-state] [--branch main] [--sync-interval 60]",
     issue: "#57",
     run: (args: string[], context: CliContext) => {
       const [subcommand] = args;
@@ -60,7 +55,6 @@ export const stateCommand = {
       const ownerOption = readStringOption(args, "--owner");
       const repoOption = readStringOption(args, "--repo");
       const branchOption = readStringOption(args, "--branch");
-      const pathOption = readStringOption(args, "--path");
       const intervalOption = readNumberOption(args, "--sync-interval");
 
       if (!ownerOption.ok) {
@@ -75,10 +69,6 @@ export const stateCommand = {
         return branchOption.result;
       }
 
-      if (!pathOption.ok) {
-        return pathOption.result;
-      }
-
       if (!intervalOption.ok) {
         return intervalOption.result;
       }
@@ -91,7 +81,6 @@ export const stateCommand = {
           owner: ownerOption.value,
           repository: repoOption.value,
           branch: branchOption.value,
-          localPath: pathOption.value,
           syncIntervalSeconds: intervalOption.value,
         });
         const loaded = loadGlobalConfig(root);
@@ -101,7 +90,6 @@ export const stateCommand = {
             enabled: true,
             repository: initialized.repository,
             branch: initialized.branch,
-            localPath: initialized.localPath,
             syncIntervalSeconds: initialized.syncIntervalSeconds,
           },
         };

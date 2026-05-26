@@ -67,7 +67,7 @@ describe("state repo sync", () => {
     const repoPath = join(root, "state-repo");
 
     projectStateRepoFiles({
-      config: stateRepoConfig(repoPath),
+      config: stateRepoConfig(),
       paths,
       machineId: "fankai-mac",
       agentId: "default@fankai-mac",
@@ -104,7 +104,7 @@ describe("state repo sync", () => {
     const runner = new FakeRunner();
 
     const result = syncStateRepository({
-      config: stateRepoConfig(repoPath),
+      config: stateRepoConfig(),
       paths,
       machineId: "fankai-mac",
       runner,
@@ -126,7 +126,7 @@ describe("state repo sync", () => {
     const run = writeRun(paths);
 
     projectStateRepoFiles({
-      config: stateRepoConfig(repoPath),
+      config: stateRepoConfig(),
       paths,
       machineId: "fankai-mac",
       agentId: "default@fankai-mac",
@@ -156,7 +156,7 @@ describe("state repo sync", () => {
     });
 
     const result = syncStateRepository({
-      config: stateRepoConfig(repoPath),
+      config: stateRepoConfig(),
       paths,
       machineId: "fankai-mac",
       runner,
@@ -178,7 +178,7 @@ describe("state repo sync", () => {
     mkdirSync(join(repoPath, ".git"), { recursive: true });
 
     const result = syncStateRepository({
-      config: stateRepoConfig(repoPath),
+      config: stateRepoConfig(),
       paths,
       machineId: "fankai-mac",
       runner: new FakeRunner({
@@ -214,7 +214,7 @@ describe("state repo sync", () => {
     const repoPath = join(root, "state-repo");
 
     projectStateRepoFiles({
-      config: stateRepoConfig(repoPath),
+      config: stateRepoConfig(),
       paths,
       machineId: "fankai-mac",
       now: new Date("2026-05-24T00:00:00Z"),
@@ -246,12 +246,11 @@ function createPaths(root: string): LocalStatePaths {
   };
 }
 
-function stateRepoConfig(localPath: string): StateRepoConfig {
+function stateRepoConfig(): StateRepoConfig {
   return {
     enabled: true,
     repository: "fankaidev/grovie-state",
     branch: "main",
-    localPath,
     syncIntervalSeconds: 60,
   };
 }

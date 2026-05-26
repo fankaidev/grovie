@@ -1,5 +1,5 @@
 import type { AdminConsoleResolvedConfig } from "../admin-console.js";
-import type { GrovieConfig, LoadedConfig, StateRepoConfig } from "../config.js";
+import type { GrovieConfig, StateRepoConfig } from "../config.js";
 import type { GitHubGateway } from "../github.js";
 import type { AgentMetadata } from "../identity.js";
 import type { RunIssueAsyncInput, RunIssueResult, RunLocalState } from "../run.js";
@@ -37,7 +37,6 @@ export type DaemonRepositoryInput = {
 
 export type MultiRepositoryDaemonInput = Omit<DaemonInput, "repository" | "label"> & {
   repositories: DaemonRepositoryInput[];
-  repositoryConfigLoader?: (repository: string) => LoadedConfig;
 };
 
 export type DaemonCycleResult = RunIssueResult & {

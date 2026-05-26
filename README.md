@@ -137,13 +137,13 @@ This keeps collaboration inspectable: humans and agents coordinate through norma
 
 `grovie watch add owner/repo` creates or updates the global daemon schedule in `~/.grovie/config.yml`. `grovie watch list` shows the configured repositories, and `grovie watch remove owner/repo` removes a repository from that schedule.
 
-`grovie init` writes an optional repo-local `.grovie.yml` with safe local-runner policy defaults. This file controls repository policy, not daemon scheduling.
+`grovie init` writes the global worker config at `~/.grovie/config.yml` when needed.
 
-`grovie doctor` validates the global worker config and any `.grovie.yml` in the current directory, then confirms the current `gh` login plus CLI runtime availability.
+`grovie doctor` validates the global worker config, then confirms the current `gh` login plus CLI runtime availability.
 
 `grovie run owner/repo#123 --agent coder@machine` requests one explicit issue run from the running daemon. The daemon owns execution, worktree preparation, logging, and publishing.
 
-`grovie daemon` polls watched repositories from `~/.grovie/config.yml`, resolves each repository's `.grovie.yml`, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
+`grovie daemon` polls watched repositories from `~/.grovie/config.yml`, resolves repository policy from each watched repository entry, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
 
 `grovie daemon service install --platform launchd|systemd` writes an optional user service file for macOS LaunchAgent or Linux systemd user service integration. The generated service runs locally and writes stdout/stderr under `~/.grovie/daemon`.
 
@@ -157,7 +157,7 @@ Grovie is a local executor, so it runs with your local filesystem, GitHub creden
 
 - `grovie run` derives the target repository from the explicit issue reference and sends the request to a running local daemon.
 - `grovie daemon` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
-- Automatic daemon queue runs require the issue creator to be trusted by repo-local policy; when no trusted authors are configured, the authenticated `gh` user is trusted by default.
+- Automatic daemon queue runs require the issue creator to be trusted by watched repository policy; when no trusted authors are configured, the authenticated `gh` user is trusted by default.
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
 - It passes runtime child processes only a small baseline environment plus variables explicitly listed in the configured agent `envKeys`.
@@ -173,7 +173,7 @@ Use this checklist before trusting a new machine or repository:
 
 1. Run `gh auth status` and confirm it is authenticated to the target account.
 2. Run `grovie watch add owner/repo --label grovie` for repositories this machine should poll.
-3. Optionally run `grovie init` inside a target repository to create a repo-local policy config.
+3. Optionally edit the repository entry in `~/.grovie/config.yml` to set queue label, branch prefix, pull request behavior, or trusted authors.
 4. Run `grovie doctor` and confirm config, GitHub auth, and Codex availability are green.
 5. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
 6. Start the daemon with `grovie daemon start`.

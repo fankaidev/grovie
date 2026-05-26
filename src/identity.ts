@@ -8,7 +8,6 @@ export type AgentMetadata = {
   runtime: RuntimeName;
   instructions?: string;
   model?: string;
-  args: string[];
   envKeys: string[];
 };
 

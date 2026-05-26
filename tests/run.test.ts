@@ -32,7 +32,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       agentInstructions: "Act as the coder agent and produce a small implementation patch.",
       github,
@@ -95,7 +95,6 @@ describe("runIssue", () => {
 
   it("[UC-GITHUB-01-S03] includes state repo sync paths in the issue summary comment", () => {
     const root = mkdtempSync(join(tmpdir(), "grovie-run-"));
-    const stateRepoPath = join(root, "state-repo");
     const github = new FakeGitHub();
     const localState = new FakeLocalState({ root, fileBacked: true });
     const runtime = new FakeRuntime({
@@ -111,7 +110,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -120,7 +119,6 @@ describe("runIssue", () => {
         enabled: true,
         repository: "fankaidev/grovie-state",
         branch: "main",
-        localPath: stateRepoPath,
         syncIntervalSeconds: 60,
       },
       resultHandler: new FakeResultHandler({
@@ -133,7 +131,7 @@ describe("runIssue", () => {
     expect(result.exitCode).toBe(0);
     expect(github.comments[0]).toContain("State repo pending:");
     expect(github.comments[0]).toContain(".grovie-sync-pending.json");
-    expect(github.comments[0]).not.toContain(stateRepoPath);
+    expect(github.comments[0]).not.toContain("state-repo");
     expect(localState.events).toContainEqual(expect.objectContaining({
       type: "state_repo.pending",
     }));
@@ -166,7 +164,7 @@ describe("runIssue", () => {
         },
         repository: "fankaidev/grovie",
         config: defaultConfig(),
-        configPath: "/project/.grovie.yml",
+        configPath: "/home/user/.grovie/config.yml",
         agent: "pi",
         github,
         localState,
@@ -213,7 +211,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -247,7 +245,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       agentId: "reviewer@fankai-mac",
       github,
@@ -285,7 +283,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -322,7 +320,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -367,7 +365,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -422,7 +420,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -472,7 +470,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -551,7 +549,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -612,7 +610,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -661,7 +659,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -693,7 +691,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -717,7 +715,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
       localState,
@@ -745,7 +743,7 @@ describe("runIssue", () => {
       },
       repository: "fankaidev/grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       agent: "codex",
       github,
     });
@@ -968,7 +966,6 @@ class FakeResultHandler implements ResultHandler {
 
 function defaultConfig(): GrovieConfig {
   return {
-    version: 1,
     queue: {
       label: "grovie",
     },

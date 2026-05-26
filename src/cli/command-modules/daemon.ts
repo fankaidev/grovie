@@ -3,14 +3,13 @@ import { buildAgentLabel } from "../../assignment.js";
 import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "../../admin-console.js";
 import {
   addWatchedRepository,
-  createConfigFile,
   defaultConfig,
-  loadConfig,
   loadGlobalConfig,
-  loadRepositoryConfig,
   removeWatchedRepository,
   resolveConfiguredAgents,
   resolveEnabledStateRepo,
+  resolveRepositoryConfig,
+  resolveWatchedRepositoryConfig,
   saveGlobalConfig,
 } from "../../config.js";
 import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "../../cleanup.js";
@@ -32,8 +31,6 @@ import {
   readNumberOption,
   readStringOption,
   renderConfiguredAgents,
-  renderConfigPath,
-  renderConfigSource,
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,
@@ -213,16 +210,17 @@ export const daemonCommand = {
           return normalizedLabelOption.result;
         }
 
+        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+        const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
+
         if (normalizedRepoOption.value !== undefined) {
-          const loaded = loadRepositoryConfig(normalizedRepoOption.value, context.localState);
-          const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
-          const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
+          const resolvedConfig = resolveRepositoryConfig(normalizedRepoOption.value, globalConfig);
 
           return runDaemon({
             repository: normalizedRepoOption.value,
-            label: normalizedLabelOption.value ?? loaded.config.queue.label,
-            config: loaded.config,
-            configPath: renderConfigPath(loaded),
+            label: normalizedLabelOption.value ?? resolvedConfig.config.queue.label,
+            config: resolvedConfig.config,
+            configPath: resolvedConfig.path ?? "built-in defaults",
             github: context.github,
             runtime: context.runtime,
             localState: context.localState,
@@ -234,15 +232,17 @@ export const daemonCommand = {
           });
         }
 
-        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
-        const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
-
         return runDaemonForRepositories({
-          repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => ({
-            repository: watchedRepository.repository,
-            label: normalizedLabelOption.value ?? watchedRepository.label,
-          })),
-          repositoryConfigLoader: (repository) => loadRepositoryConfig(repository, context.localState),
+          repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => {
+            const config = resolveWatchedRepositoryConfig(watchedRepository);
+
+            return {
+              repository: watchedRepository.repository,
+              label: normalizedLabelOption.value ?? config.queue.label,
+              config,
+              configPath: globalConfig.path,
+            };
+          }),
           config: defaultConfig(),
           configPath: "built-in defaults",
           github: context.github,

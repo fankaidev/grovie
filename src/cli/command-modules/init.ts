@@ -3,11 +3,8 @@ import { buildAgentLabel } from "../../assignment.js";
 import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "../../admin-console.js";
 import {
   addWatchedRepository,
-  createConfigFile,
   defaultConfig,
-  loadConfig,
   loadGlobalConfig,
-  loadRepositoryConfig,
   removeWatchedRepository,
   resolveConfiguredAgents,
   saveGlobalConfig,
@@ -31,8 +28,6 @@ import {
   readNumberOption,
   readStringOption,
   renderConfiguredAgents,
-  renderConfigPath,
-  renderConfigSource,
   renderGlobalConfigSource,
   renderRuntimeHealth,
   renderUnavailableAgents,
@@ -44,12 +39,16 @@ import type { CliCommand, CliContext } from "../types.js";
 
 export const initCommand = {
     name: "init",
-    description: "Create the minimal Grovie project config.",
+    description: "Create the minimal Grovie global worker config.",
     usage: "grovie init",
     issue: "#3",
     run: (_args: string[], context: CliContext) => {
+      let configPath: string;
+
       try {
-        createConfigFile(context.cwd);
+        const root = context.localState.getPaths().root;
+        const existing = loadGlobalConfig(root);
+        configPath = saveGlobalConfig(root, existing.config);
       } catch (error) {
         return errorResult(error);
       }
@@ -59,7 +58,7 @@ export const initCommand = {
         stdout: [
           "grovie init",
           "",
-          "Created .grovie.yml.",
+          `Wrote global config: ${configPath}`,
           "Run `grovie doctor` to validate it.",
         ].join("\n"),
       };

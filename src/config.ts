@@ -3,14 +3,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
-import { renderDefaultConfig, renderGlobalConfig } from "./config/render.js";
+import { renderGlobalConfig } from "./config/render.js";
 import { parseRepositoryName } from "./github.js";
 import { buildAgentId, slugifyIdentityPart, type AgentMetadata } from "./identity.js";
 import type { RuntimeName } from "./runtime.js";
 
-export { renderDefaultConfig, renderGlobalConfig } from "./config/render.js";
+export { renderGlobalConfig } from "./config/render.js";
 
-export const CONFIG_FILE_NAME = ".grovie.yml";
 export const GLOBAL_CONFIG_FILE_NAME = "config.yml";
 
 export const repositoryNameSchema = z.string().regex(
@@ -23,8 +22,7 @@ export const agentNameSchema = z.string()
   .refine((value) => slugifyIdentityPart(value).length > 0, "must contain at least one letter or number")
   .refine((value) => slugifyIdentityPart(value) !== "default", "default is reserved; configure a named local agent");
 
-export const configSchema = z.strictObject({
-  version: z.literal(1),
+export const repositoryPolicySchema = z.strictObject({
   queue: z.strictObject({
     label: z.string().min(1, "must not be empty"),
   }),
@@ -46,26 +44,11 @@ export const configSchema = z.strictObject({
   }),
 });
 
-export type GrovieConfig = z.infer<typeof configSchema>;
+export type GrovieConfig = z.infer<typeof repositoryPolicySchema>;
 
 export type LoadedConfig = {
   path?: string;
   config: GrovieConfig;
-};
-
-export type RepositoryFileResult =
-  | {
-    exists: true;
-    path: string;
-    content: string;
-  }
-  | {
-    exists: false;
-    path: string;
-  };
-
-export type RepositoryPolicyReader = {
-  readRepositoryFile?(input: { repository: string; path: string }): RepositoryFileResult;
 };
 
 export const globalConfigSchema = z.strictObject({
@@ -75,18 +58,20 @@ export const globalConfigSchema = z.strictObject({
     runtime: runtimeNameSchema,
     instructions: z.string().min(1, "must not be empty").optional(),
     model: z.string().min(1, "must not be empty").optional(),
-    args: z.array(z.string()).default([]),
     envKeys: z.array(z.string().min(1, "must not be empty")).default([]),
   })).default([]),
   watchedRepositories: z.array(z.strictObject({
     repository: repositoryNameSchema,
     label: z.string().min(1, "must not be empty").optional(),
+    branches: repositoryPolicySchema.shape.branches.optional(),
+    pullRequests: repositoryPolicySchema.shape.pullRequests.optional(),
+    comments: repositoryPolicySchema.shape.comments.optional(),
+    trust: repositoryPolicySchema.shape.trust,
   })),
   stateRepo: z.strictObject({
     enabled: z.boolean(),
     repository: repositoryNameSchema,
     branch: z.string().min(1, "must not be empty"),
-    localPath: z.string().min(1, "must not be empty").optional(),
     syncIntervalSeconds: z.number().int().min(10).max(3600),
   }).optional(),
   adminConsole: z.strictObject({
@@ -106,70 +91,6 @@ export type LoadedGlobalConfig = {
 export type WatchedRepository = GlobalGrovieConfig["watchedRepositories"][number];
 export type StateRepoConfig = NonNullable<GlobalGrovieConfig["stateRepo"]>;
 export type GlobalAgentConfig = GlobalGrovieConfig["agents"][number];
-
-export function getConfigPath(cwd: string): string {
-  return join(cwd, CONFIG_FILE_NAME);
-}
-
-export function createConfigFile(cwd: string): string {
-  const configPath = getConfigPath(cwd);
-
-  if (existsSync(configPath)) {
-    throw new Error(`${CONFIG_FILE_NAME} already exists. Edit it directly or remove it before running grovie init.`);
-  }
-
-  writeFileSync(configPath, renderDefaultConfig(), "utf8");
-  return configPath;
-}
-
-export function loadConfig(cwd: string): LoadedConfig {
-  const configPath = getConfigPath(cwd);
-
-  if (!existsSync(configPath)) {
-    return {
-      config: defaultConfig(),
-    };
-  }
-
-  return parseConfigText(readFileSync(configPath, "utf8"), configPath, CONFIG_FILE_NAME);
-}
-
-export function loadRepositoryConfig(repository: string, reader: RepositoryPolicyReader | undefined): LoadedConfig {
-  const result = reader?.readRepositoryFile?.({
-    repository,
-    path: CONFIG_FILE_NAME,
-  });
-
-  if (result === undefined || !result.exists) {
-    return {
-      config: defaultConfig(),
-    };
-  }
-
-  return parseConfigText(result.content, result.path, result.path);
-}
-
-function parseConfigText(content: string, configPath: string, errorName: string): LoadedConfig {
-  let parsed: unknown;
-
-  try {
-    parsed = parse(content);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Could not parse ${errorName}: ${message}`);
-  }
-
-  const result = configSchema.safeParse(parsed);
-
-  if (!result.success) {
-    throw new Error(renderValidationError(result.error, errorName));
-  }
-
-  return {
-    path: configPath,
-    config: result.data,
-  };
-}
 
 export function getGlobalConfigPath(root: string): string {
   return join(root, GLOBAL_CONFIG_FILE_NAME);
@@ -223,6 +144,30 @@ export function resolveEnabledStateRepo(config: GlobalGrovieConfig): StateRepoCo
   return config.stateRepo?.enabled === true ? config.stateRepo : undefined;
 }
 
+export function resolveWatchedRepositoryConfig(watchedRepository: WatchedRepository | undefined): GrovieConfig {
+  const defaults = defaultConfig();
+
+  return {
+    ...defaults,
+    queue: {
+      label: watchedRepository?.label ?? defaults.queue.label,
+    },
+    branches: watchedRepository?.branches ?? defaults.branches,
+    pullRequests: watchedRepository?.pullRequests ?? defaults.pullRequests,
+    comments: watchedRepository?.comments ?? defaults.comments,
+    ...(watchedRepository?.trust === undefined ? {} : { trust: watchedRepository.trust }),
+  };
+}
+
+export function resolveRepositoryConfig(repository: string, globalConfig: LoadedGlobalConfig): LoadedConfig {
+  const watchedRepository = globalConfig.config.watchedRepositories.find((candidate) => candidate.repository === repository);
+
+  return {
+    path: globalConfig.path,
+    config: resolveWatchedRepositoryConfig(watchedRepository),
+  };
+}
+
 export function resolveConfiguredAgents(config: GlobalGrovieConfig, machineId: string): AgentMetadata[] {
   const agents = config.agents.map((agent) => ({
     agentId: buildAgentId(agent.name, machineId),
@@ -231,7 +176,6 @@ export function resolveConfiguredAgents(config: GlobalGrovieConfig, machineId: s
     runtime: agent.runtime,
     instructions: agent.instructions,
     model: agent.model,
-    args: agent.args,
     envKeys: agent.envKeys,
   }));
   const seen = new Set<string>();
@@ -254,21 +198,18 @@ export function addWatchedRepository(
   assertValidRepository(watchedRepository.repository);
 
   const existing = config.watchedRepositories.find((candidate) => candidate.repository === watchedRepository.repository);
-  const nextRepository = watchedRepository.label === undefined
-    ? { repository: watchedRepository.repository }
-    : { repository: watchedRepository.repository, label: watchedRepository.label };
 
   if (existing === undefined) {
     return {
       ...config,
-      watchedRepositories: [...config.watchedRepositories, nextRepository],
+      watchedRepositories: [...config.watchedRepositories, watchedRepository],
     };
   }
 
   return {
     ...config,
     watchedRepositories: config.watchedRepositories.map((candidate) =>
-      candidate.repository === watchedRepository.repository ? nextRepository : candidate,
+      candidate.repository === watchedRepository.repository ? watchedRepository : candidate,
     ),
   };
 }
@@ -319,7 +260,6 @@ export function parseGitHubRemote(remoteUrl: string): string | undefined {
 
 export function defaultConfig(): GrovieConfig {
   return {
-    version: 1,
     queue: {
       label: "grovie",
     },
@@ -358,7 +298,7 @@ function assertValidRepository(repository: string): void {
   }
 }
 
-function renderValidationError(error: z.ZodError, fileName = CONFIG_FILE_NAME): string {
+function renderValidationError(error: z.ZodError, fileName: string): string {
   const issues = error.issues.map((issue) => {
     const path = issue.path.length > 0 ? issue.path.join(".") : fileName;
     return `- ${path}: ${issue.message}`;

@@ -39,7 +39,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       workerId: "worker-1",
@@ -77,7 +77,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       now: () => NOW,
@@ -101,7 +101,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       pollIntervalMs: 1234,
@@ -135,7 +135,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       now: () => NOW,
@@ -175,7 +175,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       workerId: `default@${resolveMachineId(hostname())}`,
@@ -221,7 +221,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -248,7 +248,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       now: () => NOW,
@@ -297,7 +297,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -342,7 +342,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([fakeIssue()]),
       once: true,
       localState,
@@ -387,7 +387,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -455,7 +455,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       now: () => NOW,
@@ -533,7 +533,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localAgents: [configuredCodexAgent("coder", machineId)],
@@ -589,7 +589,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -624,7 +624,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -667,7 +667,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -714,7 +714,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([fakeIssue()], { failReadIssueFor: 8 }),
       once: true,
       localState,
@@ -756,7 +756,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
       localState,
@@ -791,7 +791,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([fakeIssue({ labels: ["grovie"] })]),
       once: true,
       localState,
@@ -850,7 +850,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([fakeIssue({ labels: ["grovie"] })]),
       once: true,
       localState,
@@ -888,7 +888,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
       localState,
@@ -922,7 +922,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
       localState,
@@ -951,7 +951,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
       localState,
@@ -990,7 +990,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       now: () => NOW,
@@ -1027,7 +1027,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       now: () => NOW,
@@ -1069,7 +1069,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1100,7 +1100,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       runtime: fakeRuntime({
@@ -1142,7 +1142,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       now: () => NOW,
@@ -1178,7 +1178,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localAgents: [
@@ -1218,7 +1218,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localAgents: [
@@ -1259,7 +1259,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localAgents: [configuredCodexAgent("coder", machineId)],
@@ -1301,7 +1301,7 @@ describe("runDaemonCycle", () => {
           trustedAuthors: ["trusted-user"],
         },
       },
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localAgents: [configuredCodexAgent("coder", machineId)],
@@ -1329,7 +1329,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
       localState,
@@ -1358,7 +1358,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: false,
       localState,
@@ -1387,7 +1387,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1442,7 +1442,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1491,7 +1491,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1542,7 +1542,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1565,7 +1565,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1623,7 +1623,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1670,7 +1670,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1718,7 +1718,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1752,7 +1752,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1788,7 +1788,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1802,7 +1802,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1863,7 +1863,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1895,7 +1895,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1920,7 +1920,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1966,7 +1966,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -1985,7 +1985,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -2031,7 +2031,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       now: () => NOW,
@@ -2074,7 +2074,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       localState,
@@ -2116,7 +2116,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       workerId: "worker-1",
@@ -2155,7 +2155,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       workerId: "worker-1",
@@ -2196,7 +2196,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       workerId: "worker-1",
@@ -2236,7 +2236,7 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: defaultConfig(),
-      configPath: "/project/.grovie.yml",
+      configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
       workerId: "worker-1",
@@ -2468,7 +2468,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-WORKER-02-S04] [UC-WORKER-04-S12] uses repo-local daemon policy for queue label and run config", async () => {
+  it("[UC-WORKER-02-S04] [UC-WORKER-04-S12] uses watched repository daemon policy for queue label and run config", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -2490,12 +2490,10 @@ describe("runDaemonCycle", () => {
       repositories: [
         {
           repository: "fankaidev/grovie",
+          config,
+          configPath: "/home/user/.grovie/config.yml",
         },
       ],
-      repositoryConfigLoader: () => ({
-        path: "fankaidev/grovie:.grovie.yml",
-        config,
-      }),
       config: defaultConfig(),
       configPath: "built-in defaults",
       github,
@@ -2524,142 +2522,7 @@ describe("runDaemonCycle", () => {
         prefix: "issue/",
       },
     });
-    expect(runs[0]?.configPath).toBe("fankaidev/grovie:.grovie.yml");
-  });
-
-  it("[UC-WORKER-04-S13] reports invalid repo-local policy without blocking unrelated watched repositories", async () => {
-    const machineId = resolveMachineId(hostname());
-    const github = new FakeGitHub([
-      fakeIssue({
-        reference: {
-          owner: "fankaidev",
-          repo: "other",
-          number: 5,
-        },
-        labels: ["grovie", `agent:default@${machineId}`],
-      }),
-    ]);
-    const runs: RunIssueAsyncInput[] = [];
-
-    const result = await runDaemonForRepositories({
-      repositories: [
-        {
-          repository: "fankaidev/bad",
-        },
-        {
-          repository: "fankaidev/other",
-        },
-      ],
-      repositoryConfigLoader: (repository) => {
-        if (repository === "fankaidev/bad") {
-          throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- queue.label: Invalid input");
-        }
-
-        return {
-          config: defaultConfig(),
-        };
-      },
-      config: defaultConfig(),
-      configPath: "built-in defaults",
-      github,
-      runtime: fakeRuntime(),
-      once: true,
-      workerId: "worker-1",
-      now: () => NOW,
-      issueRunner: (input) => {
-        runs.push(input);
-        return {
-          exitCode: 0,
-          stdout: "ran unrelated repo",
-        };
-      },
-    });
-
-    expect(result).toEqual({
-      exitCode: 0,
-      stdout: "ran unrelated repo",
-      stderr: [
-        "grovie daemon",
-        "",
-        "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
-        "- queue.label: Invalid input",
-      ].join("\n"),
-    });
-    expect(runs[0]?.repository).toBe("fankaidev/other");
-  });
-
-  it("[UC-WORKER-04-S13] fails clearly when every watched repository has invalid repo-local policy", async () => {
-    const result = await runDaemonForRepositories({
-      repositories: [
-        {
-          repository: "fankaidev/bad",
-        },
-      ],
-      repositoryConfigLoader: () => {
-        throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- queue.label: Invalid input");
-      },
-      config: defaultConfig(),
-      configPath: "built-in defaults",
-      github: new FakeGitHub([]),
-      once: true,
-      now: () => NOW,
-      issueRunner: () => {
-        throw new Error("issue runner was not expected");
-      },
-    });
-
-    expect(result).toEqual({
-      exitCode: 1,
-      stderr: [
-        "grovie daemon",
-        "",
-        "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
-        "- queue.label: Invalid input",
-      ].join("\n"),
-    });
-  });
-
-  it("[UC-WORKER-04-S13] reports invalid repo-local policy during long-running daemon cycles", async () => {
-    const reports: RunIssueResult[] = [];
-    const stop = new Error("stop after first cycle");
-
-    await expect(runDaemonForRepositories({
-      repositories: [
-        {
-          repository: "fankaidev/bad",
-        },
-      ],
-      repositoryConfigLoader: () => {
-        throw new Error("Invalid fankaidev/bad:.grovie.yml:\n- queue.label: Invalid input");
-      },
-      config: defaultConfig(),
-      configPath: "built-in defaults",
-      github: new FakeGitHub([]),
-      once: false,
-      now: () => NOW,
-      sleep: () => {
-        throw stop;
-      },
-      onCycleResult: (result) => {
-        reports.push(result);
-      },
-      issueRunner: () => {
-        throw new Error("issue runner was not expected");
-      },
-    })).rejects.toThrow("stop after first cycle");
-
-    expect(reports).toEqual([
-      {
-        exitCode: 1,
-        processed: false,
-        stderr: [
-          "grovie daemon",
-          "",
-          "Skipped fankaidev/bad: Invalid fankaidev/bad:.grovie.yml:",
-          "- queue.label: Invalid input",
-        ].join("\n"),
-      },
-    ]);
+    expect(runs[0]?.configPath).toBe("/home/user/.grovie/config.yml");
   });
 });
 
@@ -2836,7 +2699,6 @@ class FakeGitHub implements GitHubGateway {
 
 function defaultConfig(): GrovieConfig {
   return {
-    version: 1,
     queue: {
       label: "grovie",
     },
@@ -2998,7 +2860,6 @@ function configuredCodexAgent(name: string, machineId: string) {
     name,
     machineId,
     runtime: "codex" as const,
-    args: [],
     envKeys: ["OPENAI_API_KEY"],
   };
 }

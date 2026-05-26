@@ -1,4 +1,3 @@
-import type { LoadedConfig } from "../config.js";
 import type { RunIssueResult } from "../run.js";
 import { planRepositoryEventPolling } from "../repository-events.js";
 import { recordActivity } from "./activity.js";
@@ -47,7 +46,6 @@ export async function runDaemonSingleRepositoryCycle(input: DaemonInput): Promis
 
 export async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput): Promise<DaemonCycleResult> {
   const idleMessages: string[] = [];
-  const policyErrors: string[] = [];
 
   for (const repository of input.repositories) {
     recordActivity(input, {
@@ -59,21 +57,7 @@ export async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput
       },
     });
 
-    let loadedConfig: LoadedConfig | undefined;
-
-    try {
-      loadedConfig = input.repositoryConfigLoader?.(repository.repository);
-    } catch (error) {
-      recordActivity(input, {
-        type: "repository.policy_failed",
-        message: `Skipped ${repository.repository}: ${toErrorMessage(error)}`,
-        repository: repository.repository,
-      });
-      policyErrors.push(`Skipped ${repository.repository}: ${toErrorMessage(error)}`);
-      continue;
-    }
-
-    const config = loadedConfig?.config ?? repository.config ?? input.config;
+    const config = repository.config ?? input.config;
     const eventPlan = planRepositoryCycle(input, repository.repository);
 
     recordActivity(input, {
@@ -100,15 +84,12 @@ export async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput
       repository: repository.repository,
       label: repository.label ?? config.queue.label,
       config,
-      configPath: loadedConfig?.path ?? repository.configPath ?? input.configPath,
+      configPath: repository.configPath ?? input.configPath,
       issueNumbers: eventPlan.issueNumbers,
     });
 
     if (result.exitCode !== 0 || result.processed) {
-      return {
-        ...result,
-        stderr: renderPolicyErrorOutput(policyErrors, result.stderr),
-      };
+      return result;
     }
 
     if (result.stdout !== undefined) {
@@ -117,10 +98,9 @@ export async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput
   }
 
   return {
-    exitCode: policyErrors.length > 0 ? 1 : 0,
+    exitCode: 0,
     processed: false,
     stdout: idleMessages.join("\n\n") || undefined,
-    stderr: renderPolicyErrorOutput(policyErrors),
   };
 }
 
@@ -158,22 +138,4 @@ function planRepositoryCycle(input: Pick<DaemonInput, "once" | "github" | "local
     github: input.github,
     now: input.now?.(),
   });
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function renderPolicyErrorOutput(policyErrors: string[], existingStderr?: string): string | undefined {
-  const policyStderr = policyErrors.length > 0
-    ? [
-      "grovie daemon",
-      "",
-      ...policyErrors,
-    ].join("\n")
-    : undefined;
-
-  return [policyStderr, existingStderr]
-    .filter((output): output is string => output !== undefined && output.length > 0)
-    .join("\n\n") || undefined;
 }
