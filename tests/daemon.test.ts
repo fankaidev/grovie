@@ -1389,6 +1389,117 @@ describe("runDaemonCycle", () => {
     expect(github.listOpenIssueCalls).toEqual([]);
   });
 
+  it("[UC-DAEMON-02-S21] immediately refreshes an issue after visible local agent output", async () => {
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const github = new FakeGitHub([fakeIssue()]);
+    const runs: RunIssueAsyncInput[] = [];
+    const stop = new Error("stop after immediate refresh");
+    let sleepCalls = 0;
+
+    await expect(runDaemon({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: false,
+      localState,
+      now: () => NOW,
+      sleep: () => {
+        sleepCalls += 1;
+        throw stop;
+      },
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "published visible output",
+          refreshes: [{
+            repository: input.repository,
+            issueNumber: input.issueReference.number,
+          }],
+        };
+      },
+    })).rejects.toThrow("stop after immediate refresh");
+
+    expect(runs).toHaveLength(1);
+    expect(sleepCalls).toBe(1);
+    expect(github.listOpenIssueCalls).toHaveLength(1);
+    expect(github.readIssueCalls.map((reference) => reference.number)).toEqual([8, 8, 8]);
+  });
+
+  it("[UC-DAEMON-02-S21] does not immediately refresh after no-op system output", async () => {
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const github = new FakeGitHub([fakeIssue()]);
+    const runs: RunIssueAsyncInput[] = [];
+    const stop = new Error("stop after first sleep");
+
+    await expect(runDaemon({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: false,
+      localState,
+      now: () => NOW,
+      sleep: () => {
+        throw stop;
+      },
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "no changes",
+        };
+      },
+    })).rejects.toThrow("stop after first sleep");
+
+    expect(runs).toHaveLength(1);
+    expect(github.readIssueCalls.map((reference) => reference.number)).toEqual([8, 8]);
+  });
+
+  it("[UC-DAEMON-02-S21] coalesces near-simultaneous refresh requests for the same issue", async () => {
+    const machineId = resolveMachineId(hostname());
+    const localState = new LocalState({ paths: { root: createTmpDir() } });
+    const github = new FakeGitHub([
+      fakeIssue({
+        labels: ["grovie", `agent:coder@${machineId}`, `agent:reviewer@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+    const stop = new Error("stop after coalesced refresh");
+
+    await expect(runDaemon({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: false,
+      localState,
+      maxConcurrentRuns: 2,
+      now: () => NOW,
+      sleep: () => {
+        throw stop;
+      },
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: `${input.agentId} published visible output`,
+          refreshes: [{
+            repository: input.repository,
+            issueNumber: input.issueReference.number,
+          }],
+        };
+      },
+    })).rejects.toThrow("stop after coalesced refresh");
+
+    expect(runs.map((run) => run.agentId).sort()).toEqual([`coder@${machineId}`, `reviewer@${machineId}`]);
+    expect(github.readIssueCalls.map((reference) => reference.number)).toEqual([8, 8, 8, 8]);
+  });
+
   it("[UC-DAEMON-02-S18] skips repository event requests before the GitHub poll interval elapses", async () => {
     const localState = new LocalState({ paths: { root: createTmpDir() } });
     const events = [fakeRepositoryEvent("event-1")];

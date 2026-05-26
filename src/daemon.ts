@@ -5,7 +5,7 @@ import { acquireDaemonLock, releaseDaemonLock, validateLocalAgents } from "./dae
 import { runDaemonRepositoryCycle, runDaemonSingleRepositoryCycle, toRunIssueResult } from "./daemon/repository-cycle.js";
 import type { DaemonInput, MultiRepositoryDaemonInput } from "./daemon/types.js";
 import { DEFAULT_POLL_INTERVAL_MS } from "./daemon/types.js";
-import type { RunIssueResult } from "./run.js";
+import type { IssueRefreshRequest, RunIssueResult } from "./run.js";
 
 export type { DaemonCycleResult, DaemonInput, DaemonRepositoryInput, MultiRepositoryDaemonInput } from "./daemon/types.js";
 export { NO_LOCAL_AGENTS_MESSAGE } from "./daemon/types.js";
@@ -45,11 +45,23 @@ export async function runDaemon(input: DaemonInput): Promise<RunIssueResult> {
       return toRunIssueResult(await runDaemonCycle(input));
     }
 
+    const refreshQueue = new IssueRefreshQueue();
+
     while (true) {
-      const result = await runDaemonSingleRepositoryCycle(input);
+      const pendingIssueNumbers = refreshQueue.takeRepository(input.repository);
+      const result = pendingIssueNumbers.length === 0
+        ? await runDaemonSingleRepositoryCycle(input)
+        : await runDaemonCycle({
+          ...input,
+          issueNumbers: pendingIssueNumbers,
+        });
+      refreshQueue.enqueue(result.refreshes);
       await reportDaemonCycle(input, result);
-      const sleep = input.sleep ?? sleepSync;
-      await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+
+      if (!refreshQueue.hasPending()) {
+        const sleep = input.sleep ?? sleepSync;
+        await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+      }
     }
   } finally {
     await stopDaemonAdminConsole(adminConsole);
@@ -97,11 +109,21 @@ export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput
 
   try {
     if (!input.once) {
+      const refreshQueue = new IssueRefreshQueue();
+
       while (true) {
-        const result = await runDaemonRepositoryCycle(input);
+        const pendingRepositories = applyPendingRepositoryRefreshes(input.repositories, refreshQueue.takeAll());
+        const result = await runDaemonRepositoryCycle({
+          ...input,
+          repositories: pendingRepositories,
+        });
+        refreshQueue.enqueue(result.refreshes);
         await reportDaemonCycle(input, result);
-        const sleep = input.sleep ?? sleepSync;
-        await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+
+        if (!refreshQueue.hasPending()) {
+          const sleep = input.sleep ?? sleepSync;
+          await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+        }
       }
     }
 
@@ -127,4 +149,58 @@ function sleepSync(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+class IssueRefreshQueue {
+  private readonly pending = new Map<string, Set<number>>();
+
+  enqueue(refreshes: IssueRefreshRequest[] | undefined): void {
+    for (const refresh of refreshes ?? []) {
+      const issues = this.pending.get(refresh.repository) ?? new Set<number>();
+      issues.add(refresh.issueNumber);
+      this.pending.set(refresh.repository, issues);
+    }
+  }
+
+  takeRepository(repository: string): number[] {
+    const issues = this.pending.get(repository);
+
+    if (issues === undefined) {
+      return [];
+    }
+
+    this.pending.delete(repository);
+    return [...issues].sort((left, right) => left - right);
+  }
+
+  takeAll(): Map<string, number[]> {
+    const entries = new Map<string, number[]>();
+
+    for (const [repository, issues] of this.pending) {
+      entries.set(repository, [...issues].sort((left, right) => left - right));
+    }
+
+    this.pending.clear();
+    return entries;
+  }
+
+  hasPending(): boolean {
+    return this.pending.size > 0;
+  }
+}
+
+function applyPendingRepositoryRefreshes(
+  repositories: MultiRepositoryDaemonInput["repositories"],
+  pending: Map<string, number[]>,
+): MultiRepositoryDaemonInput["repositories"] {
+  if (pending.size === 0) {
+    return repositories;
+  }
+
+  return repositories
+    .filter((repository) => pending.has(repository.repository))
+    .map((repository) => ({
+      ...repository,
+      issueNumbers: pending.get(repository.repository),
+    }));
 }

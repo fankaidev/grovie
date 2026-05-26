@@ -371,6 +371,7 @@ describe("runIssue", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Pull request: https://github.com/fankaidev/grovie/pull/20");
+    expect(result.refreshes).toEqual([{ repository: "fankaidev/grovie", issueNumber: 7 }]);
     expect(github.comments[0]).toContain("- Pull request: https://github.com/fankaidev/grovie/pull/20");
     expect(localState.events.map((event) => event.type)).toEqual([
       "run.started",
@@ -379,6 +380,44 @@ describe("runIssue", () => {
       "run.succeeded",
       "comment.updated",
     ]);
+  });
+
+  it("[UC-DAEMON-02-S21] requests immediate scheduling refresh after publishing an issue comment", () => {
+    const github = new FakeGitHub();
+    const localState = new FakeLocalState();
+    const runtime = new FakeRuntime({
+      ok: true,
+      execution: fakeExecution(localState.run, 0),
+    });
+
+    const result = runIssue({
+      issueReference: {
+        owner: "fankaidev",
+        repo: "grovie",
+        number: 7,
+      },
+      repository: "fankaidev/grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      agent: "codex",
+      github,
+      localState,
+      runtime,
+      resultHandler: new FakeResultHandler({
+        kind: "issue-comment",
+        status: "",
+        validationSummary: "Comment posted.",
+        comment: {
+          id: 100,
+          body: "Visible agent output.",
+          url: "https://github.com/fankaidev/grovie/issues/7#issuecomment-100",
+        },
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.refreshes).toEqual([{ repository: "fankaidev/grovie", issueNumber: 7 }]);
+    expect(result.handledThrough).toBeUndefined();
   });
 
   it("[UC-SESSION-01-S09] includes resume trace metadata in the prepared run context", () => {

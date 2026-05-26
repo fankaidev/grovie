@@ -194,13 +194,33 @@ export function combineCycleResults(results: DaemonCycleResult[]): DaemonCycleRe
   const failed = results.find((result) => result.exitCode !== 0);
   const stdout = results.map((result) => result.stdout).filter((value) => value !== undefined && value.length > 0).join("\n\n");
   const stderr = results.map((result) => result.stderr).filter((value) => value !== undefined && value.length > 0).join("\n\n");
+  const refreshes = dedupeRefreshes(results.flatMap((result) => result.refreshes ?? []));
 
   return {
     exitCode: failed?.exitCode ?? 0,
     processed: results.some((result) => result.processed),
     ...(stdout.length === 0 ? {} : { stdout }),
     ...(stderr.length === 0 ? {} : { stderr }),
+    ...(refreshes.length === 0 ? {} : { refreshes }),
   };
+}
+
+function dedupeRefreshes(refreshes: NonNullable<DaemonCycleResult["refreshes"]>): NonNullable<DaemonCycleResult["refreshes"]> {
+  const seen = new Set<string>();
+  const deduped: NonNullable<DaemonCycleResult["refreshes"]> = [];
+
+  for (const refresh of refreshes) {
+    const key = `${refresh.repository}#${refresh.issueNumber}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(refresh);
+  }
+
+  return deduped;
 }
 
 export function advanceSilentOwnOutputSkips(
