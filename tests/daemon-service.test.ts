@@ -32,6 +32,7 @@ describe("daemon service integration", () => {
     expect(readFileSync(result.path, "utf8")).toContain("<string>/usr/local/bin/grovie</string>");
     expect(readFileSync(result.path, "utf8")).toContain("Grovie managed daemon service");
     expect(readFileSync(result.path, "utf8")).toContain("<string>daemon</string>");
+    expect(readFileSync(result.path, "utf8")).not.toContain("<string>run</string>");
     expect(readFileSync(result.path, "utf8")).toContain(`<string>${root}/daemon/stdout.log</string>`);
   });
 
@@ -52,7 +53,8 @@ describe("daemon service integration", () => {
     });
     expect(readFileSync(result.path, "utf8")).toContain("ExecStart=");
     expect(readFileSync(result.path, "utf8")).toContain("Grovie managed daemon service");
-    expect(readFileSync(result.path, "utf8")).toContain("/usr/local/bin/grovie daemon run");
+    expect(readFileSync(result.path, "utf8")).toContain("/usr/local/bin/grovie daemon");
+    expect(readFileSync(result.path, "utf8")).not.toContain("/usr/local/bin/grovie daemon run");
     expect(readFileSync(result.path, "utf8")).toContain(`StandardOutput=append:${root}/daemon/stdout.log`);
   });
 

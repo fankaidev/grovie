@@ -277,7 +277,7 @@ function planRepositoryCycle(input: Pick<DaemonInput, "once" | "github" | "local
   if (input.once || input.github.listRepositoryEvents === undefined) {
     return {
       mode: "full-scan" as const,
-      reason: input.once ? "one-shot daemon run uses a full scan" : "GitHub repository events are unavailable",
+      reason: input.once ? "one-shot daemon cycle uses a full scan" : "GitHub repository events are unavailable",
       eventCount: 0,
     };
   }

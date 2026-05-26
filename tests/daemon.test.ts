@@ -2709,7 +2709,7 @@ describe("runDaemonCycle", () => {
     expect(github.createdComments).toEqual([]);
   });
 
-  it("[UC-DAEMON-04-S14] daemon run owns the enabled admin console in the same daemon process", async () => {
+  it("[UC-DAEMON-04-S14] daemon owns the enabled admin console in the same daemon process", async () => {
     const port = await getAvailablePort();
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });
@@ -2758,7 +2758,7 @@ describe("runDaemonCycle", () => {
     });
   });
 
-  it("[UC-DAEMON-04-S15] daemon run stops the admin console when the daemon stops", async () => {
+  it("[UC-DAEMON-04-S15] daemon stops the admin console when the daemon stops", async () => {
     const port = await getAvailablePort();
     const github = new FakeGitHub([fakeIssue()]);
     const localState = new LocalState({ paths: { root: createTmpDir() } });

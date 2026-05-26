@@ -207,7 +207,7 @@ describe("admin console server", () => {
         status: "running",
         state: {
           pid: 1234,
-          command: ["node", "dist/cli.js", "daemon", "run"],
+          command: ["node", "dist/cli.js", "daemon"],
           startedAt: "2026-05-23T00:00:00.000Z",
           stdoutPath: join(root, "daemon", "stdout.log"),
           stderrPath: join(root, "daemon", "stderr.log"),

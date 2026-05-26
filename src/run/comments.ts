@@ -175,7 +175,7 @@ export function runEventType(status: SessionStatus): "run.succeeded" | "run.fail
 
 export function renderCliRunOutput(summary: RunSummary): string {
   const lines = [
-    "grovie daemon run",
+    "grovie daemon",
     "",
     `Run status: ${summary.status}`,
     `Issue: ${formatIssueReference(summary.issue.reference)}`,

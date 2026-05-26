@@ -60,6 +60,8 @@ describe("CLI command registration", () => {
     expect(runsHelp).not.toContain("grovie runs rerun");
 
     const daemonHelp = runCli(["daemon", "--help"]).stdout;
+    expect(daemonHelp).toContain("grovie daemon [--repo owner/repo] [--label grovie] [--once]");
+    expect(daemonHelp).not.toContain("grovie daemon [run]");
     expect(daemonHelp).toContain("grovie daemon stop [--force]");
     expect(daemonHelp).toContain("grovie daemon logs [--stream combined|stdout|stderr] [--lines 100] [--follow]");
     expect(daemonHelp).toContain("grovie daemon service <install|uninstall|path> [--platform launchd|systemd]");
@@ -1204,7 +1206,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-DAEMON-04-S01] runs the daemon foreground subcommand with built-in defaults", async () => {
+  it("[UC-DAEMON-04-S01] runs the daemon foreground command with built-in defaults", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
@@ -1212,7 +1214,7 @@ describe("CLI command registration", () => {
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
     expect(
-      await runCliAsync(["daemon", "run", "--once"], {
+      await runCliAsync(["daemon", "--once"], {
         cwd,
         localState,
         github: fakeGitHubGateway({
@@ -1238,6 +1240,14 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-DAEMON-04-S01] rejects the removed daemon run alias", async () => {
+    expect(await runCliAsync(["daemon", "run", "--once"])).toEqual({
+      exitCode: 1,
+      stderr: "Unknown daemon subcommand: run. Usage: grovie daemon [--repo owner/repo] [--label grovie] [--once]",
+      stdout: undefined,
+    });
+  });
+
   it("[UC-DAEMON-01-S07] exits clearly when the daemon has no configured local agents", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
@@ -1245,7 +1255,7 @@ describe("CLI command registration", () => {
     runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
 
     expect(
-      await runCliAsync(["daemon", "run", "--once"], {
+      await runCliAsync(["daemon", "--once"], {
         cwd,
         localState,
         github: fakeGitHubGateway(),
@@ -1656,7 +1666,7 @@ function fakeDaemonLifecycle(overrides: Partial<DaemonLifecycle> = {}): DaemonLi
 function fakeDaemonState(root: string, pid: number): Extract<DaemonLifecycleStatus, { status: "running" | "stale" }>["state"] {
   return {
     pid,
-    command: [process.execPath, "/project/dist/cli.js", "daemon", "run"],
+    command: [process.execPath, "/project/dist/cli.js", "daemon"],
     startedAt: "2026-05-23T00:00:00.000Z",
     stdoutPath: `${root}/daemon/stdout.log`,
     stderrPath: `${root}/daemon/stderr.log`,

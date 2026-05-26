@@ -48,7 +48,7 @@ describe("runIssue", () => {
     expect(result).toEqual({
       exitCode: 0,
       stdout: [
-        "grovie daemon run",
+        "grovie daemon",
         "",
         "Run status: succeeded",
         "Issue: fankaidev/grovie#7",

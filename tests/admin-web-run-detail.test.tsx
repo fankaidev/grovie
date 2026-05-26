@@ -27,7 +27,7 @@ describe("admin web home route", () => {
             status: "running",
             state: {
               pid: 321,
-              command: ["grovie", "daemon", "run"],
+              command: ["grovie", "daemon"],
               startedAt: "2026-05-24T13:00:00.000Z",
               stdoutPath: "/state/daemon/stdout.log",
               stderrPath: "/state/daemon/stderr.log",
@@ -167,7 +167,7 @@ describe("admin web home route", () => {
               status: "running",
               state: {
                 pid: 321,
-                command: ["grovie", "daemon", "run"],
+                command: ["grovie", "daemon"],
                 startedAt: "2026-05-24T13:00:00.000Z",
                 stdoutPath: "/state/daemon/stdout.log",
                 stderrPath: "/state/daemon/stderr.log",
