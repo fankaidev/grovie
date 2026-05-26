@@ -83,6 +83,9 @@ export function buildCodexPrompt(input: { issue: GitHubIssue; run: PreparedRun; 
           renderComments(effectiveComments),
         ]
       : [
+          "Session continuation:",
+          "You are resuming the same Grovie issue-agent session. Use prior runtime history as working context, and use the current task snapshot as the source of truth.",
+          "",
           "Current body:",
           "See `.grovie/task.json` for the complete current issue body and full comment history.",
           "",

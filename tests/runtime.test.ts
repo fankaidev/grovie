@@ -158,6 +158,8 @@ describe("CodexRuntime", () => {
     });
 
     expect(prompt).toContain("Recent activity since last run:");
+    expect(prompt).toContain("You are resuming the same Grovie issue-agent session.");
+    expect(prompt).toContain("use the current task snapshot as the source of truth.");
     expect(prompt).toContain("Previous handled cursor: 2026-05-22T00:10:00Z");
     expect(prompt).toContain("Please also update the docs.");
     expect(prompt).not.toContain("This old user comment was already handled.");
@@ -299,7 +301,7 @@ describe("CodexRuntime", () => {
     });
   });
 
-  it("[UC-RUN-02-S07] stores and uses Codex runtime session refs for resume runs", () => {
+  it("[UC-RUN-02-S07] stores and uses Codex runtime session refs across issue-agent runs", () => {
     const root = createTmpDir();
     const firstRun = fakeRun(root);
     const runner = new FakeRunner([
@@ -334,9 +336,10 @@ describe("CodexRuntime", () => {
       `${JSON.stringify({
         issue: 6,
         repository: "fankaidev/grovie",
-        runRequest: {
-          reason: "resume",
-          sourceRunId: firstRun.runId,
+        trigger: {
+          previousHandledCursor: {
+            handledThrough: "2026-05-22T00:00:00Z",
+          },
         },
       }, null, 2)}\n`,
     );
@@ -359,6 +362,30 @@ describe("CodexRuntime", () => {
       ],
     });
     expect(readFileSync(join(resumeRun.runDir, "metadata.json"), "utf8")).toContain("codex-thread-1");
+  });
+
+  it("[UC-RUN-02-S07] starts a new Codex runtime session when no session ref exists", () => {
+    const root = createTmpDir();
+    const run = fakeRun(root);
+    const runner = new FakeRunner([{ stdout: '{"type":"thread.started","thread_id":"codex-thread-1"}\n' }]);
+    const runtime = new CodexRuntime(runner);
+
+    runtime.run({
+      run,
+      issue: fakeIssue(),
+    });
+
+    expect(runner.calls[0]?.args).toEqual([
+      "--ask-for-approval",
+      "never",
+      "exec",
+      "--json",
+      "--cd",
+      run.worktreePath,
+      "--sandbox",
+      "danger-full-access",
+      "-",
+    ]);
   });
 
   it("[UC-RUN-02-S06] returns a clear failure while preserving stdout and stderr logs", () => {
@@ -574,7 +601,7 @@ describe("additional local runtimes", () => {
     });
   });
 
-  it("[UC-RUN-04-S05] resumes Claude Code from a persisted runtime session ref", () => {
+  it("[UC-RUN-04-S05] resumes Claude Code from a persisted runtime session ref across issue-agent runs", () => {
     const root = createTmpDir();
     const run = fakeRun(root, "fankaidev-grovie-issue-6-resume");
     writeFileSync(
@@ -586,19 +613,12 @@ describe("additional local runtimes", () => {
         updatedAt: "2026-05-24T00:00:00.000Z",
       }, null, 2)}\n`,
     );
-    const runtimeSessionRef = {
-      runtime: "claude-code" as const,
-      sessionId: "claude-session-1",
-      createdAt: "2026-05-24T00:00:00.000Z",
-      updatedAt: "2026-05-24T00:00:00.000Z",
-    };
     const runner = new FakeRunner([{ stdout: "done\n" }]);
     const runtime = new ClaudeCodeRuntime(runner);
 
-    const result = runtime.resume({
+    const result = runtime.run({
       run,
       issue: fakeIssue(),
-      runtimeSessionRef,
     });
 
     expect(result).toMatchObject({
@@ -635,7 +655,7 @@ describe("additional local runtimes", () => {
     });
   });
 
-  it("[UC-RUN-04-S05] resumes Pi from a persisted runtime session ref", () => {
+  it("[UC-RUN-04-S05] resumes Pi from a persisted runtime session ref across issue-agent runs", () => {
     const root = createTmpDir();
     const run = fakeRun(root, "fankaidev-grovie-issue-6-pi-resume");
     writeFileSync(
@@ -647,20 +667,10 @@ describe("additional local runtimes", () => {
         updatedAt: "2026-05-24T00:00:00.000Z",
       }, null, 2)}\n`,
     );
-    writeFileSync(
-      run.taskPath,
-      `${JSON.stringify({
-        issue: 6,
-        repository: "fankaidev/grovie",
-        runRequest: {
-          reason: "resume",
-        },
-      }, null, 2)}\n`,
-    );
     const runner = new FakeRunner([{ stdout: "done\n" }]);
     const runtime = new PiRuntime(runner);
 
-    const result = runtime.resume({
+    const result = runtime.run({
       run,
       issue: fakeIssue(),
     });
