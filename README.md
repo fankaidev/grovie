@@ -18,6 +18,8 @@ agents:
   - name: coder
     runtime: codex
 watchedRepositories: []
+daemon:
+  maxConcurrentRuns: 3
 adminConsole:
   enabled: false
 YAML
@@ -70,12 +72,15 @@ agents:
   - name: coder
     runtime: codex
 watchedRepositories: []
+daemon:
+  maxConcurrentRuns: 3
 adminConsole:
   enabled: false
 YAML
 ```
 
 This starts with one local agent. The agent name is combined with this machine's id to form labels and run targets such as `coder@your-machine-id`.
+The daemon concurrency limit caps total local runs across all watched repositories.
 
 Check the local Grovie setup:
 

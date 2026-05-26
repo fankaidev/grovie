@@ -65,6 +65,11 @@ export const globalConfigSchema = z.strictObject({
     branch: z.string().min(1, "must not be empty"),
     syncIntervalSeconds: z.number().int().min(10).max(3600),
   }).optional(),
+  daemon: z.strictObject({
+    maxConcurrentRuns: z.number().int().min(1),
+  }).default({
+    maxConcurrentRuns: 3,
+  }),
   adminConsole: z.strictObject({
     enabled: z.boolean(),
     host: z.string().min(1, "must not be empty").optional(),
@@ -72,7 +77,10 @@ export const globalConfigSchema = z.strictObject({
   }).optional(),
 });
 
-export type GlobalGrovieConfig = z.infer<typeof globalConfigSchema>;
+type ParsedGlobalGrovieConfig = z.infer<typeof globalConfigSchema>;
+export type GlobalGrovieConfig = Omit<ParsedGlobalGrovieConfig, "daemon"> & {
+  daemon?: ParsedGlobalGrovieConfig["daemon"];
+};
 
 export type LoadedGlobalConfig = {
   path: string;
@@ -266,6 +274,9 @@ export function defaultGlobalConfig(): GlobalGrovieConfig {
     version: 1,
     agents: [],
     watchedRepositories: [],
+    daemon: {
+      maxConcurrentRuns: 3,
+    },
     adminConsole: {
       enabled: false,
     },

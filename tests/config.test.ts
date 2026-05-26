@@ -100,6 +100,9 @@ describe("config helpers", () => {
         version: 1,
         agents: [],
         watchedRepositories: [],
+        daemon: {
+          maxConcurrentRuns: 3,
+        },
         adminConsole: {
           enabled: false,
         },
@@ -113,6 +116,65 @@ describe("config helpers", () => {
     expect(loadGlobalConfig(root).config.adminConsole).toEqual({
       enabled: false,
     });
+  });
+
+  it("[UC-DAEMON-01-S08] defaults daemon max concurrent runs to 3", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "agents: []",
+        "watchedRepositories: []",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(loadGlobalConfig(root).config.daemon).toEqual({
+      maxConcurrentRuns: 3,
+    });
+  });
+
+  it("[UC-DAEMON-01-S08] accepts an explicit daemon max concurrent run limit", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "agents: []",
+        "watchedRepositories: []",
+        "daemon:",
+        "  maxConcurrentRuns: 5",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(loadGlobalConfig(root).config.daemon).toEqual({
+      maxConcurrentRuns: 5,
+    });
+  });
+
+  it("[UC-DAEMON-01-S08] rejects invalid daemon max concurrent run limits", () => {
+    const root = createTmpDir();
+
+    for (const value of ["0", "-1", "1.5"]) {
+      writeFileSync(
+        join(root, "config.yml"),
+        [
+          "version: 1",
+          "agents: []",
+          "watchedRepositories: []",
+          "daemon:",
+          `  maxConcurrentRuns: ${value}`,
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      expect(() => loadGlobalConfig(root)).toThrow("daemon.maxConcurrentRuns");
+    }
   });
 
   it("[UC-ADMIN-01-S05] accepts explicitly configured admin console bind hosts", () => {
@@ -189,6 +251,9 @@ describe("config helpers", () => {
           label: "ready",
         },
       ],
+      daemon: {
+        maxConcurrentRuns: 3,
+      },
       adminConsole: {
         enabled: false,
       },
@@ -213,10 +278,14 @@ describe("config helpers", () => {
         branch: "main",
         syncIntervalSeconds: 60,
       },
+      daemon: {
+        maxConcurrentRuns: 3,
+      },
     });
 
     expect(config).toContain("schedules repositories");
     expect(config).toContain("not a security allowlist");
+    expect(config).toContain("maxConcurrentRuns: 3");
     expect(config).toContain("repository: fankaidev/grovie");
     expect(config).toContain("stateRepo:");
     expect(config).toContain("repository: fankaidev/grovie-state");
@@ -253,6 +322,9 @@ describe("config helpers", () => {
         host: "127.0.0.1",
         port: 4317,
       },
+      daemon: {
+        maxConcurrentRuns: 7,
+      },
     });
 
     writeFileSync(join(root, "config.yml"), rendered, "utf8");
@@ -279,6 +351,9 @@ describe("config helpers", () => {
         repository: "fankaidev/grovie-state",
         branch: "main: dev",
         syncIntervalSeconds: 60,
+      },
+      daemon: {
+        maxConcurrentRuns: 7,
       },
       adminConsole: {
         enabled: true,
