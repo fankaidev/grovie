@@ -1,5 +1,5 @@
 import type { Server } from "node:http";
-import type { RuntimeAvailabilityChecker } from "../agent-health.js";
+import type { AgentVerifier, RuntimeAvailabilityChecker } from "../agent-health.js";
 import type { AdminConsoleResolvedConfig, StartedAdminConsole } from "../admin-console.js";
 import type { DaemonLifecycle } from "../daemon-lifecycle.js";
 import type { GitHubGateway } from "../github.js";
@@ -23,6 +23,8 @@ export type CliContext = {
   github: GitHubGateway;
   runtime?: AgentRuntime;
   runtimeAvailabilityChecker?: RuntimeAvailabilityChecker;
+  agentVerifier?: AgentVerifier;
+  progressWriter?: (output: string) => void;
   localState: RunLocalState;
   daemonLifecycle: DaemonLifecycle;
   adminConsolePortCheck: AdminConsolePortCheck;

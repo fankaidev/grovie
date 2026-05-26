@@ -31,6 +31,8 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
     github: context.github ?? new GhGitHubGateway(),
     runtime: context.runtime,
     runtimeAvailabilityChecker: context.runtimeAvailabilityChecker,
+    agentVerifier: context.agentVerifier,
+    progressWriter: context.progressWriter,
     localState: context.localState ?? new LocalState(),
     daemonLifecycle: context.daemonLifecycle ?? new LocalDaemonLifecycle(),
     adminConsolePortCheck: context.adminConsolePortCheck ?? checkAdminConsolePortAvailable,
