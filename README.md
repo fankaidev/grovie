@@ -11,9 +11,20 @@ It keeps execution on your machines while GitHub remains the shared workflow, au
 ```sh
 npm install --global @fankaidev/grovie
 gh auth login
+mkdir -p ~/.grovie
+cat > ~/.grovie/config.yml <<'YAML'
+version: 1
+agents:
+  - name: coder
+    runtime: codex
+watchedRepositories: []
+adminConsole:
+  enabled: false
+YAML
 grovie doctor
+grovie watch add owner/repo --label grovie
 grovie daemon start
-grovie run owner/repo#123 --agent codex
+grovie run owner/repo#123 --agent coder@your-machine-id
 ```
 
 ## Why Grovie?
@@ -50,11 +61,30 @@ grovie --version
 grovie --help
 ```
 
+Create the global worker config:
+
+```sh
+mkdir -p ~/.grovie
+cat > ~/.grovie/config.yml <<'YAML'
+version: 1
+agents:
+  - name: coder
+    runtime: codex
+watchedRepositories: []
+adminConsole:
+  enabled: false
+YAML
+```
+
+This starts with one local agent. The agent name is combined with this machine's id to form labels and run targets such as `coder@your-machine-id`.
+
 Check the machine-level worker setup:
 
 ```sh
 grovie doctor
 ```
+
+Use the `Machine id` and `Configured agents` lines from `grovie doctor` to find the concrete agent id for this machine, such as `coder@kai-mini`.
 
 Add repositories to the global daemon schedule:
 
@@ -73,7 +103,7 @@ grovie daemon status
 Request one issue run from the daemon:
 
 ```sh
-grovie run owner/repo#123 --agent codex
+grovie run owner/repo#123 --agent coder@your-machine-id
 ```
 
 Run the local daemon in the foreground instead:
@@ -92,38 +122,71 @@ grovie daemon --once
 
 1. Create a GitHub issue, such as `Fix failing login test`.
 2. Add the queue label, usually `grovie`.
-3. Grovie sees the issue from the local daemon schedule.
-4. Grovie prepares an isolated worktree under `~/.grovie/`.
-5. The configured local agent receives the issue context and works in that worktree.
-6. If code changes are produced, Grovie commits them to a generated branch and opens a pull request.
-7. Grovie comments back on the issue with the run id, local log paths, branch, and pull request link.
-8. Humans review, merge, or ask the agent to continue using normal GitHub workflow.
+3. Add an assignment label, such as `agent:coder@your-machine-id`, or request an explicit run with `--agent`.
+4. Grovie sees the issue from the local daemon schedule.
+5. Grovie prepares an isolated worktree under `~/.grovie/`.
+6. The configured local agent receives the issue context and works in that worktree.
+7. If code changes are produced, Grovie commits them to a generated branch and opens a pull request.
+8. Grovie comments back on the issue with the run id, local log paths, branch, and pull request link.
+9. Humans review, merge, or ask the agent to continue using normal GitHub workflow.
 
 An explicit run request follows the same execution path and requires a running daemon:
 
 ```sh
-grovie run owner/repo#123 --agent codex
+grovie run owner/repo#123 --agent coder@your-machine-id
 ```
 
 ## How It Works
 
-Grovie is organized around four user-visible areas. The detailed behavior lives in [docs/use-cases](docs/use-cases), with the scenario format described in [docs/bdd.md](docs/bdd.md).
+Grovie splits responsibility between GitHub and the local machine.
+
+GitHub is the control plane. Issues describe work, labels route that work to agents, comments carry human-visible updates, pull requests hold code changes, and CI remains the review gate.
+
+The local machine is the executor. A Grovie daemon runs on your machine, polls the repositories you configured with `grovie watch add`, and starts work only for issues that are eligible for a configured local agent.
+
+```mermaid
+flowchart TD
+  config["~/.grovie/config.yml<br/>local agents + watched repos"]
+  issue["GitHub issue<br/>queue label + agent assignment"]
+  daemon["Local Grovie daemon<br/>polls GitHub and checks eligibility"]
+  run["Local run<br/>one issue-agent execution"]
+  state["~/.grovie/<br/>session worktree + run logs + task handoff"]
+  runtime["Local agent runtime<br/>Codex, Claude Code, or Pi"]
+  result{"Runtime result"}
+  comment["GitHub issue comment<br/>status, reason, local paths, links"]
+  pr["Generated branch + pull request<br/>normal review and CI"]
+  review["Human and agent follow-up<br/>comments, reviews, relabeling, reruns"]
+
+  config --> daemon
+  issue --> daemon
+  daemon --> run
+  run --> state
+  state --> runtime
+  runtime --> result
+  result --> comment
+  result --> pr
+  comment --> review
+  pr --> review
+  review --> issue
+```
+
+The loop has two durable boundaries:
+
+- GitHub holds shared coordination state: issues, labels, comments, pull requests, reviews, and CI.
+- The local machine owns execution state: daemon locks, isolated worktrees, runtime handoff files, stdout/stderr logs, events, and result metadata.
+
+An explicit `grovie run owner/repo#123 --agent coder@your-machine-id` request uses the same daemon-owned execution path. It asks the running daemon to start one run now; it does not bypass local state, logs, worktrees, or safe publishing.
+
+Grovie is organized around four user-visible areas:
 
 | Area | What it owns |
 |------|--------------|
 | Worker | Machine identity, local agents, watched repositories, assignment labels, and daemon polling. |
-| Execution | One concrete agent run for a GitHub issue, including sessions, runtime handoff, logs, cancellation, and local state. |
-| GitHub | Human-visible summaries on issues and pull requests without dumping raw prompts or logs into comments. |
+| Execution | Agent sessions, concrete runs, runtime handoff, logs, cancellation, local state, and safe result classification. |
+| GitHub | Human-visible issue and pull request updates without dumping raw prompts or logs into comments. |
 | State repo | Optional remote sync of local run metadata for observability and recovery. |
 
-The main flow is:
-
-1. Configure the local worker with repositories to watch.
-2. Create or select a GitHub issue.
-3. Request one issue from a running daemon, or let the daemon pick eligible work.
-4. Grovie prepares isolated local state and runs the configured runtime.
-5. Grovie posts a concise issue result.
-6. Grovie publishes the result back to GitHub without pushing to the default branch.
+The detailed behavior lives in [docs/use-cases](docs/use-cases), with the scenario format described in [docs/bdd.md](docs/bdd.md).
 
 ## Agent Coordination Model
 
@@ -141,7 +204,7 @@ This keeps collaboration inspectable: humans and agents coordinate through norma
 
 `grovie doctor` validates the global worker config, then confirms the current `gh` login plus CLI runtime availability.
 
-`grovie run owner/repo#123 --agent coder@machine` requests one explicit issue run from the running daemon. The daemon owns execution, worktree preparation, logging, and publishing.
+`grovie run owner/repo#123 --agent coder@your-machine-id` requests one explicit issue run from the running daemon. The daemon owns execution, worktree preparation, logging, and publishing.
 
 `grovie daemon` polls watched repositories from `~/.grovie/config.yml`, resolves repository policy from each watched repository entry, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
 
@@ -172,17 +235,19 @@ Grovie is a local executor, so it runs with your local filesystem, GitHub creden
 Use this checklist before trusting a new machine or repository:
 
 1. Run `gh auth status` and confirm it is authenticated to the target account.
-2. Run `grovie watch add owner/repo --label grovie` for repositories this machine should poll.
-3. Optionally edit the repository entry in `~/.grovie/config.yml` to set queue label, branch prefix, pull request behavior, or trusted authors.
-4. Run `grovie doctor` and confirm config, GitHub auth, and Codex availability are green.
-5. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
-6. Start the daemon with `grovie daemon start`.
-7. Run `grovie run owner/repo#123 --agent codex` from any directory.
-8. Confirm the issue receives a Grovie result comment with a run id and local run directory.
-9. For code-change runs, confirm Grovie publishes a generated branch and links the result from the issue.
-10. Confirm no direct push was made to the default branch.
-11. Run `grovie daemon --once` against another labeled issue.
-12. Add `/grovie cancel` to a running issue and confirm the daemon marks it canceled.
+2. Create `~/.grovie/config.yml` with at least one configured local agent.
+3. Run `grovie doctor` and confirm config, GitHub auth, and local agent runtime availability are green.
+4. Note the concrete agent id shown by `grovie doctor`, such as `coder@your-machine-id`.
+5. Run `grovie watch add owner/repo --label grovie` for repositories this machine should poll.
+6. Optionally edit the repository entry in `~/.grovie/config.yml` to set queue label, branch prefix, pull request behavior, or trusted authors.
+7. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
+8. Start the daemon with `grovie daemon start`.
+9. Run `grovie run owner/repo#123 --agent coder@your-machine-id` from any directory.
+10. Confirm the issue receives a Grovie result comment with a run id and local run directory.
+11. For code-change runs, confirm Grovie publishes a generated branch and links the result from the issue.
+12. Confirm no direct push was made to the default branch.
+13. Run `grovie daemon --once` against another labeled issue.
+14. Add `/grovie cancel` to a running issue and confirm the daemon marks it canceled.
 
 ## Contributing
 
