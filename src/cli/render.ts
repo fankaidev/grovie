@@ -28,18 +28,12 @@ export function renderCommandHelp(command: CliCommand): string {
     .split("\n")
     .map((line) => "  " + line);
 
-  const lines = [
+  return [
     "grovie " + command.name,
     "",
     command.description,
     "",
     "Usage:",
     usageLines.join("\n"),
-  ];
-
-  if (command.issue !== undefined) {
-    lines.push("", "Tracked by " + command.issue + ".");
-  }
-
-  return lines.join("\n");
+  ].join("\n");
 }

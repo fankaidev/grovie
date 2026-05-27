@@ -66,6 +66,7 @@ describe("CLI command registration", () => {
     expect(daemonHelp).toContain("grovie daemon stop [--force]");
     expect(daemonHelp).toContain("grovie daemon logs [--stream combined|stdout|stderr] [--lines 100] [--follow]");
     expect(daemonHelp).toContain("grovie daemon service <install|uninstall|path> [--platform launchd|systemd]");
+    expect(daemonHelp).not.toContain("Tracked by");
 
     expect(runCli(["watch", "--help"]).stderr).toContain("Unknown command: watch");
   });
