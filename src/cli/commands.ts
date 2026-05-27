@@ -3,11 +3,8 @@ import { doctorCommand } from "./command-modules/doctor.js";
 import { statusCommand } from "./command-modules/status.js";
 import { runsCommand } from "./command-modules/runs.js";
 import { issueCommand } from "./command-modules/issue.js";
-import { queueCommand } from "./command-modules/queue.js";
 import { daemonCommand } from "./command-modules/daemon.js";
 import { stateCommand } from "./command-modules/state.js";
-import { adminCommand } from "./command-modules/admin.js";
-import { watchCommand } from "./command-modules/watch.js";
 import type { CliCommand } from "./types.js";
 
 export const commands: readonly CliCommand[] = [
@@ -16,9 +13,6 @@ export const commands: readonly CliCommand[] = [
   statusCommand,
   runsCommand,
   issueCommand,
-  queueCommand,
   daemonCommand,
   stateCommand,
-  adminCommand,
-  watchCommand,
 ];

@@ -16,10 +16,8 @@ import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "../../cl
 import { NO_LOCAL_AGENTS_MESSAGE, runDaemon, runDaemonForRepositories } from "../../daemon.js";
 import { followDaemonLogs, parseDaemonLogStream, readDaemonLogs } from "../../daemon-logs.js";
 import { renderDaemonLifecycleStatus } from "../../daemon-lifecycle.js";
-import { getDaemonServicePath, installDaemonService, parseDaemonServicePlatform, renderDaemonServiceResult, uninstallDaemonService } from "../../daemon-service.js";
 import { formatIssueReference, parseIssueReference } from "../../github.js";
 import { resolveLocalIdentity } from "../../identity.js";
-import { inspectQueue, renderQueueInspection } from "../../queue.js";
 import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail, renderRunsList } from "../../status.js";
 import { initStateRepository } from "../../state-repo.js";
 import {
@@ -42,12 +40,10 @@ export const daemonCommand = {
     name: "daemon",
     description: "Run and control the local Grovie daemon.",
     usage: [
-      "grovie daemon [--repo owner/repo] [--label grovie] [--once]",
       "grovie daemon start",
       "grovie daemon stop [--force]",
       "grovie daemon status",
       "grovie daemon logs [--stream combined|stdout|stderr] [--lines 100] [--follow]",
-      "grovie daemon service <install|uninstall|path> [--platform launchd|systemd]",
     ].join("\n"),
     issue: "#77",
     run: (args: string[], context: CliContext) => {
@@ -77,8 +73,8 @@ export const daemonCommand = {
 
         if (adminConsole.enabled) {
           return context.adminConsolePortCheck(adminConsole)
-            .then(() => startDaemonProcess(args, context))
-            .catch(errorResult);
+            .then(() => startDaemonProcess(args, context, adminConsole))
+            .catch((error: unknown) => errorResult(explainDaemonStartPortError(error)));
         }
 
         return startDaemonProcess(args, context);
@@ -187,143 +183,117 @@ export const daemonCommand = {
         }
       }
 
-      if (subcommand === "service") {
-        const action = args[1];
-
-        if (action !== "install" && action !== "uninstall" && action !== "path") {
-          return {
-            exitCode: 1,
-            stderr: "Missing daemon service action. Usage: grovie daemon service <install|uninstall|path> [--platform launchd|systemd]",
-          };
-        }
-
-        const argValidation = validateCliArgs(args.slice(1), {
-          positionals: {
-            min: 1,
-            max: 1,
-            label: "daemon service action",
-          },
-          valueOptions: ["--platform"],
-        });
-
-        if (!argValidation.ok) {
-          return argValidation.result;
-        }
-
-        const platformOption = readStringOption(args.slice(2), "--platform");
-
-        if (!platformOption.ok) {
-          return platformOption.result;
-        }
-
-        const platform = parseDaemonServicePlatform(platformOption.value);
-
-        if (platformOption.value !== undefined && platform === undefined) {
-          return {
-            exitCode: 1,
-            stderr: "Invalid --platform value. Use launchd or systemd.",
-          };
-        }
+      if (subcommand === "worker" && process.env.GROVIE_DAEMON_TOKEN !== undefined) {
+        const workerArgs = args.slice(1);
 
         try {
-          const input = {
-            paths: context.localState.getPaths(),
-            platform,
-          };
-          const result = action === "install"
-            ? installDaemonService(input)
-            : action === "uninstall"
-              ? uninstallDaemonService(input)
-              : getDaemonServicePath(input);
+          const argValidation = validateCliArgs(workerArgs, {
+            valueOptions: ["--repo", "--label"],
+            flags: ["--once"],
+          });
 
-          return {
-            exitCode: 0,
-            stdout: renderDaemonServiceResult(action, result),
-          };
-        } catch (error) {
-          return errorResult(error);
-        }
-      }
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
 
-      if (subcommand !== undefined && !subcommand.startsWith("-")) {
-        return {
-          exitCode: 1,
-          stderr: `Unknown daemon subcommand: ${subcommand}. Usage: grovie daemon [--repo owner/repo] [--label grovie] [--once]`,
-        };
-      }
+          const normalizedRepoOption = readStringOption(workerArgs, "--repo");
 
-      const runArgs = args;
+          if (!normalizedRepoOption.ok) {
+            return normalizedRepoOption.result;
+          }
 
-      try {
-        const argValidation = validateCliArgs(runArgs, {
-          valueOptions: ["--repo", "--label"],
-          flags: ["--once"],
-        });
+          const normalizedLabelOption = readStringOption(workerArgs, "--label");
 
-        if (!argValidation.ok) {
-          return argValidation.result;
-        }
+          if (!normalizedLabelOption.ok) {
+            return normalizedLabelOption.result;
+          }
 
-        const normalizedRepoOption = readStringOption(runArgs, "--repo");
+          const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+          const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
 
-        if (!normalizedRepoOption.ok) {
-          return normalizedRepoOption.result;
-        }
+          if (normalizedRepoOption.value !== undefined) {
+            const resolvedConfig = resolveRepositoryConfig(normalizedRepoOption.value, globalConfig);
 
-        const normalizedLabelOption = readStringOption(runArgs, "--label");
+            return runDaemon({
+              repository: normalizedRepoOption.value,
+              label: normalizedLabelOption.value ?? resolvedConfig.config.queue.label,
+              config: resolvedConfig.config,
+              configPath: resolvedConfig.path ?? "built-in defaults",
+              github: context.github,
+              runtime: context.runtime,
+              localState: context.localState,
+              stateRepo: resolveEnabledStateRepo(globalConfig.config),
+              localAgents,
+              once: workerArgs.includes("--once"),
+              maxConcurrentRuns: globalConfig.config.daemon?.maxConcurrentRuns ?? 3,
+              adminConsole: resolveAdminConsoleConfig(globalConfig.config),
+              daemonLifecycle: context.daemonLifecycle,
+            });
+          }
 
-        if (!normalizedLabelOption.ok) {
-          return normalizedLabelOption.result;
-        }
+          return runDaemonForRepositories({
+            repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => {
+              const config = resolveWatchedRepositoryConfig(watchedRepository);
 
-        const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
-        const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
-
-        if (normalizedRepoOption.value !== undefined) {
-          const resolvedConfig = resolveRepositoryConfig(normalizedRepoOption.value, globalConfig);
-
-          return runDaemon({
-            repository: normalizedRepoOption.value,
-            label: normalizedLabelOption.value ?? resolvedConfig.config.queue.label,
-            config: resolvedConfig.config,
-            configPath: resolvedConfig.path ?? "built-in defaults",
+              return {
+                repository: watchedRepository.repository,
+                label: normalizedLabelOption.value ?? config.queue.label,
+                config,
+                configPath: globalConfig.path,
+              };
+            }),
+            config: defaultConfig(),
+            configPath: "built-in defaults",
             github: context.github,
             runtime: context.runtime,
             localState: context.localState,
             stateRepo: resolveEnabledStateRepo(globalConfig.config),
             localAgents,
-            once: runArgs.includes("--once"),
+            once: workerArgs.includes("--once"),
             maxConcurrentRuns: globalConfig.config.daemon?.maxConcurrentRuns ?? 3,
             adminConsole: resolveAdminConsoleConfig(globalConfig.config),
             daemonLifecycle: context.daemonLifecycle,
           });
+        } catch (error) {
+          return errorResult(error);
         }
-
-        return runDaemonForRepositories({
-          repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => {
-            const config = resolveWatchedRepositoryConfig(watchedRepository);
-
-            return {
-              repository: watchedRepository.repository,
-              label: normalizedLabelOption.value ?? config.queue.label,
-              config,
-              configPath: globalConfig.path,
-            };
-          }),
-          config: defaultConfig(),
-          configPath: "built-in defaults",
-          github: context.github,
-          runtime: context.runtime,
-          localState: context.localState,
-          stateRepo: resolveEnabledStateRepo(globalConfig.config),
-          localAgents,
-          once: runArgs.includes("--once"),
-          maxConcurrentRuns: globalConfig.config.daemon?.maxConcurrentRuns ?? 3,
-          adminConsole: resolveAdminConsoleConfig(globalConfig.config),
-          daemonLifecycle: context.daemonLifecycle,
-        });
-      } catch (error) {
-        return errorResult(error);
       }
+
+      if (subcommand === undefined) {
+        return {
+          exitCode: 1,
+          stderr: "Missing daemon subcommand. Usage: grovie daemon <start|stop|status|logs>",
+        };
+      }
+
+      if (subcommand.startsWith("-")) {
+        const argValidation = validateCliArgs(args);
+
+        return argValidation.ok
+          ? {
+            exitCode: 1,
+            stderr: "Missing daemon subcommand. Usage: grovie daemon <start|stop|status|logs>",
+          }
+          : argValidation.result;
+      }
+
+      return {
+        exitCode: 1,
+        stderr: `Unknown daemon subcommand: ${subcommand}. Usage: grovie daemon <start|stop|status|logs>`,
+      };
     },
   } satisfies CliCommand;
+
+function explainDaemonStartPortError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (!/^Admin console port \d+ is unavailable on .+\.$/.test(message)) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  return new Error([
+    message,
+    "Another Grovie daemon or local process may already be using that port.",
+    "Run `grovie daemon status` to check the recorded daemon, or choose another `adminConsole.port` in ~/.grovie/config.yml.",
+  ].join("\n"));
+}

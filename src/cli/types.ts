@@ -12,6 +12,11 @@ export type CliResult = {
   stderr?: string;
 };
 
+export type CliTerminal = {
+  isInteractive: boolean;
+  prompt: (question: string) => Promise<string>;
+};
+
 export type AdminConsolePortCheck = (config: AdminConsoleResolvedConfig) => Promise<void>;
 export type AdminConsoleStarter = (input: {
   config: AdminConsoleResolvedConfig;
@@ -25,6 +30,7 @@ export type CliContext = {
   runtimeAvailabilityChecker?: RuntimeAvailabilityChecker;
   agentVerifier?: AgentVerifier;
   progressWriter?: (output: string) => void;
+  terminal: CliTerminal;
   localState: RunLocalState;
   daemonLifecycle: DaemonLifecycle;
   adminConsolePortCheck: AdminConsolePortCheck;
@@ -35,6 +41,6 @@ export type CliCommand = {
   name: string;
   description: string;
   usage: string;
-  issue: string;
+  issue?: string;
   run: (args: string[], context: CliContext) => CliResult | Promise<CliResult>;
 };

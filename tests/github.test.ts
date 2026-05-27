@@ -571,10 +571,53 @@ describe("GhGitHubGateway", () => {
       },
     });
   });
+
+  it("[UC-DAEMON-01-S10] lists recent repositories through gh repo list", () => {
+    const runner = new FakeRunner([
+      {
+        stdout: JSON.stringify([
+          {
+            nameWithOwner: "fankaidev/grovie",
+            isPrivate: false,
+            updatedAt: "2026-05-27T14:17:06Z",
+          },
+          {
+            nameWithOwner: "fankaidev/qstory",
+            isPrivate: true,
+            updatedAt: "2026-05-23T01:22:59Z",
+          },
+        ]),
+      },
+    ]);
+    const gateway = new GhGitHubGateway(runner);
+
+    expect(gateway.listRecentRepositories(2)).toEqual({
+      ok: true,
+      value: [
+        {
+          repository: "fankaidev/grovie",
+          private: false,
+          updatedAt: "2026-05-27T14:17:06Z",
+        },
+        {
+          repository: "fankaidev/qstory",
+          private: true,
+          updatedAt: "2026-05-23T01:22:59Z",
+        },
+      ],
+    });
+    expect(runner.calls).toEqual([
+      {
+        command: "gh",
+        args: ["repo", "list", "--limit", "2", "--json", "nameWithOwner,isPrivate,updatedAt"],
+        input: undefined,
+      },
+    ]);
+  });
 });
 
 describe("SpawnCommandRunner", () => {
-  it("[UC-DAEMON-03-S09] applies command timeouts", () => {
+  it("applies command timeouts", () => {
     const runner = new SpawnCommandRunner({ timeoutMs: 10 });
     const result = runner.run(process.execPath, ["-e", "setTimeout(() => {}, 1000)"]);
 

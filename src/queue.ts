@@ -14,7 +14,7 @@ import type { RunLocalState } from "./run.js";
 
 export { getIssueActivity } from "./queue/activity.js";
 export { compareRunnableCandidates, getIssuePriority, selectNextRunnableCandidate, selectRunnableCandidates } from "./queue/candidates.js";
-export { renderQueueInspection, renderSkippedQueueSummary } from "./queue/render.js";
+export { renderSkippedQueueSummary } from "./queue/render.js";
 export type { IssueActivity, IssueActivityTrigger } from "./queue/activity.js";
 
 export type QueueRepositoryInput = {

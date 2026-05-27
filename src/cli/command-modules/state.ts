@@ -13,10 +13,8 @@ import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "../../cl
 import { NO_LOCAL_AGENTS_MESSAGE, runDaemon, runDaemonForRepositories } from "../../daemon.js";
 import { followDaemonLogs, parseDaemonLogStream, readDaemonLogs } from "../../daemon-logs.js";
 import { renderDaemonLifecycleStatus } from "../../daemon-lifecycle.js";
-import { getDaemonServicePath, installDaemonService, parseDaemonServicePlatform, renderDaemonServiceResult, uninstallDaemonService } from "../../daemon-service.js";
 import { formatIssueReference, parseIssueReference } from "../../github.js";
 import { resolveLocalIdentity } from "../../identity.js";
-import { inspectQueue, renderQueueInspection } from "../../queue.js";
 import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail, renderRunsList } from "../../status.js";
 import { initStateRepository } from "../../state-repo.js";
 import {

@@ -32,6 +32,7 @@ describe("LocalDaemonLifecycle", () => {
       throw new Error(startResult.message);
     }
 
+    expect(startResult.state.command).toContain("worker");
     expect(lifecycle.stop({ root })).toEqual({
       ok: false,
       message: `Refusing to stop pid ${startResult.state.pid} because it does not match the recorded Grovie daemon token.`,

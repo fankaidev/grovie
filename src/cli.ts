@@ -1,17 +1,51 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { runCliAsync } from "./cli-app.js";
+import type { CliTerminal } from "./cli/types.js";
 
 export async function main(args: string[]): Promise<number> {
-  const result = await runCliAsync(args, {
-    progressWriter: (output) => writeOutput(process.stdout, output),
+  const { terminal, close } = createTerminal();
+
+  try {
+    const result = await runCliAsync(args, {
+      progressWriter: (output) => writeOutput(process.stdout, output),
+      terminal,
+    });
+
+    writeOutput(process.stdout, result.stdout);
+    writeOutput(process.stderr, result.stderr);
+
+    return result.exitCode;
+  } finally {
+    close();
+  }
+}
+
+function createTerminal(): { terminal: CliTerminal; close: () => void } {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return {
+      terminal: {
+        isInteractive: false,
+        prompt: async () => "",
+      },
+      close: () => {},
+    };
+  }
+
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout,
   });
 
-  writeOutput(process.stdout, result.stdout);
-  writeOutput(process.stderr, result.stderr);
-
-  return result.exitCode;
+  return {
+    terminal: {
+      isInteractive: true,
+      prompt: (question) => readline.question(question),
+    },
+    close: () => readline.close(),
+  };
 }
 
 function writeOutput(stream: NodeJS.WriteStream, output: string | undefined): void {

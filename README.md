@@ -9,7 +9,6 @@ Grovie is a local-first, GitHub-native multi-agent platform for coordinating cod
 It keeps execution on your machines while GitHub remains the shared workflow, audit trail, and review surface. Agents run locally with your tools, credentials, prompts, and runtime permissions; coordination happens through the GitHub artifacts your team already uses.
 
 ```sh
-npm install --global @fankaidev/grovie
 gh auth login
 mkdir -p ~/.grovie
 cat > ~/.grovie/config.yml <<'YAML'
@@ -17,15 +16,16 @@ version: 1
 agents:
   - name: coder
     runtime: codex
-watchedRepositories: []
+watchedRepositories:
+  - repository: owner/repo
+    label: grovie
 daemon:
   maxConcurrentRuns: 3
 adminConsole:
   enabled: false
 YAML
-grovie doctor
-grovie watch add owner/repo --label grovie
-grovie daemon start
+npx @fankaidev/grovie@latest doctor
+npx @fankaidev/grovie@latest daemon start
 ```
 
 ## Why Grovie?
@@ -54,12 +54,11 @@ Prerequisites:
 - Node.js 20 or newer
 - A local agent runtime such as Codex CLI, Claude Code, or Pi
 
-Install Grovie:
+Run Grovie with `npx`:
 
 ```sh
-npm install --global @fankaidev/grovie
-grovie --version
-grovie --help
+npx @fankaidev/grovie@latest --version
+npx @fankaidev/grovie@latest --help
 ```
 
 Create the global Grovie config:
@@ -71,7 +70,9 @@ version: 1
 agents:
   - name: coder
     runtime: codex
-watchedRepositories: []
+watchedRepositories:
+  - repository: owner/repo
+    label: grovie
 daemon:
   maxConcurrentRuns: 3
 adminConsole:
@@ -85,43 +86,33 @@ The daemon concurrency limit caps total local runs across all watched repositori
 Check the local Grovie setup:
 
 ```sh
-grovie doctor
+npx @fankaidev/grovie@latest doctor
 ```
 
 Use the `Machine id` and `Configured agents` lines from `grovie doctor` to find the concrete agent id for this machine, such as `coder@kai-mini`.
 
-Add repositories to the global daemon schedule:
-
-```sh
-grovie watch add owner/repo --label grovie
-grovie watch list
-```
+Add repositories to the global daemon schedule by editing `watchedRepositories` in `~/.grovie/config.yml`.
 
 Start the local daemon:
 
 ```sh
-grovie daemon start
-grovie daemon status
+npx @fankaidev/grovie@latest daemon start
+npx @fankaidev/grovie@latest daemon status
 ```
 
 Trigger issue work through GitHub:
 
 ```sh
 gh issue edit 123 --repo owner/repo --add-label grovie
-grovie issue assign owner/repo#123 coder@your-machine-id
+npx @fankaidev/grovie@latest issue assign owner/repo#123 coder@your-machine-id
 gh issue comment 123 --repo owner/repo --body "Please start."
 ```
 
-Run the local daemon in the foreground instead:
+Inspect the background daemon when needed:
 
 ```sh
-grovie daemon
-```
-
-Use `--once` when you want exactly one polling cycle:
-
-```sh
-grovie daemon --once
+npx @fankaidev/grovie@latest daemon status
+npx @fankaidev/grovie@latest daemon logs
 ```
 
 ## Example Workflow
@@ -144,7 +135,7 @@ Grovie splits responsibility between GitHub and the local machine.
 
 GitHub is the control plane. Issues describe work, labels route that work to agents, comments carry human-visible updates, pull requests hold code changes, and CI remains the review gate.
 
-The local machine is the executor. A Grovie daemon runs on your machine, polls the repositories you configured with `grovie watch add`, and starts work only for issues that are eligible for a configured local agent.
+The local machine is the executor. A Grovie daemon runs on your machine, polls the repositories configured in `~/.grovie/config.yml`, and starts work only for issues that are eligible for a configured local agent.
 
 ```mermaid
 flowchart TD
@@ -200,17 +191,21 @@ This keeps collaboration inspectable: humans and agents coordinate through norma
 
 ## Commands
 
-`grovie watch add owner/repo` creates or updates the global daemon schedule in `~/.grovie/config.yml`. `grovie watch list` shows the configured repositories, and `grovie watch remove owner/repo` removes a repository from that schedule.
+Edit `watchedRepositories` in `~/.grovie/config.yml` to control the global daemon schedule. Each entry can include the repository, queue label, branch policy, and trusted authors in one visible config block.
 
-`grovie init` writes the global Grovie config at `~/.grovie/config.yml` when needed.
+```yaml
+watchedRepositories:
+  - repository: owner/repo
+    label: grovie
+```
+
+`grovie init` creates the global Grovie config at `~/.grovie/config.yml`. In an interactive terminal it can pick a watched repository from the current GitHub remote or recent GitHub repositories, enable detected local runtimes as agents, and enable the local-only admin console. Existing configs are kept unless you confirm replacement; scripts can use `grovie init --yes` or `grovie init --force --yes`.
 
 `grovie doctor` validates the global Grovie config, then confirms the current `gh` login plus CLI runtime availability.
 
 `grovie issue assign owner/repo#123 coder@your-machine-id` adds the matching `agent:...` issue label. `grovie issue unassign owner/repo#123 coder@your-machine-id` removes it.
 
-`grovie daemon` polls watched repositories from `~/.grovie/config.yml`, resolves repository policy from each watched repository entry, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
-
-`grovie daemon service install --platform launchd|systemd` writes an optional user service file for macOS LaunchAgent or Linux systemd user service integration. The generated service runs locally and writes stdout/stderr under `~/.grovie/daemon`.
+`grovie daemon start` polls watched repositories from `~/.grovie/config.yml` in a local background process, resolves repository policy from each watched repository entry, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
 
 `grovie status` and `grovie runs list` show recent local session status, issue identity, branches, log paths, and last event time. `grovie runs show <run-id>` shows the worktree, run directory, stdout/stderr logs, and recent events for one run.
 
@@ -220,7 +215,7 @@ This keeps collaboration inspectable: humans and agents coordinate through norma
 
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The safety boundary is intentionally simple:
 
-- `grovie daemon` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
+- `grovie daemon start` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
 - Automatic daemon queue runs require the issue creator to be trusted by watched repository policy; when no trusted authors are configured, the authenticated `gh` user is trusted by default.
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
@@ -239,8 +234,8 @@ Use this checklist before trusting a new machine or repository:
 2. Create `~/.grovie/config.yml` with at least one configured local agent.
 3. Run `grovie doctor` and confirm config, GitHub auth, and local agent runtime availability are green.
 4. Note the concrete agent id shown by `grovie doctor`, such as `coder@your-machine-id`.
-5. Run `grovie watch add owner/repo --label grovie` for repositories this machine should poll.
-6. Optionally edit the repository entry in `~/.grovie/config.yml` to set queue label, branch prefix, or trusted authors.
+5. Edit `watchedRepositories` in `~/.grovie/config.yml` for repositories this machine should poll.
+6. Optionally set queue label, branch prefix, or trusted authors on each repository entry.
 7. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
 8. Start the daemon with `grovie daemon start`.
 9. Assign the issue with `grovie issue assign owner/repo#123 coder@your-machine-id`.
@@ -248,8 +243,7 @@ Use this checklist before trusting a new machine or repository:
 11. Confirm the issue receives a Grovie result comment with a run id and local run directory.
 12. For code-change runs, confirm Grovie publishes a generated branch and links the result from the issue.
 13. Confirm no direct push was made to the default branch.
-14. Run `grovie daemon --once` against another labeled issue.
-15. Add `/grovie cancel` to a running issue and confirm the daemon marks it canceled.
+14. Add `/grovie cancel` to a running issue and confirm the daemon marks it canceled.
 
 ## Isolated Smoke Validation
 

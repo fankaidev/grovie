@@ -32,7 +32,9 @@ agents:
   - name: coder
     runtime: codex
     envKeys: []
-watchedRepositories: []
+watchedRepositories:
+  - repository: owner/repo
+    label: grovie
 adminConsole:
   enabled: false
 ```
@@ -48,13 +50,14 @@ grovie doctor
 
 Use the `Machine id` and `Configured agents` lines from `grovie doctor` to find the exact agent id for labels.
 
-## Watch Repositories
+## Watched Repositories
 
-Add repositories to the daemon schedule:
+Add repositories to the daemon schedule by editing `watchedRepositories` in `~/.grovie/config.yml`:
 
-```sh
-grovie watch add owner/repo --label grovie
-grovie watch list
+```yaml
+watchedRepositories:
+  - repository: owner/repo
+    label: grovie
 ```
 
 `watchedRepositories` is scheduling configuration, not a security allowlist. Repository-specific policy, when needed, belongs inside the matching watched repository entry in `~/.grovie/config.yml`.
@@ -108,9 +111,6 @@ To make an assigned agent act again, create visible GitHub issue activity such a
 Use local inspection commands before guessing:
 
 ```sh
-grovie queue list
-grovie queue list --repo owner/repo
-grovie queue list --json
 grovie runs list
 grovie runs show <run-id>
 grovie status
