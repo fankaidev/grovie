@@ -16,7 +16,6 @@ import { renderDaemonLifecycleStatus } from "../../daemon-lifecycle.js";
 import { getDaemonServicePath, installDaemonService, parseDaemonServicePlatform, renderDaemonServiceResult, uninstallDaemonService } from "../../daemon-service.js";
 import { formatIssueReference, parseIssueReference } from "../../github.js";
 import { resolveLocalIdentity } from "../../identity.js";
-import { inspectQueue, renderQueueInspection } from "../../queue.js";
 import { findLocalRun, listLocalRuns, renderLocalStatusOverview, renderRunDetail, renderRunsList, type LocalRunSummary } from "../../status.js";
 import { initStateRepository } from "../../state-repo.js";
 import {

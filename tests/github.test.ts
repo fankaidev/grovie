@@ -574,7 +574,7 @@ describe("GhGitHubGateway", () => {
 });
 
 describe("SpawnCommandRunner", () => {
-  it("[UC-DAEMON-03-S09] applies command timeouts", () => {
+  it("applies command timeouts", () => {
     const runner = new SpawnCommandRunner({ timeoutMs: 10 });
     const result = runner.run(process.execPath, ["-e", "setTimeout(() => {}, 1000)"]);
 

@@ -90,7 +90,7 @@ export async function runDaemonForRepositories(input: MultiRepositoryDaemonInput
 
     return {
       exitCode: 1,
-      stderr: "No watched repositories configured. Add one with `grovie watch add owner/repo`.",
+      stderr: "No watched repositories configured. Edit watchedRepositories in ~/.grovie/config.yml.",
     };
   }
 
