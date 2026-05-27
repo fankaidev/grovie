@@ -1,5 +1,4 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -22,11 +21,11 @@ afterEach(() => {
 });
 
 describe("CLI command registration", () => {
-  it("registers issue assignment, daemon, and admin commands", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "daemon", "state", "admin"]);
+  it("registers issue assignment and daemon commands", () => {
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "daemon", "state"]);
   });
 
-  it("renders help with daemon and admin commands", () => {
+  it("[UC-ADMIN-01-S08] renders help with daemon commands", () => {
     const help = renderHelp();
 
     expect(help).toContain("grovie <command>");
@@ -38,8 +37,8 @@ describe("CLI command registration", () => {
     expect(help).not.toContain("queue");
     expect(help).toContain("daemon");
     expect(help).toContain("state");
-    expect(help).toContain("admin");
     expect(help).not.toContain("watch");
+    expect(help).not.toContain("admin");
   });
 
   it("accepts pnpm script argument separators", () => {
@@ -106,10 +105,7 @@ describe("CLI command registration", () => {
       exitCode: 1,
       stderr: "Missing value for --repo.",
     });
-    await expect(runCliAsync(["admin", "serve", "--bogus"], { localState })).resolves.toEqual({
-      exitCode: 1,
-      stderr: "Unknown option: --bogus",
-    });
+    expect(runCli(["admin", "serve"], { localState }).stderr).toContain("Unknown command: admin");
   });
 
   it("reports the package version through long and short flags", () => {
@@ -503,53 +499,6 @@ describe("CLI command registration", () => {
     ).toEqual({
       exitCode: 1,
       stderr: "gh auth required",
-    });
-  });
-
-  it("[UC-ADMIN-01-S01] fails clearly when the admin console is disabled", async () => {
-    const localState = new FakeLocalState(createTmpDir());
-
-    await expect(runCliAsync(["admin", "serve"], { localState })).resolves.toEqual({
-      exitCode: 1,
-      stderr: "Admin console is disabled. Set adminConsole.enabled: true in the global config.",
-    });
-  });
-
-  it("[UC-ADMIN-01-S05] serves the admin console at the configured host", async () => {
-    const localState = new FakeLocalState(createTmpDir());
-    saveGlobalConfig(localState.paths.root, {
-      version: 1,
-      agents: [],
-      watchedRepositories: [],
-      adminConsole: {
-        enabled: true,
-        host: "localhost",
-        port: 9876,
-      },
-    });
-
-    await expect(runCliAsync(["admin", "serve"], {
-      localState,
-      adminConsoleStarter: async ({ config, server }) => {
-        expect(config).toEqual({
-          enabled: true,
-          host: "localhost",
-          port: 9876,
-        });
-        expect(server).toBeDefined();
-
-        return {
-          server: createServer(),
-          url: "http://localhost:9876",
-        };
-      },
-    })).resolves.toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie admin serve",
-        "",
-        "Admin console listening at http://localhost:9876.",
-      ].join("\n"),
     });
   });
 

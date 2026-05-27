@@ -5,7 +5,6 @@ import { runsCommand } from "./command-modules/runs.js";
 import { issueCommand } from "./command-modules/issue.js";
 import { daemonCommand } from "./command-modules/daemon.js";
 import { stateCommand } from "./command-modules/state.js";
-import { adminCommand } from "./command-modules/admin.js";
 import type { CliCommand } from "./types.js";
 
 export const commands: readonly CliCommand[] = [
@@ -16,5 +15,4 @@ export const commands: readonly CliCommand[] = [
   issueCommand,
   daemonCommand,
   stateCommand,
-  adminCommand,
 ];
