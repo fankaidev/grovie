@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { GhGitHubGateway, type CommandResult, type CommandRunner, parseIssueReference } from "../src/github.js";
+import { GhGitHubGateway, SpawnCommandRunner, type CommandResult, type CommandRunner, parseIssueReference } from "../src/github.js";
 
 describe("parseIssueReference", () => {
-  it("[UC-RUN-01-S01] parses owner/repo issue references", () => {
+  it("parses owner/repo issue references", () => {
     expect(parseIssueReference("fankaidev/grovie#123")).toEqual({
       ok: true,
       value: {
@@ -13,7 +13,7 @@ describe("parseIssueReference", () => {
     });
   });
 
-  it("[UC-RUN-01-S01] rejects invalid issue references with structured errors", () => {
+  it("rejects invalid issue references with structured errors", () => {
     expect(parseIssueReference("fankaidev/grovie/extra#123")).toEqual({
       ok: false,
       error: {
@@ -23,7 +23,7 @@ describe("parseIssueReference", () => {
     });
   });
 
-  it("[UC-RUN-01-S01] rejects zero, missing, and non-numeric issue numbers", () => {
+  it("rejects zero, missing, and non-numeric issue numbers", () => {
     for (const value of ["fankaidev/grovie#0", "fankaidev/grovie#", "fankaidev/grovie#abc"]) {
       expect(parseIssueReference(value)).toEqual({
         ok: false,
@@ -570,6 +570,16 @@ describe("GhGitHubGateway", () => {
         stderr: "not authenticated",
       },
     });
+  });
+});
+
+describe("SpawnCommandRunner", () => {
+  it("[UC-DAEMON-03-S09] applies command timeouts", () => {
+    const runner = new SpawnCommandRunner({ timeoutMs: 10 });
+    const result = runner.run(process.execPath, ["-e", "setTimeout(() => {}, 1000)"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("ETIMEDOUT");
   });
 });
 

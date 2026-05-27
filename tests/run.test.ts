@@ -803,7 +803,7 @@ describe("runIssue", () => {
     expect(github.comments[0]).toContain("- Error: git clone failed");
   });
 
-  it("[UC-RUN-01-S01] rejects issue references that do not match the runner repository before reading from GitHub", () => {
+  it("rejects issue references that do not match the runner repository before reading from GitHub", () => {
     const github = new FakeGitHub();
 
     const result = runIssue({

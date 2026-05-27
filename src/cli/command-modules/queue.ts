@@ -40,7 +40,7 @@ import type { CliCommand, CliContext } from "../types.js";
 export const queueCommand = {
     name: "queue",
     description: "List assigned issues and local daemon pick order.",
-    usage: "grovie queue list [--repo owner/repo] [--json]",
+    usage: "grovie queue list [--repo owner/repo] [--json] [--fast|--no-pr-context] [--timeout 15s]",
     issue: "#40",
     run: (args: string[], context: CliContext) => {
       const [subcommand] = args;
@@ -53,8 +53,8 @@ export const queueCommand = {
       }
 
       const argValidation = validateCliArgs(args.slice(1), {
-        valueOptions: ["--repo"],
-        flags: ["--json"],
+        valueOptions: ["--repo", "--timeout"],
+        flags: ["--json", "--fast", "--no-pr-context"],
       });
 
       if (!argValidation.ok) {
@@ -65,6 +65,19 @@ export const queueCommand = {
 
       if (!repoOption.ok) {
         return repoOption.result;
+      }
+
+      const timeoutOption = readStringOption(args, "--timeout");
+
+      if (!timeoutOption.ok) {
+        return timeoutOption.result;
+      }
+
+      if (timeoutOption.value !== undefined && parseQueueTimeoutMs(timeoutOption.value) === undefined) {
+        return {
+          exitCode: 1,
+          stderr: "Invalid --timeout value. Use a positive duration like 500ms, 15s, or 2m.",
+        };
       }
 
       try {
@@ -110,6 +123,7 @@ export const queueCommand = {
           machineId: identity.machineId,
           configuredAgentIds: localAgents.map((agent) => agent.agentId),
           localState: context.localState,
+          includePullRequestContext: !args.includes("--fast") && !args.includes("--no-pr-context"),
         });
 
         if (!result.ok) {
@@ -128,3 +142,23 @@ export const queueCommand = {
       }
     },
   } satisfies CliCommand;
+
+export function parseQueueTimeoutMs(value: string): number | undefined {
+  const match = /^(\d+)(ms|s|m)?$/.exec(value);
+
+  if (match === null) {
+    return undefined;
+  }
+
+  const amount = Number(match[1]);
+
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return undefined;
+  }
+
+  const unit = match[2] ?? "ms";
+  const multiplier = unit === "m" ? 60_000 : unit === "s" ? 1_000 : 1;
+  const timeoutMs = amount * multiplier;
+
+  return Number.isSafeInteger(timeoutMs) ? timeoutMs : undefined;
+}

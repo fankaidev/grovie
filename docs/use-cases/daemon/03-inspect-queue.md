@@ -20,3 +20,5 @@
 | UC-DAEMON-03-S05 | P1 | Queue inspection does not mutate GitHub state, write local request files, or start runtimes. |
 | UC-DAEMON-03-S06 | P1 | `grovie queue list --json` prints the same queue inspection result as structured JSON. |
 | UC-DAEMON-03-S07 | P1 | Queue inspection skips machine-local agent labels that are not configured in global local agent config. |
+| UC-DAEMON-03-S08 | P1 | `grovie queue list --fast` and `grovie queue list --no-pr-context` skip related pull request, review, check, and diff context for a bounded issue-only inspection. |
+| UC-DAEMON-03-S09 | P1 | `grovie queue list --timeout 15s` applies a timeout to underlying `gh` calls, and invalid timeout values fail before queue inspection starts. |
