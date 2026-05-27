@@ -36,6 +36,10 @@ function runCliInternal(args: string[], context: Partial<CliContext> = {}): CliR
     runtimeAvailabilityChecker: context.runtimeAvailabilityChecker,
     agentVerifier: context.agentVerifier,
     progressWriter: context.progressWriter,
+    terminal: context.terminal ?? {
+      isInteractive: false,
+      prompt: async () => "",
+    },
     localState: context.localState ?? new LocalState(),
     daemonLifecycle: context.daemonLifecycle ?? new LocalDaemonLifecycle(),
     adminConsolePortCheck: context.adminConsolePortCheck ?? checkAdminConsolePortAvailable,

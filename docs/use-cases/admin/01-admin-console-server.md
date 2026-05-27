@@ -19,7 +19,7 @@
 | UC-ADMIN-01-S01 | P2 | Loading the default global config keeps the admin console disabled. |
 | UC-ADMIN-01-S02 | P2 | Enabling `adminConsole.enabled` starts a local server bound to `127.0.0.1` on port `8765` by default. |
 | UC-ADMIN-01-S03 | P2 | Setting `adminConsole.port` overrides the default port without silently choosing a random fallback. |
-| UC-ADMIN-01-S04 | P2 | Starting the admin console when the configured port is unavailable fails clearly. |
+| UC-ADMIN-01-S04 | P2 | Starting the admin console when the configured port is unavailable fails clearly and points users at `grovie daemon status` because another daemon may already be running. |
 | UC-ADMIN-01-S05 | P2 | Setting `adminConsole.host` overrides the default bind host, while empty host values are rejected. |
 | UC-ADMIN-01-S06 | P2 | Starting the daemon with `adminConsole.enabled: false` does not bind the configured admin console web port. |
 | UC-ADMIN-01-S07 | P0 | A long-running daemon serves admin console health checks from a separate worker thread so synchronous daemon polling cannot block `/api/health`. |

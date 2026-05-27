@@ -8,6 +8,7 @@ import type {
   GitHubIssue,
   GitHubIssueSummary,
   GitHubPullRequestIssueLink,
+  GitHubRecentRepository,
   GitHubRelatedPullRequest,
   GitHubRepositoryEventsResult,
   GitHubUser,
@@ -449,6 +450,58 @@ export class GhGitHubGateway implements GitHubGateway {
       repository,
       pullRequestNumber,
     });
+  }
+
+  listRecentRepositories(limit: number): Result<GitHubRecentRepository[]> {
+    const args = [
+      "repo",
+      "list",
+      "--limit",
+      String(limit),
+      "--json",
+      "nameWithOwner,isPrivate,updatedAt",
+    ];
+    const result = this.runner.run("gh", args);
+
+    if (result.exitCode !== 0) {
+      return {
+        ok: false,
+        error: {
+          code: "gh_failed",
+          message: result.stderr.trim() || `gh ${args.join(" ")} failed with exit code ${result.exitCode}.`,
+          command: `gh ${args.join(" ")}`,
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+        },
+      };
+    }
+
+    let repositories: Array<{ nameWithOwner: string; isPrivate: boolean; updatedAt: string }>;
+
+    try {
+      repositories = JSON.parse(result.stdout) as Array<{ nameWithOwner: string; isPrivate: boolean; updatedAt: string }>;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      return {
+        ok: false,
+        error: {
+          code: "invalid_json",
+          message: `gh ${args.join(" ")} returned invalid JSON: ${message}`,
+          command: `gh ${args.join(" ")}`,
+          stderr: result.stdout,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      value: repositories.map((repository) => ({
+        repository: repository.nameWithOwner,
+        private: repository.isPrivate,
+        updatedAt: repository.updatedAt,
+      })),
+    };
   }
 
 }

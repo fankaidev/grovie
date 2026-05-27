@@ -49,6 +49,10 @@ describe("CLI command registration", () => {
   });
 
   it("[UC-SESSION-01-S10] renders command-specific usage with supported subcommand options", () => {
+    const initHelp = runCli(["init", "--help"]).stdout;
+    expect(initHelp).toContain("grovie init --yes [--force]");
+    expect(initHelp).not.toContain("Tracked by");
+
     const runsHelp = runCli(["runs", "--help"]).stdout;
     expect(runsHelp).toContain("grovie runs list [--limit 20] [--status status] [--repo owner/repo] [--issue owner/repo#123|123] [--agent agent@machine]");
     expect(runsHelp).toContain("grovie runs show <run-id>");
@@ -60,6 +64,7 @@ describe("CLI command registration", () => {
     expect(daemonHelp).toContain("grovie daemon start");
     expect(daemonHelp).toContain("grovie daemon stop [--force]");
     expect(daemonHelp).toContain("grovie daemon logs [--stream combined|stdout|stderr] [--lines 100] [--follow]");
+    expect(daemonHelp).not.toContain("Tracked by");
 
     expect(runCli(["watch", "--help"]).stderr).toContain("Unknown command: watch");
   });
@@ -120,7 +125,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("writes the default global Grovie config", () => {
+  it("writes the default global Grovie config non-interactively", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -132,10 +137,94 @@ describe("CLI command registration", () => {
         "",
         `Wrote global config: ${join(globalRoot, "config.yml")}`,
         "Run `grovie doctor` to validate it.",
+        "Run `grovie daemon start` to start processing issues.",
       ].join("\n"),
     });
 
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("watchedRepositories: []");
+  });
+
+  it("[UC-DAEMON-01-S10] creates an interactive global config from selected repository and runtimes", async () => {
+    const cwd = createTmpDir();
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+
+    const result = await runCliAsync(["init"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listRecentRepositories: () => ({
+          ok: true,
+          value: [
+            { repository: "fankaidev/grovie", private: false, updatedAt: "2026-05-27T14:17:06Z" },
+            { repository: "fankaidev/qstory", private: true, updatedAt: "2026-05-23T01:22:59Z" },
+          ],
+        }),
+      }),
+      runtimeAvailabilityChecker: fakeRuntimeAvailability,
+      terminal: fakeTerminal(["2", "1,2", ""]),
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie init",
+        "",
+        `Wrote global config: ${join(globalRoot, "config.yml")}`,
+        "Run `grovie doctor` to validate it.",
+        "Run `grovie daemon start` to start processing issues.",
+      ].join("\n"),
+    });
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("repository: fankaidev/qstory");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("name: codex");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("name: claude-code");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("host: 127.0.0.1");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).not.toContain("envKeys: []");
+  });
+
+  it("[UC-DAEMON-01-S10] keeps an existing config unchanged when interactive replace is declined", async () => {
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const configPath = join(globalRoot, "config.yml");
+    writeFileSync(configPath, "version: 1\nagents: []\nwatchedRepositories: []\n", "utf8");
+
+    await expect(runCliAsync(["init"], {
+      localState,
+      terminal: fakeTerminal([""]),
+    })).resolves.toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie init",
+        "",
+        `Existing config kept unchanged: ${configPath}`,
+        "Run `grovie doctor` to validate it.",
+      ].join("\n"),
+    });
+    expect(readFileSync(configPath, "utf8")).toBe("version: 1\nagents: []\nwatchedRepositories: []\n");
+  });
+
+  it("[UC-DAEMON-01-S10] backs up and replaces an existing config when forced", () => {
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const configPath = join(globalRoot, "config.yml");
+    writeFileSync(configPath, "version: 1\nagents: []\nwatchedRepositories: []\n", "utf8");
+
+    expect(runCli(["init", "--force", "--yes", "--repo", "fankaidev/grovie", "--runtime", "codex", "--admin-console"], {
+      localState,
+    })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie init",
+        "",
+        `Backup written: ${configPath}.bak`,
+        `Wrote global config: ${configPath}`,
+        "Run `grovie doctor` to validate it.",
+        "Run `grovie daemon start` to start processing issues.",
+      ].join("\n"),
+    });
+    expect(readFileSync(`${configPath}.bak`, "utf8")).toBe("version: 1\nagents: []\nwatchedRepositories: []\n");
+    expect(readFileSync(configPath, "utf8")).toContain("repository: fankaidev/grovie");
+    expect(readFileSync(configPath, "utf8")).toContain("enabled: true");
   });
 
   it("[UC-DAEMON-01-S06] reports invalid global config fields through doctor", () => {
@@ -880,6 +969,49 @@ describe("CLI command registration", () => {
     });
   });
 
+  it("[UC-ADMIN-01-S02] prints the local admin console URL when detached daemon startup enables it", () => {
+    const localState = new FakeLocalState(createTmpDir());
+    configureLocalAgent(localState);
+    saveGlobalConfig(localState.paths.root, {
+      version: 1,
+      agents: [
+        {
+          name: "coder",
+          runtime: "codex",
+        },
+      ],
+      watchedRepositories: [],
+      adminConsole: {
+        enabled: true,
+        host: "127.0.0.1",
+        port: 8765,
+      },
+    });
+    const daemonLifecycle = fakeDaemonLifecycle({
+      start: () => ({
+        ok: true,
+        state: fakeDaemonState(localState.paths.root, 1234),
+      }),
+    });
+
+    expect(runCliAsync(["daemon", "start"], {
+      localState,
+      daemonLifecycle,
+      adminConsolePortCheck: async () => {},
+    })).resolves.toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie daemon start",
+        "",
+        "Started Grovie daemon pid 1234.",
+        `State: ${localState.paths.root}/daemon/daemon.json`,
+        `Stdout log: ${localState.paths.root}/daemon/stdout.log`,
+        `Stderr log: ${localState.paths.root}/daemon/stderr.log`,
+        "Admin console: http://127.0.0.1:8765/",
+      ].join("\n"),
+    });
+  });
+
   it("[UC-DAEMON-01-S07] refuses detached daemon start when no local agents are configured", () => {
     const localState = new FakeLocalState(createTmpDir());
     const daemonLifecycle = fakeDaemonLifecycle({
@@ -928,7 +1060,11 @@ describe("CLI command registration", () => {
       }),
     ).resolves.toEqual({
       exitCode: 1,
-      stderr: "Admin console port 9876 is unavailable on localhost.",
+      stderr: [
+        "Admin console port 9876 is unavailable on localhost.",
+        "Another Grovie daemon or local process may already be using that port.",
+        "Run `grovie daemon status` to check the recorded daemon, or choose another `adminConsole.port` in ~/.grovie/config.yml.",
+      ].join("\n"),
     });
   });
 
@@ -1131,6 +1267,13 @@ function fakeRuntimeAvailability(runtime: RuntimeName): RuntimeAvailability {
   }
 
   return fakeRuntime().checkAvailability();
+}
+
+function fakeTerminal(answers: string[]) {
+  return {
+    isInteractive: true,
+    prompt: async () => answers.shift() ?? "",
+  };
 }
 
 function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGateway {

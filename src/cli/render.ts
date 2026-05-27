@@ -35,7 +35,5 @@ export function renderCommandHelp(command: CliCommand): string {
     "",
     "Usage:",
     usageLines.join("\n"),
-    "",
-    "Tracked by " + command.issue + ".",
   ].join("\n");
 }
