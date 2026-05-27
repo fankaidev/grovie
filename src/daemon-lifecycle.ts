@@ -60,7 +60,7 @@ export class LocalDaemonLifecycle implements DaemonLifecycle {
     }
 
     const token = randomUUID();
-    const command = [process.execPath, entrypoint, "daemon", ...input.args.filter((arg) => arg !== "start")];
+    const command = [process.execPath, entrypoint, "daemon", "worker", ...input.args.filter((arg) => arg !== "start")];
     const stdoutFd = openSync(stdoutPath, "a");
     const stderrFd = openSync(stderrPath, "a");
 

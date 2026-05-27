@@ -61,11 +61,9 @@ describe("CLI command registration", () => {
     expect(runsHelp).not.toContain("grovie runs rerun");
 
     const daemonHelp = runCli(["daemon", "--help"]).stdout;
-    expect(daemonHelp).toContain("grovie daemon [--repo owner/repo] [--label grovie] [--once]");
-    expect(daemonHelp).not.toContain("grovie daemon [run]");
+    expect(daemonHelp).toContain("grovie daemon start");
     expect(daemonHelp).toContain("grovie daemon stop [--force]");
     expect(daemonHelp).toContain("grovie daemon logs [--stream combined|stdout|stderr] [--lines 100] [--follow]");
-    expect(daemonHelp).toContain("grovie daemon service <install|uninstall|path> [--platform launchd|systemd]");
     expect(daemonHelp).not.toContain("Tracked by");
 
     expect(runCli(["watch", "--help"]).stderr).toContain("Unknown command: watch");
@@ -845,39 +843,6 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-AGENT-01-S05] runs one daemon polling cycle from global watched repositories with explicit agent config", async () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    writeIgnoredRepoLocalConfig(cwd);
-    configureLocalAgent(localState, ["coder"], [{ repository: "fankaidev/grovie" }]);
-
-    expect(
-      await runCliAsync(["daemon", "--label", "grovie", "--once"], {
-        cwd,
-        localState,
-        github: fakeGitHubGateway({
-          listOpenIssues: (repository, label) => {
-            expect(repository).toBe("fankaidev/grovie");
-            expect(label).toBe("grovie");
-
-            return {
-              ok: true,
-              value: [],
-            };
-          },
-        }),
-        runtime: fakeRuntime(),
-      }),
-    ).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie daemon",
-        "",
-        "No queued issues found for fankaidev/grovie with label grovie.",
-      ].join("\n"),
-    });
-  });
-
   it("[UC-AGENT-02-S01] assigns an issue to an agent label", () => {
     const addedLabels: Array<{ reference: IssueReference; labels: string[] }> = [];
 
@@ -948,81 +913,7 @@ describe("CLI command registration", () => {
     ]);
   });
 
-  it("[UC-DAEMON-01-S03] uses built-in queue defaults for global daemon without reading cwd policy config", async () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    writeIgnoredRepoLocalConfig(cwd);
-    configureLocalAgent(localState, ["coder"], [{ repository: "fankaidev/grovie" }]);
-
-    expect(
-      await runCliAsync(["daemon", "--once"], {
-        cwd,
-        localState,
-        github: fakeGitHubGateway({
-          listOpenIssues: (repository, label) => {
-            expect(repository).toBe("fankaidev/grovie");
-            expect(label).toBe("grovie");
-
-            return {
-              ok: true,
-              value: [],
-            };
-          },
-        }),
-        runtime: fakeRuntime(),
-      }),
-    ).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie daemon",
-        "",
-        "No queued issues found for fankaidev/grovie with label grovie.",
-      ].join("\n"),
-    });
-  });
-
-  it("[UC-DAEMON-04-S01] runs the daemon foreground command with built-in defaults", async () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    writeIgnoredRepoLocalConfig(cwd);
-    configureLocalAgent(localState, ["coder"], [{ repository: "fankaidev/grovie" }]);
-
-    expect(
-      await runCliAsync(["daemon", "--once"], {
-        cwd,
-        localState,
-        github: fakeGitHubGateway({
-          listOpenIssues: (repository, label) => {
-            expect(repository).toBe("fankaidev/grovie");
-            expect(label).toBe("grovie");
-
-            return {
-              ok: true,
-              value: [],
-            };
-          },
-        }),
-        runtime: fakeRuntime(),
-      }),
-    ).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie daemon",
-        "",
-        "No queued issues found for fankaidev/grovie with label grovie.",
-      ].join("\n"),
-    });
-  });
-
-  it("rejects the removed daemon run alias", async () => {
-    expect(await runCliAsync(["daemon", "run", "--once"])).toEqual({
-      exitCode: 1,
-      stderr: "Unknown daemon subcommand: run. Usage: grovie daemon [--repo owner/repo] [--label grovie] [--once]",
-      stdout: undefined,
-    });
-  });
-
-  it("[UC-DAEMON-01-S07] exits clearly when the daemon has no configured local agents", async () => {
+  it("[UC-DAEMON-01-S07] exits clearly when daemon start has no configured local agents", async () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
@@ -1036,7 +927,7 @@ describe("CLI command registration", () => {
     });
 
     expect(
-      await runCliAsync(["daemon", "--once"], {
+      await runCliAsync(["daemon", "start"], {
         cwd,
         localState,
         github: fakeGitHubGateway(),
@@ -1286,56 +1177,12 @@ describe("CLI command registration", () => {
     expect(result.stdout).not.toContain("daemon stdout");
   });
 
-  it("[UC-DAEMON-04-S12] reports daemon service paths through the CLI", () => {
-    const localState = new FakeLocalState(createTmpDir());
-
-    const result = runCli(["daemon", "service", "path", "--platform", "systemd"], { localState });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("grovie daemon service path");
-    expect(result.stdout).toContain("Platform: systemd");
-    expect(result.stdout).toContain(".config/systemd/user/grovie.service");
-  });
-
   it("[UC-DAEMON-04-S07] reports missing daemon logs through the CLI", () => {
     const localState = new FakeLocalState(createTmpDir());
 
     expect(runCli(["daemon", "logs"], { localState })).toEqual({
       exitCode: 1,
       stderr: `Daemon logs are not available because ${localState.paths.root}/daemon does not exist. Run \`grovie daemon start\` first.`,
-    });
-  });
-
-  it("[UC-DAEMON-04-S01] runs an explicit daemon repository without reading the current checkout repository", async () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    writeIgnoredRepoLocalConfig(cwd);
-    configureLocalAgent(localState);
-
-    expect(
-      await runCliAsync(["daemon", "--repo", "fankaidev/other", "--label", "ready", "--once"], {
-        cwd,
-        localState,
-        github: fakeGitHubGateway({
-          listOpenIssues: (repository, label) => {
-            expect(repository).toBe("fankaidev/other");
-            expect(label).toBe("ready");
-
-            return {
-              ok: true,
-              value: [],
-            };
-          },
-        }),
-        runtime: fakeRuntime(),
-      }),
-    ).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie daemon",
-        "",
-        "No queued issues found for fankaidev/other with label ready.",
-      ].join("\n"),
     });
   });
 
