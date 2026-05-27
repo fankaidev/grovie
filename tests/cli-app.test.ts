@@ -6,11 +6,11 @@ import { commands, renderHelp, runCli, runCliAsync } from "../src/cli-app.js";
 import { saveGlobalConfig } from "../src/config.js";
 import type { DaemonLifecycle, DaemonLifecycleStatus } from "../src/daemon-lifecycle.js";
 import { resolveMachineId } from "../src/identity.js";
-import { GROVIE_VERSION } from "../src/version.js";
 import type { CreatedComment, GitHubGateway, GitHubIssue, IssueReference } from "../src/github.js";
 import type { HandledCursor, LocalStatePaths, PreparedRun } from "../src/local-state.js";
 import type { RunLocalState } from "../src/run.js";
 import type { AgentRunInput, AgentRuntime, RuntimeAvailability, RuntimeName } from "../src/runtime.js";
+import { GROVIE_VERSION } from "../src/version.js";
 
 const tmpDirs: string[] = [];
 
@@ -117,11 +117,11 @@ describe("CLI command registration", () => {
     expect(GROVIE_VERSION).toBe(packageVersion.version);
     expect(runCli(["--version"])).toEqual({
       exitCode: 0,
-      stdout: "0.1.0",
+      stdout: "0.2.0",
     });
     expect(runCli(["-v"])).toEqual({
       exitCode: 0,
-      stdout: "0.1.0",
+      stdout: "0.2.0",
     });
   });
 

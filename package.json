@@ -1,6 +1,6 @@
 {
   "name": "@fankaidev/grovie",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "GitHub-native local runner for multi-agent coding workflows.",
   "license": "MIT",
   "type": "module",
@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",
