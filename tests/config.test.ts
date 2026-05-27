@@ -22,13 +22,13 @@ afterEach(() => {
 });
 
 describe("config helpers", () => {
-  it("[UC-RUN-01-S01] parses supported GitHub origin URL formats", () => {
+  it("parses supported GitHub origin URL formats", () => {
     expect(parseGitHubRemote("git@github.com:fankaidev/grovie.git")).toBe("fankaidev/grovie");
     expect(parseGitHubRemote("https://github.com/fankaidev/grovie.git")).toBe("fankaidev/grovie");
     expect(parseGitHubRemote("ssh://git@github.com/fankaidev/grovie.git")).toBe("fankaidev/grovie");
   });
 
-  it("[UC-RUN-01-S01] ignores non-GitHub remotes", () => {
+  it("ignores non-GitHub remotes", () => {
     expect(parseGitHubRemote("git@example.com:fankaidev/grovie.git")).toBeUndefined();
   });
 

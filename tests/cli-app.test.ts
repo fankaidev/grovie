@@ -22,11 +22,11 @@ afterEach(() => {
 });
 
 describe("CLI command registration", () => {
-  it("[UC-AGENT-02-S01] [UC-DAEMON-03-S01] [UC-ADMIN-01-S02] registers issue assignment, queue, daemon, and admin commands", () => {
+  it("registers issue assignment, queue, daemon, and admin commands", () => {
     expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "queue", "daemon", "state", "admin", "watch"]);
   });
 
-  it("[UC-DAEMON-03-S01] [UC-DAEMON-04-S01] [UC-ADMIN-01-S02] renders help with queue, daemon, and admin commands", () => {
+  it("renders help with queue, daemon, and admin commands", () => {
     const help = renderHelp();
 
     expect(help).toContain("grovie <command>");
@@ -42,14 +42,14 @@ describe("CLI command registration", () => {
     expect(help).toContain("watch");
   });
 
-  it("[UC-DAEMON-04-S01] accepts pnpm script argument separators", () => {
+  it("accepts pnpm script argument separators", () => {
     expect(runCli(["--", "--help"])).toEqual({
       exitCode: 0,
       stdout: renderHelp(),
     });
   });
 
-  it("[UC-DAEMON-04-S01] [UC-SESSION-01-S10] renders command-specific usage with supported subcommand options", () => {
+  it("[UC-SESSION-01-S10] renders command-specific usage with supported subcommand options", () => {
     expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json] [--fast|--no-pr-context] [--timeout 15s]");
 
     const runsHelp = runCli(["runs", "--help"]).stdout;
@@ -133,7 +133,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-DAEMON-04-S01] reports the package version through long and short flags", () => {
+  it("reports the package version through long and short flags", () => {
     const packageVersion = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 
     expect(GROVIE_VERSION).toBe(packageVersion.version);
@@ -147,7 +147,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-DAEMON-01-S04] writes the default global Grovie config", () => {
+  it("writes the default global Grovie config", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -1465,7 +1465,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-DAEMON-04-S01] rejects the removed daemon run alias", async () => {
+  it("rejects the removed daemon run alias", async () => {
     expect(await runCliAsync(["daemon", "run", "--once"])).toEqual({
       exitCode: 1,
       stderr: "Unknown daemon subcommand: run. Usage: grovie daemon [--repo owner/repo] [--label grovie] [--once]",
