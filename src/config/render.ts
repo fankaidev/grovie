@@ -4,6 +4,10 @@ import type { GlobalGrovieConfig } from "../config.js";
 export function renderGlobalConfig(config: GlobalGrovieConfig): string {
   const renderedConfig = stringify({
     ...config,
+    agents: config.agents.map((agent) => ({
+      ...agent,
+      ...(agent.envKeys === undefined || agent.envKeys.length === 0 ? { envKeys: undefined } : { envKeys: agent.envKeys }),
+    })),
     daemon: {
       maxConcurrentRuns: config.daemon?.maxConcurrentRuns ?? 3,
     },

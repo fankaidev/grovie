@@ -206,7 +206,7 @@ watchedRepositories:
     label: grovie
 ```
 
-`grovie init` writes the global Grovie config at `~/.grovie/config.yml` when needed.
+`grovie init` creates the global Grovie config at `~/.grovie/config.yml`. In an interactive terminal it can pick a watched repository from the current GitHub remote or recent GitHub repositories, enable detected local runtimes as agents, and enable the local-only admin console. Existing configs are kept unless you confirm replacement; scripts can use `grovie init --yes` or `grovie init --force --yes`.
 
 `grovie doctor` validates the global Grovie config, then confirms the current `gh` login plus CLI runtime availability.
 

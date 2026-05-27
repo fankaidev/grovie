@@ -119,6 +119,12 @@ export type GitHubPullRequestIssueLink = {
   source: "closing-reference" | "body" | "branch";
 };
 
+export type GitHubRecentRepository = {
+  repository: string;
+  private: boolean;
+  updatedAt: string;
+};
+
 export type GitHubIssue = {
   reference: IssueReference;
   title: string;
@@ -178,6 +184,7 @@ export type GitHubGateway = {
   readRelatedPullRequests?(reference: IssueReference): Result<GitHubRelatedPullRequest[]>;
   listRepositoryEvents?(repository: string, options?: { ifNoneMatch?: string }): Result<GitHubRepositoryEventsResult>;
   readPullRequestIssueLinks?(repository: string, pullRequestNumber: number): Result<GitHubPullRequestIssueLink[]>;
+  listRecentRepositories?(limit: number): Result<GitHubRecentRepository[]>;
   listRepositoryOwners?(): Result<string[]>;
   readRepository?(repository: string): Result<CreatedRepository>;
   createRepository?(input: { repository: string; private: boolean }): Result<CreatedRepository>;

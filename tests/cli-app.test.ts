@@ -49,6 +49,10 @@ describe("CLI command registration", () => {
   });
 
   it("[UC-SESSION-01-S10] renders command-specific usage with supported subcommand options", () => {
+    const initHelp = runCli(["init", "--help"]).stdout;
+    expect(initHelp).toContain("grovie init --yes [--force]");
+    expect(initHelp).not.toContain("Tracked by");
+
     const runsHelp = runCli(["runs", "--help"]).stdout;
     expect(runsHelp).toContain("grovie runs list [--limit 20] [--status status] [--repo owner/repo] [--issue owner/repo#123|123] [--agent agent@machine]");
     expect(runsHelp).toContain("grovie runs show <run-id>");
@@ -122,7 +126,7 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("writes the default global Grovie config", () => {
+  it("writes the default global Grovie config non-interactively", () => {
     const cwd = createTmpDir();
     const globalRoot = createTmpDir();
     const localState = new FakeLocalState(globalRoot);
@@ -134,10 +138,94 @@ describe("CLI command registration", () => {
         "",
         `Wrote global config: ${join(globalRoot, "config.yml")}`,
         "Run `grovie doctor` to validate it.",
+        "Run `grovie daemon` to start processing issues.",
       ].join("\n"),
     });
 
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("watchedRepositories: []");
+  });
+
+  it("[UC-DAEMON-01-S10] creates an interactive global config from selected repository and runtimes", async () => {
+    const cwd = createTmpDir();
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+
+    const result = await runCliAsync(["init"], {
+      cwd,
+      localState,
+      github: fakeGitHubGateway({
+        listRecentRepositories: () => ({
+          ok: true,
+          value: [
+            { repository: "fankaidev/grovie", private: false, updatedAt: "2026-05-27T14:17:06Z" },
+            { repository: "fankaidev/qstory", private: true, updatedAt: "2026-05-23T01:22:59Z" },
+          ],
+        }),
+      }),
+      runtimeAvailabilityChecker: fakeRuntimeAvailability,
+      terminal: fakeTerminal(["2", "1,2", ""]),
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie init",
+        "",
+        `Wrote global config: ${join(globalRoot, "config.yml")}`,
+        "Run `grovie doctor` to validate it.",
+        "Run `grovie daemon` to start processing issues.",
+      ].join("\n"),
+    });
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("repository: fankaidev/qstory");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("name: codex");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("name: claude-code");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("host: 127.0.0.1");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).not.toContain("envKeys: []");
+  });
+
+  it("[UC-DAEMON-01-S10] keeps an existing config unchanged when interactive replace is declined", async () => {
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const configPath = join(globalRoot, "config.yml");
+    writeFileSync(configPath, "version: 1\nagents: []\nwatchedRepositories: []\n", "utf8");
+
+    await expect(runCliAsync(["init"], {
+      localState,
+      terminal: fakeTerminal([""]),
+    })).resolves.toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie init",
+        "",
+        `Existing config kept unchanged: ${configPath}`,
+        "Run `grovie doctor` to validate it.",
+      ].join("\n"),
+    });
+    expect(readFileSync(configPath, "utf8")).toBe("version: 1\nagents: []\nwatchedRepositories: []\n");
+  });
+
+  it("[UC-DAEMON-01-S10] backs up and replaces an existing config when forced", () => {
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const configPath = join(globalRoot, "config.yml");
+    writeFileSync(configPath, "version: 1\nagents: []\nwatchedRepositories: []\n", "utf8");
+
+    expect(runCli(["init", "--force", "--yes", "--repo", "fankaidev/grovie", "--runtime", "codex", "--admin-console"], {
+      localState,
+    })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "grovie init",
+        "",
+        `Backup written: ${configPath}.bak`,
+        `Wrote global config: ${configPath}`,
+        "Run `grovie doctor` to validate it.",
+        "Run `grovie daemon` to start processing issues.",
+      ].join("\n"),
+    });
+    expect(readFileSync(`${configPath}.bak`, "utf8")).toBe("version: 1\nagents: []\nwatchedRepositories: []\n");
+    expect(readFileSync(configPath, "utf8")).toContain("repository: fankaidev/grovie");
+    expect(readFileSync(configPath, "utf8")).toContain("enabled: true");
   });
 
   it("[UC-DAEMON-01-S06] reports invalid global config fields through doctor", () => {
@@ -1284,6 +1372,13 @@ function fakeRuntimeAvailability(runtime: RuntimeName): RuntimeAvailability {
   }
 
   return fakeRuntime().checkAvailability();
+}
+
+function fakeTerminal(answers: string[]) {
+  return {
+    isInteractive: true,
+    prompt: async () => answers.shift() ?? "",
+  };
 }
 
 function fakeGitHubGateway(overrides: Partial<GitHubGateway> = {}): GitHubGateway {

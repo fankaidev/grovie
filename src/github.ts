@@ -15,6 +15,7 @@ export type {
   GitHubLabel,
   GitHubPullRequestIssueLink,
   GitHubPullRequestReview,
+  GitHubRecentRepository,
   GitHubRelatedPullRequest,
   GitHubRepositoryEvent,
   GitHubUser,

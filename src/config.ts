@@ -51,7 +51,7 @@ export const globalConfigSchema = z.strictObject({
     runtime: runtimeNameSchema,
     instructions: z.string().min(1, "must not be empty").optional(),
     model: z.string().min(1, "must not be empty").optional(),
-    envKeys: z.array(z.string().min(1, "must not be empty")).default([]),
+    envKeys: z.array(z.string().min(1, "must not be empty")).optional(),
   })),
   watchedRepositories: z.array(z.strictObject({
     repository: repositoryNameSchema,
@@ -173,7 +173,7 @@ export function resolveConfiguredAgents(config: GlobalGrovieConfig, machineId: s
     runtime: agent.runtime,
     instructions: agent.instructions,
     model: agent.model,
-    envKeys: agent.envKeys,
+    envKeys: agent.envKeys ?? [],
   }));
   const seen = new Set<string>();
 
