@@ -22,11 +22,11 @@ afterEach(() => {
 });
 
 describe("CLI command registration", () => {
-  it("registers issue assignment, queue, daemon, and admin commands", () => {
-    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "queue", "daemon", "state", "admin", "watch"]);
+  it("registers issue assignment, daemon, and admin commands", () => {
+    expect(commands.map((command) => command.name)).toEqual(["init", "doctor", "status", "runs", "issue", "daemon", "state", "admin"]);
   });
 
-  it("renders help with queue, daemon, and admin commands", () => {
+  it("renders help with daemon and admin commands", () => {
     const help = renderHelp();
 
     expect(help).toContain("grovie <command>");
@@ -35,11 +35,11 @@ describe("CLI command registration", () => {
     expect(help).toContain("doctor");
     expect(help).toContain("status");
     expect(help).toContain("runs");
-    expect(help).toContain("queue");
+    expect(help).not.toContain("queue");
     expect(help).toContain("daemon");
     expect(help).toContain("state");
     expect(help).toContain("admin");
-    expect(help).toContain("watch");
+    expect(help).not.toContain("watch");
   });
 
   it("accepts pnpm script argument separators", () => {
@@ -50,8 +50,6 @@ describe("CLI command registration", () => {
   });
 
   it("[UC-SESSION-01-S10] renders command-specific usage with supported subcommand options", () => {
-    expect(runCli(["queue", "--help"]).stdout).toContain("grovie queue list [--repo owner/repo] [--json] [--fast|--no-pr-context] [--timeout 15s]");
-
     const runsHelp = runCli(["runs", "--help"]).stdout;
     expect(runsHelp).toContain("grovie runs list [--limit 20] [--status status] [--repo owner/repo] [--issue owner/repo#123|123] [--agent agent@machine]");
     expect(runsHelp).toContain("grovie runs show <run-id>");
@@ -66,10 +64,7 @@ describe("CLI command registration", () => {
     expect(daemonHelp).toContain("grovie daemon logs [--stream combined|stdout|stderr] [--lines 100] [--follow]");
     expect(daemonHelp).toContain("grovie daemon service <install|uninstall|path> [--platform launchd|systemd]");
 
-    const watchHelp = runCli(["watch", "--help"]).stdout;
-    expect(watchHelp).toContain("grovie watch add owner/repo [--label grovie]");
-    expect(watchHelp).toContain("grovie watch list");
-    expect(watchHelp).toContain("grovie watch remove owner/repo");
+    expect(runCli(["watch", "--help"]).stderr).toContain("Unknown command: watch");
   });
 
   it("[UC-DAEMON-04-S17] rejects unknown, duplicate, and extra CLI arguments consistently", async () => {
@@ -102,22 +97,6 @@ describe("CLI command registration", () => {
     expect(runCli(["daemon", "logs", "--lines"], { localState })).toEqual({
       exitCode: 1,
       stderr: "Missing value for --lines.",
-    });
-    expect(runCli(["queue", "list", "--json", "--json"], { localState })).toEqual({
-      exitCode: 1,
-      stderr: "Duplicate option: --json",
-    });
-    expect(runCli(["queue", "list", "--timeout", "soon"], { localState })).toEqual({
-      exitCode: 1,
-      stderr: "Invalid --timeout value. Use a positive duration like 500ms, 15s, or 2m.",
-    });
-    expect(runCli(["watch", "list", "--bogus"], { localState })).toEqual({
-      exitCode: 1,
-      stderr: "Unknown option: --bogus",
-    });
-    expect(runCli(["watch", "add", "fankaidev/grovie", "extra"], { localState })).toEqual({
-      exitCode: 1,
-      stderr: "Unexpected argument: extra",
     });
     expect(runCli(["issue", "assign", "fankaidev/grovie#1", "coder@machine", "--bogus"], { localState })).toEqual({
       exitCode: 1,
@@ -832,8 +811,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
-    configureLocalAgent(localState);
-    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+    configureLocalAgent(localState, ["coder"], [{ repository: "fankaidev/grovie" }]);
 
     expect(
       await runCliAsync(["daemon", "--label", "grovie", "--once"], {
@@ -860,471 +838,6 @@ describe("CLI command registration", () => {
         "No queued issues found for fankaidev/grovie with label grovie.",
       ].join("\n"),
     });
-  });
-
-  it("[UC-DAEMON-03-S01] [UC-DAEMON-03-S03] lists global watched assigned issues in daemon pick order", async () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    const machineId = resolveMachineId(hostname());
-    writeIgnoredRepoLocalConfig(cwd);
-    configureLocalAgent(localState);
-    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
-
-    const result = runCli(["queue", "list"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: (repository, label) => {
-          expect(repository).toBe("fankaidev/grovie");
-          expect(label).toBe("grovie");
-
-          return {
-            ok: true,
-            value: [
-              {
-                reference: fakeReference(8),
-                title: "Normal priority",
-                labels: ["grovie", `agent:coder@${machineId}`, "priority:p2"],
-              },
-              {
-                reference: fakeReference(9),
-                title: "Highest priority",
-                labels: ["grovie", `agent:coder@${machineId}`, "priority:p0"],
-              },
-            ],
-          };
-        },
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            title: reference.number === 9 ? "Highest priority" : "Normal priority",
-            labels: reference.number === 9
-              ? ["grovie", `agent:coder@${machineId}`, "priority:p0"]
-              : ["grovie", `agent:coder@${machineId}`, "priority:p2"],
-          },
-        }),
-        readRelatedPullRequests: () => ({
-          ok: true,
-          value: [],
-        }),
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("grovie queue list");
-    expect(result.stdout).toContain("fankaidev/grovie label=grovie");
-    expect(result.stdout).toContain(`#1 fankaidev/grovie#9 agent=coder@${machineId} priority=p0`);
-    expect(result.stdout).toContain(`#2 fankaidev/grovie#8 agent=coder@${machineId} priority=p2`);
-    expect(result.stdout?.indexOf("fankaidev/grovie#9")).toBeLessThan(result.stdout?.indexOf("fankaidev/grovie#8") ?? 0);
-  });
-
-  it("[UC-DAEMON-02-S17] shows untrusted issue creators as skipped in queue inspection", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    const machineId = resolveMachineId(hostname());
-    configureLocalAgent(localState);
-
-    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: () => ({
-          ok: true,
-          value: [
-            {
-              reference: fakeReference(8),
-              title: "External request",
-              labels: ["grovie", `agent:coder@${machineId}`],
-            },
-          ],
-        }),
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            author: "external-user",
-            title: "External request",
-            labels: ["grovie", `agent:coder@${machineId}`],
-          },
-        }),
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("- skip fankaidev/grovie#8");
-    expect(result.stdout).toContain("reason=untrusted issue creator external-user");
-  });
-
-  it("[UC-DAEMON-03-S02] inspects an explicit repository without global watched repositories", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    const machineId = resolveMachineId(hostname());
-    configureLocalAgent(localState);
-
-    const result = runCli(["queue", "list", "--repo", "fankaidev/other"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: (repository, label) => {
-          expect(repository).toBe("fankaidev/other");
-          expect(label).toBe("grovie");
-
-          return {
-            ok: true,
-            value: [
-              {
-                reference: {
-                  owner: "fankaidev",
-                  repo: "other",
-                  number: 3,
-                },
-                title: "Other repo issue",
-                labels: ["grovie", `agent:coder@${machineId}`],
-              },
-            ],
-          };
-        },
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            labels: ["grovie", `agent:coder@${machineId}`],
-          },
-        }),
-        readRelatedPullRequests: () => ({
-          ok: true,
-          value: [],
-        }),
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("fankaidev/other label=grovie");
-    expect(result.stdout).toContain(`#1 fankaidev/other#3 agent=coder@${machineId}`);
-  });
-
-  it("[UC-DAEMON-03-S04] lists skipped assigned issues with clear reasons", () => {
-    const cwd = createTmpDir();
-    const machineId = resolveMachineId(hostname());
-    const lockedAgent = `locked@${machineId}`;
-    const localState = new FakeLocalState(createTmpDir(), { lockedAgents: [lockedAgent] });
-    configureLocalAgent(localState, ["coder", "locked", "cancel"]);
-
-    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: () => ({
-          ok: true,
-          value: [
-            {
-              reference: fakeReference(2),
-              title: "Other machine",
-              labels: ["grovie", "agent:coder@other-machine"],
-            },
-            {
-              reference: fakeReference(30),
-              title: "Handled",
-              labels: ["grovie", `agent:coder@${machineId}`],
-            },
-            {
-              reference: fakeReference(4),
-              title: "Locked",
-              labels: ["grovie", `agent:${lockedAgent}`],
-            },
-            {
-              reference: fakeReference(5),
-              title: "Canceled",
-              labels: ["grovie", `agent:cancel@${machineId}`, "grovie:cancel"],
-            },
-          ],
-        }),
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            title: reference.number === 2
-              ? "Other machine"
-              : reference.number === 30
-                ? "Handled"
-                : reference.number === 4
-                  ? "Locked"
-                  : "Canceled",
-            labels: reference.number === 2
-              ? ["grovie", "agent:coder@other-machine"]
-              : reference.number === 30
-                ? ["grovie", `agent:coder@${machineId}`]
-                : reference.number === 4
-                  ? ["grovie", `agent:${lockedAgent}`]
-                  : ["grovie", `agent:cancel@${machineId}`, "grovie:cancel"],
-            updatedAt: "2026-05-22T00:00:00.000Z",
-          },
-        }),
-        readRelatedPullRequests: () => ({
-          ok: true,
-          value: [],
-        }),
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("skip fankaidev/grovie#2 agent=coder@other-machine");
-    expect(result.stdout).toContain("reason=assigned to another machine");
-    expect(result.stdout).toContain("skip fankaidev/grovie#30");
-    expect(result.stdout).toContain("reason=no unhandled activity");
-    expect(result.stdout).toContain("skip fankaidev/grovie#4");
-    expect(result.stdout).toContain("reason=active local execution lock");
-    expect(result.stdout).toContain("skip fankaidev/grovie#5");
-    expect(result.stdout).toContain("reason=canceled");
-  });
-
-  it("[UC-DAEMON-03-S04] does not read related pull requests for cheap skipped candidates", () => {
-    const cwd = createTmpDir();
-    const machineId = resolveMachineId(hostname());
-    const lockedAgent = `locked@${machineId}`;
-    const localState = new FakeLocalState(createTmpDir(), { lockedAgents: [lockedAgent] });
-    configureLocalAgent(localState, ["coder", "locked"]);
-    const relatedReads: number[] = [];
-
-    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: () => ({
-          ok: true,
-          value: [
-            {
-              reference: fakeReference(4),
-              title: "Locked",
-              labels: ["grovie", `agent:${lockedAgent}`, "priority:p0"],
-            },
-            {
-              reference: fakeReference(8),
-              title: "Runnable",
-              labels: ["grovie", `agent:coder@${machineId}`, "priority:p1"],
-            },
-          ],
-        }),
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            title: reference.number === 4 ? "Locked" : "Runnable",
-            labels: reference.number === 4
-              ? ["grovie", `agent:${lockedAgent}`, "priority:p0"]
-              : ["grovie", `agent:coder@${machineId}`, "priority:p1"],
-          },
-        }),
-        readRelatedPullRequests: (reference) => {
-          relatedReads.push(reference.number);
-
-          if (reference.number === 4) {
-            throw new Error("locked candidate related PR lookup was not expected");
-          }
-
-          return {
-            ok: true,
-            value: [],
-          };
-        },
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain(`#1 fankaidev/grovie#8 agent=coder@${machineId}`);
-    expect(result.stdout).toContain("skip fankaidev/grovie#4");
-    expect(relatedReads).toEqual([8]);
-  });
-
-  it("[UC-DAEMON-03-S05] queue inspection does not mutate GitHub state or enqueue runs", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-
-    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: () => ({
-          ok: true,
-          value: [],
-        }),
-        createIssueComment: () => {
-          throw new Error("queue list must not create comments");
-        },
-        addLabels: () => {
-          throw new Error("queue list must not add labels");
-        },
-      }),
-    });
-
-    expect(result).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie queue list",
-        "",
-        "No assigned issues found.",
-      ].join("\n"),
-    });
-  });
-
-  it("[UC-DAEMON-03-S06] prints queue inspection as JSON", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    const machineId = resolveMachineId(hostname());
-    configureLocalAgent(localState);
-    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie", "--json"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: () => ({
-          ok: true,
-          value: [
-            {
-              reference: fakeReference(8),
-              title: "JSON issue",
-              labels: ["grovie", `agent:coder@${machineId}`],
-            },
-          ],
-        }),
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            title: "JSON issue",
-            labels: ["grovie", `agent:coder@${machineId}`],
-          },
-        }),
-        readRelatedPullRequests: () => ({
-          ok: true,
-          value: [],
-        }),
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout ?? "")).toEqual([
-      expect.objectContaining({
-        repository: "fankaidev/grovie",
-        candidates: [
-          expect.objectContaining({
-            status: "runnable",
-            pickOrder: 1,
-            agentId: `coder@${machineId}`,
-          }),
-        ],
-      }),
-    ]);
-  });
-
-  it("[UC-DAEMON-03-S08] skips related pull request context in fast queue inspection", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    const machineId = resolveMachineId(hostname());
-    configureLocalAgent(localState);
-    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie", "--fast"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: () => ({
-          ok: true,
-          value: [
-            {
-              reference: fakeReference(8),
-              title: "Fast issue",
-              labels: ["grovie", `agent:coder@${machineId}`],
-            },
-          ],
-        }),
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            title: "Fast issue",
-            labels: ["grovie", `agent:coder@${machineId}`],
-          },
-        }),
-        readRelatedPullRequests: () => {
-          throw new Error("fast queue inspection should not read related pull requests");
-        },
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain(`#1 fankaidev/grovie#8 agent=coder@${machineId}`);
-  });
-
-  it("[UC-DAEMON-03-S08] treats no-pr-context as a fast queue inspection alias", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    const machineId = resolveMachineId(hostname());
-    configureLocalAgent(localState);
-    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie", "--no-pr-context"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: () => ({
-          ok: true,
-          value: [
-            {
-              reference: fakeReference(8),
-              title: "No PR context issue",
-              labels: ["grovie", `agent:coder@${machineId}`],
-            },
-          ],
-        }),
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            title: "No PR context issue",
-            labels: ["grovie", `agent:coder@${machineId}`],
-          },
-        }),
-        readRelatedPullRequests: () => {
-          throw new Error("no-pr-context queue inspection should not read related pull requests");
-        },
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain(`#1 fankaidev/grovie#8 agent=coder@${machineId}`);
-  });
-
-  it("[UC-DAEMON-03-S07] skips machine-local agent labels that are not configured locally", () => {
-    const cwd = createTmpDir();
-    const localState = new FakeLocalState(createTmpDir());
-    const machineId = resolveMachineId(hostname());
-    configureLocalAgent(localState);
-
-    const result = runCli(["queue", "list", "--repo", "fankaidev/grovie"], {
-      cwd,
-      localState,
-      github: fakeGitHubGateway({
-        listOpenIssues: () => ({
-          ok: true,
-          value: [
-            {
-              reference: fakeReference(99),
-              title: "Old default assignment",
-              labels: ["grovie", `agent:default@${machineId}`],
-            },
-          ],
-        }),
-        readIssue: (reference) => ({
-          ok: true,
-          value: {
-            ...fakeIssue(reference),
-            title: "Old default assignment",
-            labels: ["grovie", `agent:default@${machineId}`],
-          },
-        }),
-      }),
-    });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain(`skip fankaidev/grovie#99 agent=default@${machineId}`);
-    expect(result.stdout).toContain("reason=agent not configured locally");
   });
 
   it("[UC-AGENT-02-S01] assigns an issue to an agent label", () => {
@@ -1401,8 +914,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
-    configureLocalAgent(localState);
-    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+    configureLocalAgent(localState, ["coder"], [{ repository: "fankaidev/grovie" }]);
 
     expect(
       await runCliAsync(["daemon", "--once"], {
@@ -1435,8 +947,7 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
-    configureLocalAgent(localState);
-    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+    configureLocalAgent(localState, ["coder"], [{ repository: "fankaidev/grovie" }]);
 
     expect(
       await runCliAsync(["daemon", "--once"], {
@@ -1477,7 +988,14 @@ describe("CLI command registration", () => {
     const cwd = createTmpDir();
     const localState = new FakeLocalState(createTmpDir());
     writeIgnoredRepoLocalConfig(cwd);
-    runCli(["watch", "add", "fankaidev/grovie"], { cwd, localState });
+    saveGlobalConfig(localState.paths.root, {
+      version: 1,
+      agents: [],
+      watchedRepositories: [{ repository: "fankaidev/grovie" }],
+      adminConsole: {
+        enabled: false,
+      },
+    });
 
     expect(
       await runCliAsync(["daemon", "--once"], {
@@ -1736,71 +1254,14 @@ describe("CLI command registration", () => {
     });
   });
 
-  it("[UC-DAEMON-01-S01] [UC-DAEMON-01-S02] manages watched repositories in the global config", () => {
-    const cwd = createTmpDir();
-    const globalRoot = createTmpDir();
-    const localState = new FakeLocalState(globalRoot);
+  it("[UC-DAEMON-01-S09] [UC-DAEMON-03-S01] does not expose watch or queue commands", () => {
+    const watch = runCli(["watch", "add", "fankaidev/grovie"]);
+    const queue = runCli(["queue", "list"]);
 
-    expect(runCli(["watch", "add", "fankaidev/grovie", "--label", "ready"], { cwd, localState })).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie watch add",
-        "",
-        "Added fankaidev/grovie.",
-        `Config: ${join(globalRoot, "config.yml")}`,
-        "Daemon: not running; changes will apply the next time it starts.",
-      ].join("\n"),
-    });
-
-    expect(runCli(["watch", "list"], { cwd, localState })).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie watch list",
-        "",
-        `Config: ${join(globalRoot, "config.yml")}`,
-        "- fankaidev/grovie label=ready",
-      ].join("\n"),
-    });
-
-    const remove = runCli(["watch", "remove", "fankaidev/grovie"], { cwd, localState });
-
-    expect(remove.stdout).toContain("Removed fankaidev/grovie.");
-    expect(remove.stdout).toContain("Daemon: not running; changes will apply the next time it starts.");
-  });
-
-  it("[UC-DAEMON-01-S09] warns when watch changes require a running daemon restart", () => {
-    const globalRoot = createTmpDir();
-    const localState = new FakeLocalState(globalRoot);
-    const daemonLifecycle = fakeDaemonLifecycle({
-      status: () => ({
-        status: "running",
-        state: fakeDaemonState(globalRoot, 1234),
-      }),
-    });
-
-    expect(runCli(["watch", "add", "fankaidev/grovie"], { localState, daemonLifecycle })).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie watch add",
-        "",
-        "Added fankaidev/grovie.",
-        `Config: ${join(globalRoot, "config.yml")}`,
-        "Daemon: running; restart it for watch changes to take effect.",
-        "Run `grovie daemon stop && grovie daemon start`.",
-      ].join("\n"),
-    });
-
-    expect(runCli(["watch", "remove", "fankaidev/grovie"], { localState, daemonLifecycle })).toEqual({
-      exitCode: 0,
-      stdout: [
-        "grovie watch remove",
-        "",
-        "Removed fankaidev/grovie.",
-        `Config: ${join(globalRoot, "config.yml")}`,
-        "Daemon: running; restart it for watch changes to take effect.",
-        "Run `grovie daemon stop && grovie daemon start`.",
-      ].join("\n"),
-    });
+    expect(watch.exitCode).toBe(1);
+    expect(watch.stderr).toContain("Unknown command: watch");
+    expect(queue.exitCode).toBe(1);
+    expect(queue.stderr).toContain("Unknown command: queue");
   });
 });
 
@@ -1946,7 +1407,11 @@ function writeDaemonLogs(root: string, input: { stdout: string; stderr: string }
   writeFileSync(join(daemonDir, "stderr.log"), input.stderr, "utf8");
 }
 
-function configureLocalAgent(localState: FakeLocalState, agentNames = ["coder"]): void {
+function configureLocalAgent(
+  localState: FakeLocalState,
+  agentNames = ["coder"],
+  watchedRepositories: Array<{ repository: string; label?: string }> = [],
+): void {
   saveGlobalConfig(localState.paths.root, {
     version: 1,
     agents: agentNames.map((name) => ({
@@ -1954,7 +1419,7 @@ function configureLocalAgent(localState: FakeLocalState, agentNames = ["coder"])
       runtime: "codex" as const,
       envKeys: ["OPENAI_API_KEY"],
     })),
-    watchedRepositories: [],
+    watchedRepositories,
     adminConsole: {
       enabled: false,
     },

@@ -1,33 +1,6 @@
 import { formatIssueReference } from "../github.js";
 import type { QueueInspectionResult } from "../queue.js";
 
-export function renderQueueInspection(results: QueueInspectionResult[], title = "grovie queue list"): string {
-  const lines = [title, ""];
-
-  if (results.every((result) => result.candidates.length === 0)) {
-    lines.push("No assigned issues found.");
-    return lines.join("\n");
-  }
-
-  for (const result of results) {
-    lines.push(`${result.repository} label=${result.label}`);
-
-    if (result.candidates.length === 0) {
-      lines.push("- No assigned issues.");
-      continue;
-    }
-
-    for (const candidate of result.candidates) {
-      const prefix = candidate.status === "runnable" ? `#${candidate.pickOrder ?? "?"}` : "skip";
-      const reason = candidate.status === "skipped" ? ` reason=${candidate.reason}` : "";
-      lines.push(`- ${prefix} ${formatIssueReference(candidate.issueReference)} agent=${candidate.agentId ?? "(none)"} priority=${candidate.priority} activity=${candidate.activity.timestamp}${reason}`);
-      lines.push(`  ${candidate.title}`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
 export function renderSkippedQueueSummary(results: QueueInspectionResult[]): string | undefined {
   const skipped = results.flatMap((result) =>
     result.candidates

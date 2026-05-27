@@ -23,4 +23,4 @@
 | UC-DAEMON-01-S06 | P1 | Unsafe or unknown config shapes fail validation with a clear error. |
 | UC-DAEMON-01-S07 | P0 | A daemon started with no configured local agents exits clearly before polling work. |
 | UC-DAEMON-01-S08 | P1 | Global daemon config accepts `maxConcurrentRuns` as a positive integer and defaults it to `3` when omitted. |
-| UC-DAEMON-01-S09 | P1 | `grovie watch add` and `grovie watch remove` report whether a running daemon needs restart before watch changes take effect. |
+| UC-DAEMON-01-S09 | P1 | The CLI does not expose a `grovie watch` command for mutating `watchedRepositories`; users edit the global config directly. |
