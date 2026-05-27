@@ -122,7 +122,7 @@ function saveInitConfig(context: CliContext, configPath: string, exists: boolean
       ...(backupPath === undefined ? [] : [`Backup written: ${backupPath}`]),
       `Wrote global config: ${configPath}`,
       "Run `grovie doctor` to validate it.",
-      "Run `grovie daemon` to start processing issues.",
+      "Run `grovie daemon start` to start processing issues.",
     ].join("\n"),
   };
 }

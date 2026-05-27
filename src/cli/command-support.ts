@@ -1,4 +1,5 @@
 import type { AgentHealth, AgentVerificationResult } from "../agent-health.js";
+import type { AdminConsoleResolvedConfig } from "../admin-console.js";
 import type { GrovieConfig } from "../config.js";
 import type { GitHubGateway } from "../github.js";
 import { createRuntime, type RuntimeAvailability, type RuntimeName } from "../runtime.js";
@@ -16,7 +17,7 @@ export function checkRuntimeAvailability(context: CliContext, runtime: RuntimeNa
   return createRuntime(runtime).checkAvailability();
 }
 
-export function startDaemonProcess(args: string[], context: CliContext): CliResult {
+export function startDaemonProcess(args: string[], context: CliContext, adminConsole?: AdminConsoleResolvedConfig): CliResult {
   const result = context.daemonLifecycle.start({
     root: context.localState.getPaths().root,
     args,
@@ -38,6 +39,7 @@ export function startDaemonProcess(args: string[], context: CliContext): CliResu
       `State: ${result.state.statePath}`,
       `Stdout log: ${result.state.stdoutPath}`,
       `Stderr log: ${result.state.stderrPath}`,
+      ...(adminConsole?.enabled === true ? [`Admin console: http://${adminConsole.host}:${adminConsole.port}/`] : []),
     ].join("\n"),
   };
 }

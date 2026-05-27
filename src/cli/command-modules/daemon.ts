@@ -76,8 +76,8 @@ export const daemonCommand = {
 
         if (adminConsole.enabled) {
           return context.adminConsolePortCheck(adminConsole)
-            .then(() => startDaemonProcess(args, context))
-            .catch(errorResult);
+            .then(() => startDaemonProcess(args, context, adminConsole))
+            .catch((error: unknown) => errorResult(explainDaemonStartPortError(error)));
         }
 
         return startDaemonProcess(args, context);
@@ -326,3 +326,17 @@ export const daemonCommand = {
       }
     },
   } satisfies CliCommand;
+
+function explainDaemonStartPortError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (!/^Admin console port \d+ is unavailable on .+\.$/.test(message)) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  return new Error([
+    message,
+    "Another Grovie daemon or local process may already be using that port.",
+    "Run `grovie daemon status` to check the recorded daemon, or choose another `adminConsole.port` in ~/.grovie/config.yml.",
+  ].join("\n"));
+}
