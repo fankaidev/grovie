@@ -212,9 +212,7 @@ watchedRepositories:
 
 `grovie issue assign owner/repo#123 coder@your-machine-id` adds the matching `agent:...` issue label. `grovie issue unassign owner/repo#123 coder@your-machine-id` removes it.
 
-`grovie daemon` polls watched repositories from `~/.grovie/config.yml`, resolves repository policy from each watched repository entry, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
-
-`grovie daemon service install --platform launchd|systemd` writes an optional user service file for macOS LaunchAgent or Linux systemd user service integration. The generated service runs locally and writes stdout/stderr under `~/.grovie/daemon`.
+`grovie daemon start` polls watched repositories from `~/.grovie/config.yml` in a local background process, resolves repository policy from each watched repository entry, acquires a local execution lock for one `(issue, agent)` at a time, and runs eligible work locally.
 
 `grovie status` and `grovie runs list` show recent local session status, issue identity, branches, log paths, and last event time. `grovie runs show <run-id>` shows the worktree, run directory, stdout/stderr logs, and recent events for one run.
 
