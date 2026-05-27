@@ -9,7 +9,6 @@ Grovie is a local-first, GitHub-native multi-agent platform for coordinating cod
 It keeps execution on your machines while GitHub remains the shared workflow, audit trail, and review surface. Agents run locally with your tools, credentials, prompts, and runtime permissions; coordination happens through the GitHub artifacts your team already uses.
 
 ```sh
-npm install --global @fankaidev/grovie
 gh auth login
 mkdir -p ~/.grovie
 cat > ~/.grovie/config.yml <<'YAML'
@@ -25,8 +24,8 @@ daemon:
 adminConsole:
   enabled: false
 YAML
-grovie doctor
-grovie daemon start
+npx @fankaidev/grovie@latest doctor
+npx @fankaidev/grovie@latest daemon start
 ```
 
 ## Why Grovie?
@@ -55,12 +54,11 @@ Prerequisites:
 - Node.js 20 or newer
 - A local agent runtime such as Codex CLI, Claude Code, or Pi
 
-Install Grovie:
+Run Grovie with `npx`:
 
 ```sh
-npm install --global @fankaidev/grovie
-grovie --version
-grovie --help
+npx @fankaidev/grovie@latest --version
+npx @fankaidev/grovie@latest --help
 ```
 
 Create the global Grovie config:
@@ -88,7 +86,7 @@ The daemon concurrency limit caps total local runs across all watched repositori
 Check the local Grovie setup:
 
 ```sh
-grovie doctor
+npx @fankaidev/grovie@latest doctor
 ```
 
 Use the `Machine id` and `Configured agents` lines from `grovie doctor` to find the concrete agent id for this machine, such as `coder@kai-mini`.
@@ -98,23 +96,23 @@ Add repositories to the global daemon schedule by editing `watchedRepositories` 
 Start the local daemon:
 
 ```sh
-grovie daemon start
-grovie daemon status
+npx @fankaidev/grovie@latest daemon start
+npx @fankaidev/grovie@latest daemon status
 ```
 
 Trigger issue work through GitHub:
 
 ```sh
 gh issue edit 123 --repo owner/repo --add-label grovie
-grovie issue assign owner/repo#123 coder@your-machine-id
+npx @fankaidev/grovie@latest issue assign owner/repo#123 coder@your-machine-id
 gh issue comment 123 --repo owner/repo --body "Please start."
 ```
 
 Inspect the background daemon when needed:
 
 ```sh
-grovie daemon status
-grovie daemon logs
+npx @fankaidev/grovie@latest daemon status
+npx @fankaidev/grovie@latest daemon logs
 ```
 
 ## Example Workflow
