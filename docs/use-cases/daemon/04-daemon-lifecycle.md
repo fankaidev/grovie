@@ -9,13 +9,11 @@
 | R1 | `daemon stop` validates the recorded process before sending a termination signal. |
 | R2 | Daemon process logs stay separate from per-run stdout and stderr logs. |
 | R3 | When the admin console is enabled, the daemon process owns the admin console server lifecycle. |
-| R4 | Grovie does not expose foreground daemon or platform service installation subcommands. |
 
 ## Scenarios
 
 | ID | Priority | Scenario |
 |----|----------|----------|
-| UC-DAEMON-04-S01 | P1 | `grovie daemon` without a lifecycle subcommand is rejected with a clear usage message. |
 | UC-DAEMON-04-S02 | P1 | `grovie daemon start` starts a detached background daemon, records pid and log paths, and refuses to start another live daemon. |
 | UC-DAEMON-04-S03 | P1 | `grovie daemon stop` terminates the recorded background daemon only when the pid still matches Grovie daemon state. |
 | UC-DAEMON-04-S04 | P1 | `grovie daemon status` reports running, stopped, or stale background daemon state with pid and log paths when available. |

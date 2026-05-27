@@ -3,13 +3,17 @@ import { buildAgentLabel } from "../../assignment.js";
 import { createAdminConsoleServer, resolveAdminConsoleConfig, startAdminConsoleServer } from "../../admin-console.js";
 import {
   addWatchedRepository,
+  defaultConfig,
   loadGlobalConfig,
   removeWatchedRepository,
   resolveConfiguredAgents,
+  resolveEnabledStateRepo,
+  resolveRepositoryConfig,
+  resolveWatchedRepositoryConfig,
   saveGlobalConfig,
 } from "../../config.js";
 import { cleanupLocalState, parseOlderThan, renderCleanupResult } from "../../cleanup.js";
-import { NO_LOCAL_AGENTS_MESSAGE } from "../../daemon.js";
+import { NO_LOCAL_AGENTS_MESSAGE, runDaemon, runDaemonForRepositories } from "../../daemon.js";
 import { followDaemonLogs, parseDaemonLogStream, readDaemonLogs } from "../../daemon-logs.js";
 import { renderDaemonLifecycleStatus } from "../../daemon-lifecycle.js";
 import { formatIssueReference, parseIssueReference } from "../../github.js";
@@ -174,6 +178,82 @@ export const daemonCommand = {
               exitCode: 1,
               stderr: result.message,
             };
+        } catch (error) {
+          return errorResult(error);
+        }
+      }
+
+      if (subcommand === "worker" && process.env.GROVIE_DAEMON_TOKEN !== undefined) {
+        const workerArgs = args.slice(1);
+
+        try {
+          const argValidation = validateCliArgs(workerArgs, {
+            valueOptions: ["--repo", "--label"],
+            flags: ["--once"],
+          });
+
+          if (!argValidation.ok) {
+            return argValidation.result;
+          }
+
+          const normalizedRepoOption = readStringOption(workerArgs, "--repo");
+
+          if (!normalizedRepoOption.ok) {
+            return normalizedRepoOption.result;
+          }
+
+          const normalizedLabelOption = readStringOption(workerArgs, "--label");
+
+          if (!normalizedLabelOption.ok) {
+            return normalizedLabelOption.result;
+          }
+
+          const globalConfig = loadGlobalConfig(context.localState.getPaths().root);
+          const localAgents = resolveConfiguredAgents(globalConfig.config, resolveLocalIdentity().machineId);
+
+          if (normalizedRepoOption.value !== undefined) {
+            const resolvedConfig = resolveRepositoryConfig(normalizedRepoOption.value, globalConfig);
+
+            return runDaemon({
+              repository: normalizedRepoOption.value,
+              label: normalizedLabelOption.value ?? resolvedConfig.config.queue.label,
+              config: resolvedConfig.config,
+              configPath: resolvedConfig.path ?? "built-in defaults",
+              github: context.github,
+              runtime: context.runtime,
+              localState: context.localState,
+              stateRepo: resolveEnabledStateRepo(globalConfig.config),
+              localAgents,
+              once: workerArgs.includes("--once"),
+              maxConcurrentRuns: globalConfig.config.daemon?.maxConcurrentRuns ?? 3,
+              adminConsole: resolveAdminConsoleConfig(globalConfig.config),
+              daemonLifecycle: context.daemonLifecycle,
+            });
+          }
+
+          return runDaemonForRepositories({
+            repositories: globalConfig.config.watchedRepositories.map((watchedRepository) => {
+              const config = resolveWatchedRepositoryConfig(watchedRepository);
+
+              return {
+                repository: watchedRepository.repository,
+                label: normalizedLabelOption.value ?? config.queue.label,
+                config,
+                configPath: globalConfig.path,
+              };
+            }),
+            config: defaultConfig(),
+            configPath: "built-in defaults",
+            github: context.github,
+            runtime: context.runtime,
+            localState: context.localState,
+            stateRepo: resolveEnabledStateRepo(globalConfig.config),
+            localAgents,
+            once: workerArgs.includes("--once"),
+            maxConcurrentRuns: globalConfig.config.daemon?.maxConcurrentRuns ?? 3,
+            adminConsole: resolveAdminConsoleConfig(globalConfig.config),
+            daemonLifecycle: context.daemonLifecycle,
+          });
         } catch (error) {
           return errorResult(error);
         }

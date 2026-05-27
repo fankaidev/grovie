@@ -110,16 +110,11 @@ grovie issue assign owner/repo#123 coder@your-machine-id
 gh issue comment 123 --repo owner/repo --body "Please start."
 ```
 
-Run the local daemon in the foreground instead:
+Inspect the background daemon when needed:
 
 ```sh
-grovie daemon
-```
-
-Use `--once` when you want exactly one polling cycle:
-
-```sh
-grovie daemon --once
+grovie daemon status
+grovie daemon logs
 ```
 
 ## Example Workflow
@@ -222,7 +217,7 @@ watchedRepositories:
 
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The safety boundary is intentionally simple:
 
-- `grovie daemon` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
+- `grovie daemon start` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
 - Automatic daemon queue runs require the issue creator to be trusted by watched repository policy; when no trusted authors are configured, the authenticated `gh` user is trusted by default.
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
@@ -250,8 +245,7 @@ Use this checklist before trusting a new machine or repository:
 11. Confirm the issue receives a Grovie result comment with a run id and local run directory.
 12. For code-change runs, confirm Grovie publishes a generated branch and links the result from the issue.
 13. Confirm no direct push was made to the default branch.
-14. Run `grovie daemon --once` against another labeled issue.
-15. Add `/grovie cancel` to a running issue and confirm the daemon marks it canceled.
+14. Add `/grovie cancel` to a running issue and confirm the daemon marks it canceled.
 
 ## Isolated Smoke Validation
 
