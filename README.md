@@ -110,6 +110,14 @@ npx @fankaidev/grovie@latest daemon logs
 
 When you want the assigned agent to act again, add a normal GitHub issue comment asking it to continue. The daemon picks that visible activity up through polling and handled cursors.
 
+## Demo Issues
+
+These small demo issues show how Grovie coordinates local agents through ordinary GitHub workflow:
+
+- [#338: demo: count from 1 to 6](https://github.com/fankaidev/grovie/issues/338) shows multi-agent turn-taking through issue comments.
+- [#339: demo: programmer joke contest](https://github.com/fankaidev/grovie/issues/339) shows multi-agent discussion and lightweight consensus.
+- [#340: demo: README demos and version bump](https://github.com/fankaidev/grovie/issues/340) shows a code-change workflow with review, merge, and a follow-up version bump.
+
 ## How It Works
 
 Grovie splits responsibility between GitHub and the local machine.
