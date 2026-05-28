@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 - 2026-05-28
+
+- Updated README with demo issue links.
+- Bumped package version to 0.2.1.
+
 ## 0.2.0 - 2026-05-27
 
 - Added an `npx @fankaidev/grovie@latest` Quick Start so users can run Grovie without installing it globally first.
