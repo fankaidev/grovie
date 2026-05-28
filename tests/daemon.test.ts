@@ -32,6 +32,24 @@ afterEach(() => {
 });
 
 describe("runDaemonCycle", () => {
+  it("[UC-DAEMON-02-S17] fails clearly when author trust is not configured", async () => {
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: defaultConfig(),
+      configPath: "/home/user/.grovie/config.yml",
+      github: new FakeGitHub([fakeIssue()]),
+      once: true,
+      now: () => NOW,
+    });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      processed: false,
+      stderr: "Watched repository trust.allowedAuthors must be configured explicitly.",
+    });
+  });
+
   it("[UC-GITHUB-01-S05] runs one queued issue without creating advisory claim comments", async () => {
     const github = new FakeGitHub([fakeIssue()]);
     const runs: RunIssueAsyncInput[] = [];
@@ -39,7 +57,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -77,7 +95,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -101,7 +119,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -135,7 +153,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -175,7 +193,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -221,7 +239,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -248,7 +266,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -294,7 +312,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -369,7 +387,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -391,7 +409,7 @@ describe("runDaemonCycle", () => {
     const secondResult = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -431,7 +449,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -509,7 +527,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -565,7 +583,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -600,7 +618,7 @@ describe("runDaemonCycle", () => {
     const secondResult = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -643,7 +661,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -690,7 +708,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([fakeIssue()], { failReadIssueFor: 8 }),
       once: true,
@@ -732,7 +750,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
@@ -767,7 +785,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([fakeIssue({ labels: ["grovie"] })]),
       once: true,
@@ -826,7 +844,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([fakeIssue({ labels: ["grovie"] })]),
       once: true,
@@ -864,7 +882,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
@@ -898,7 +916,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
@@ -927,7 +945,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
@@ -966,7 +984,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1003,7 +1021,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1045,7 +1063,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1076,7 +1094,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1118,7 +1136,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1154,7 +1172,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1194,7 +1212,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1234,7 +1252,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1275,7 +1293,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1299,7 +1317,7 @@ describe("runDaemonCycle", () => {
     expect(runs).toEqual([]);
   });
 
-  it("[UC-DAEMON-02-S17] uses configured trusted authors instead of the authenticated gh login", async () => {
+  it("[UC-DAEMON-02-S17] uses configured allowed authors instead of the authenticated gh login", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
       fakeIssue({
@@ -1313,9 +1331,9 @@ describe("runDaemonCycle", () => {
       repository: "fankaidev/grovie",
       label: "grovie",
       config: {
-        ...defaultConfig(),
+        ...defaultTrustedConfig(),
         trust: {
-          trustedAuthors: ["trusted-user"],
+          allowedAuthors: ["trusted-user"],
         },
       },
       configPath: "/home/user/.grovie/config.yml",
@@ -1345,7 +1363,7 @@ describe("runDaemonCycle", () => {
     await expect(runDaemon({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github: new FakeGitHub([]),
       once: true,
@@ -1374,7 +1392,7 @@ describe("runDaemonCycle", () => {
     await expect(runDaemon({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: false,
@@ -1399,7 +1417,7 @@ describe("runDaemonCycle", () => {
     await expect(runDaemon({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: false,
@@ -1437,7 +1455,7 @@ describe("runDaemonCycle", () => {
     await expect(runDaemon({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: false,
@@ -1473,7 +1491,7 @@ describe("runDaemonCycle", () => {
     await expect(runDaemon({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: false,
@@ -1522,7 +1540,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonSingleRepositoryCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: false,
@@ -1561,7 +1579,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonSingleRepositoryCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: false,
@@ -1593,7 +1611,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1648,7 +1666,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1697,7 +1715,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1748,7 +1766,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1771,7 +1789,7 @@ describe("runDaemonCycle", () => {
     const secondResult = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1829,7 +1847,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1876,7 +1894,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1936,7 +1954,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -1995,7 +2013,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2048,7 +2066,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2087,7 +2105,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2121,7 +2139,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2157,7 +2175,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2171,7 +2189,7 @@ describe("runDaemonCycle", () => {
     const secondResult = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2232,7 +2250,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2264,7 +2282,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2289,7 +2307,7 @@ describe("runDaemonCycle", () => {
     const secondResult = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2335,7 +2353,7 @@ describe("runDaemonCycle", () => {
     await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2354,7 +2372,7 @@ describe("runDaemonCycle", () => {
     const secondResult = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2400,7 +2418,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2443,7 +2461,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2482,7 +2500,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2523,7 +2541,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2540,6 +2558,43 @@ describe("runDaemonCycle", () => {
     });
 
     expect(result.exitCode).toBe(0);
+    expect(result.processed).toBe(true);
+    expect(runs).toHaveLength(1);
+  });
+
+  it("[UC-DAEMON-02-S17] can explicitly allow all issue creators", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        author: "external-user",
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: {
+        ...defaultTrustedConfig(),
+        trust: {
+          allowedAuthors: ["*"],
+        },
+      },
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localAgents: [configuredCodexAgent("coder", machineId)],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "coder ran",
+        };
+      },
+    });
+
     expect(result.processed).toBe(true);
     expect(runs).toHaveLength(1);
   });
@@ -2561,7 +2616,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2600,7 +2655,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2643,7 +2698,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2689,7 +2744,7 @@ describe("runDaemonCycle", () => {
     const result = await runDaemonCycle({
       repository: "fankaidev/grovie",
       label: "grovie",
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "/home/user/.grovie/config.yml",
       github,
       once: true,
@@ -2721,7 +2776,7 @@ describe("runDaemonCycle", () => {
           label: "grovie",
         },
       ],
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "built-in defaults",
       github,
       runtime: fakeRuntime(),
@@ -2770,7 +2825,7 @@ describe("runDaemonCycle", () => {
           label: "grovie",
         },
       ],
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "built-in defaults",
       github,
       runtime: fakeRuntime(),
@@ -2803,7 +2858,7 @@ describe("runDaemonCycle", () => {
           label: "grovie",
         },
       ],
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "built-in defaults",
       github,
       runtime: fakeRuntime(),
@@ -2846,7 +2901,7 @@ describe("runDaemonCycle", () => {
             label: "grovie",
           },
         ],
-        config: defaultConfig(),
+        config: defaultTrustedConfig(),
         configPath: "built-in defaults",
         github: new FakeGitHub([fakeIssue()]),
         runtime: fakeRuntime(),
@@ -2895,7 +2950,7 @@ describe("runDaemonCycle", () => {
           label: "ready",
         },
       ],
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "built-in defaults",
       github,
       runtime: fakeRuntime(),
@@ -2957,7 +3012,7 @@ describe("runDaemonCycle", () => {
           label: "ready",
         },
       ],
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "built-in defaults",
       github,
       runtime: fakeRuntime(),
@@ -3018,7 +3073,7 @@ describe("runDaemonCycle", () => {
           label: "ready",
         },
       ],
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "built-in defaults",
       github,
       runtime: fakeRuntime(),
@@ -3046,7 +3101,7 @@ describe("runDaemonCycle", () => {
     ]);
     const runs: RunIssueAsyncInput[] = [];
     const config = {
-      ...defaultConfig(),
+      ...defaultTrustedConfig(),
       queue: {
         label: "ready",
       },
@@ -3063,7 +3118,7 @@ describe("runDaemonCycle", () => {
           configPath: "/home/user/.grovie/config.yml",
         },
       ],
-      config: defaultConfig(),
+      config: defaultTrustedConfig(),
       configPath: "built-in defaults",
       github,
       runtime: fakeRuntime(),
@@ -3297,6 +3352,15 @@ function defaultConfig(): GrovieConfig {
     },
     safety: {
       allowDefaultBranchPush: false,
+    },
+  };
+}
+
+function defaultTrustedConfig(): GrovieConfig {
+  return {
+    ...defaultConfig(),
+    trust: {
+      allowedAuthors: ["fankaidev"],
     },
   };
 }

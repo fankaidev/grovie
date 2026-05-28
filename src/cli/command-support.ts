@@ -1,6 +1,6 @@
 import type { AgentHealth, AgentVerificationResult } from "../agent-health.js";
 import type { AdminConsoleResolvedConfig } from "../admin-console.js";
-import type { GrovieConfig } from "../config.js";
+import { resolveAllowedIssueAuthors, type GrovieConfig } from "../config.js";
 import type { GitHubGateway } from "../github.js";
 import { createRuntime, type RuntimeAvailability, type RuntimeName } from "../runtime.js";
 import type { CliContext, CliResult } from "./types.js";
@@ -130,29 +130,8 @@ export function renderGlobalConfigSource(path: string, watchedRepositoryCount: n
   return `${path} (${repositoryText}).`;
 }
 
-export function resolveQueueTrustedAuthors(config: GrovieConfig, github: GitHubGateway): { ok: true; value: string[] } | { ok: false; message: string } {
-  const configured = config.trust?.trustedAuthors.filter((author) => author.trim().length > 0) ?? [];
-
-  if (configured.length > 0) {
-    return {
-      ok: true,
-      value: configured,
-    };
-  }
-
-  const authenticated = github.getAuthenticatedUser();
-
-  if (!authenticated.ok) {
-    return {
-      ok: false,
-      message: `Could not resolve default trusted issue creator from gh login: ${authenticated.error.message}`,
-    };
-  }
-
-  return {
-    ok: true,
-    value: [authenticated.value.login],
-  };
+export function resolveQueueTrustedAuthors(config: GrovieConfig, _github: GitHubGateway): { ok: true; value: string[] | undefined } | { ok: false; message: string } {
+  return resolveAllowedIssueAuthors(config);
 }
 
 export function readStringOption(

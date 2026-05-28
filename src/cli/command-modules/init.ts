@@ -20,6 +20,7 @@ type InitOptions = {
   repository?: string;
   runtimes: RuntimeName[];
   adminConsole?: boolean;
+  allowedAuthors?: string[];
 };
 
 const MANUAL_REPOSITORY_CHOICE = "m";
@@ -30,7 +31,7 @@ export const initCommand = {
   description: "Create the global Grovie config.",
   usage: [
     "grovie init",
-    "grovie init --yes [--force] [--repo owner/repo] [--runtime codex|claude-code|pi] [--admin-console|--no-admin-console]",
+    "grovie init --yes [--force] [--repo owner/repo] [--allow-current-user|--allow-all-authors] [--runtime codex|claude-code|pi] [--admin-console|--no-admin-console]",
   ].join("\n"),
   run: (args: string[], context: CliContext): CliResult | Promise<CliResult> => {
     try {
@@ -98,7 +99,7 @@ function writeInitConfig(
 ): CliResult | Promise<CliResult> {
   const config = interactive
     ? buildInteractiveConfig(options, context)
-    : buildNonInteractiveConfig(options);
+    : buildNonInteractiveConfig(options, context);
 
   if (isPromise(config)) {
     return config
@@ -133,6 +134,9 @@ function isPromise(value: GlobalGrovieConfig | Promise<GlobalGrovieConfig>): val
 
 async function buildInteractiveConfig(options: InitOptions, context: CliContext): Promise<GlobalGrovieConfig> {
   const repository = options.repository ?? await promptForRepository(context);
+  const allowedAuthors = repository === undefined
+    ? undefined
+    : options.allowedAuthors ?? await promptForAllowedAuthors(context);
   const runtimeHealth = SUPPORTED_RUNTIMES.map((runtime) => checkRuntimeAvailability(context, runtime));
   const selectedRuntimes = options.runtimes.length > 0
     ? options.runtimes
@@ -142,20 +146,25 @@ async function buildInteractiveConfig(options: InitOptions, context: CliContext)
 
   return createConfig({
     repository,
+    allowedAuthors,
     runtimes: selectedRuntimes,
     adminConsole: adminConsoleEnabled,
   });
 }
 
-function buildNonInteractiveConfig(options: InitOptions): GlobalGrovieConfig {
+function buildNonInteractiveConfig(options: InitOptions, context: CliContext): GlobalGrovieConfig {
+  const allowedAuthors = options.repository === undefined ? undefined : options.allowedAuthors ?? [resolveAuthenticatedUser(context)];
+  const resolvedAllowedAuthors = allowedAuthors?.length === 0 ? [resolveAuthenticatedUser(context)] : allowedAuthors;
+
   return createConfig({
     repository: options.repository,
+    allowedAuthors: resolvedAllowedAuthors,
     runtimes: options.runtimes,
     adminConsole: options.adminConsole ?? false,
   });
 }
 
-function createConfig(input: { repository?: string; runtimes: RuntimeName[]; adminConsole: boolean }): GlobalGrovieConfig {
+function createConfig(input: { repository?: string; allowedAuthors?: string[]; runtimes: RuntimeName[]; adminConsole: boolean }): GlobalGrovieConfig {
   return {
     ...defaultGlobalConfig(),
     agents: input.runtimes.map((runtime) => ({
@@ -167,6 +176,9 @@ function createConfig(input: { repository?: string; runtimes: RuntimeName[]; adm
       : [
         {
           repository: input.repository,
+          trust: {
+            allowedAuthors: input.allowedAuthors ?? [],
+          },
         },
       ],
     adminConsole: input.adminConsole
@@ -178,6 +190,36 @@ function createConfig(input: { repository?: string; runtimes: RuntimeName[]; adm
         enabled: false,
       },
   };
+}
+
+function resolveAuthenticatedUser(context: CliContext): string {
+  const authenticated = context.github.getAuthenticatedUser();
+
+  if (!authenticated.ok) {
+    throw new Error(`Could not resolve current GitHub user for trusted author policy: ${authenticated.error.message}`);
+  }
+
+  return authenticated.value.login;
+}
+
+async function promptForAllowedAuthors(context: CliContext): Promise<string[]> {
+  const answer = (await context.terminal.prompt([
+    "Which issue creators should Grovie run automatically?",
+    "1. Only the current authenticated GitHub user (recommended)",
+    "2. Any issue creator",
+    "Choose [1]: ",
+  ].join("\n"))).trim();
+  const selected = answer.length === 0 ? "1" : answer;
+
+  if (selected === "1" || selected === "current-user") {
+    return [resolveAuthenticatedUser(context)];
+  }
+
+  if (selected === "2" || selected === "all") {
+    return ["*"];
+  }
+
+  throw new Error(`Invalid allowed authors choice: ${selected}`);
 }
 
 async function promptForRepository(context: CliContext): Promise<string | undefined> {
@@ -350,6 +392,16 @@ function parseInitOptions(args: string[]): { ok: true; value: InitOptions } | { 
 
       seenFlags.add("--admin-console");
       options.adminConsole = arg === "--admin-console";
+      continue;
+    }
+
+    if (arg === "--allow-current-user" || arg === "--allow-all-authors") {
+      if (seenFlags.has("--allowed-authors")) {
+        return invalidArgs(`Duplicate option: ${arg}`);
+      }
+
+      seenFlags.add("--allowed-authors");
+      options.allowedAuthors = arg === "--allow-all-authors" ? ["*"] : [];
       continue;
     }
 

@@ -88,7 +88,13 @@ describe("admin web home route", () => {
 
       if (url === "/api/repos") {
         return jsonResponse(200, {
-          repositories: [{ repository: "fankaidev/grovie", label: "grovie" }],
+          repositories: [{
+            repository: "fankaidev/grovie",
+            label: "grovie",
+            trust: {
+              allowedAuthors: ["fankaidev"],
+            },
+          }],
         });
       }
 
@@ -140,7 +146,13 @@ describe("admin web home route", () => {
       config: {
         path: "/state/config.yml",
       },
-      repositories: [{ repository: "fankaidev/grovie", label: "grovie" }],
+      repositories: [{
+        repository: "fankaidev/grovie",
+        label: "grovie",
+        trust: {
+          allowedAuthors: ["fankaidev"],
+        },
+      }],
       activity: expect.arrayContaining([
         expect.objectContaining({ type: "run.started" }),
         expect.objectContaining({ type: "daemon.started" }),
@@ -220,7 +232,13 @@ describe("admin web home route", () => {
           config: {
             path: "/state/config.yml",
           },
-          repositories: [{ repository: "fankaidev/grovie", label: "grovie" }],
+          repositories: [{
+            repository: "fankaidev/grovie",
+            label: "grovie",
+            trust: {
+              allowedAuthors: ["fankaidev"],
+            },
+          }],
           activity: [{
             timestamp: "2026-05-24T13:01:00.000Z",
             type: "run.started",

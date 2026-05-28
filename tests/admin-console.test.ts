@@ -232,6 +232,9 @@ describe("admin console server", () => {
         {
           repository: "fankaidev/grovie",
           label: "grovie",
+          trust: {
+            allowedAuthors: ["fankaidev"],
+          },
         },
       ],
       adminConsole: {
@@ -264,7 +267,13 @@ describe("admin console server", () => {
     saveGlobalConfig(root, {
       version: 1,
       agents: [],
-      watchedRepositories: [{ repository: "fankaidev/grovie", label: "ready" }],
+      watchedRepositories: [{
+        repository: "fankaidev/grovie",
+        label: "ready",
+        trust: {
+          allowedAuthors: ["fankaidev"],
+        },
+      }],
       adminConsole: { enabled: true },
     });
     const started = await startTestServer(root);
@@ -272,7 +281,13 @@ describe("admin console server", () => {
     const payload = await (await fetch(`${started.url}/api/repos`)).json() as AdminApiRepositoriesResponse;
 
     expect(payload).toEqual({
-      repositories: [{ repository: "fankaidev/grovie", label: "ready" }],
+      repositories: [{
+        repository: "fankaidev/grovie",
+        label: "ready",
+        trust: {
+          allowedAuthors: ["fankaidev"],
+        },
+      }],
     });
   });
 
@@ -415,7 +430,13 @@ describe("admin console server", () => {
         { name: "codex", runtime: "codex", envKeys: [] },
         { name: "pi", runtime: "pi", envKeys: [] },
       ],
-      watchedRepositories: [{ repository: "fankaidev/grovie", label: "ready" }],
+      watchedRepositories: [{
+        repository: "fankaidev/grovie",
+        label: "ready",
+        trust: {
+          allowedAuthors: ["fankaidev"],
+        },
+      }],
       adminConsole: { enabled: true },
     });
     writeRun(pathsForRoot(root).runsDir, "run-1", {

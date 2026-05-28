@@ -248,7 +248,15 @@ describe("local run status", () => {
         host: "localhost",
         port: 8765,
       },
-      watchedRepositories: [{ repository: "fankaidev/grovie", label: "grovie" }],
+      watchedRepositories: [
+        {
+          repository: "fankaidev/grovie",
+          label: "grovie",
+          trust: {
+            allowedAuthors: ["fankaidev"],
+          },
+        },
+      ],
       paths: {
         root,
         reposDir: join(root, "repos"),

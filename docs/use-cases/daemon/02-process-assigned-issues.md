@@ -10,7 +10,7 @@
 | R2 | Execution locks are local and keyed by `(issue, agent)`. |
 | R3 | Different agents can work on the same issue independently. |
 | R4 | Fresh issue and pull request reads remain the source of truth before starting work. |
-| R5 | Automatic queue runs require the issue creator to be trusted; watched repository `trust.trustedAuthors` supplies the trusted list, and the authenticated `gh` user is the default when no trusted authors are configured. |
+| R5 | Automatic queue runs require an explicit watched repository author trust policy. `trust.allowedAuthors` lists allowed GitHub logins, and a single `*` allows any issue creator. |
 
 ## Scenarios
 
@@ -32,7 +32,7 @@
 | UC-DAEMON-02-S14 | P0 | A daemon cycle skips an issue assigned to an agent id that matches the machine but is not configured locally. |
 | UC-DAEMON-02-S15 | P1 | A long-running daemon cycle reads repository events, skips queue inspection when no relevant events changed, resolves pull request events to related issues through GitHub with a local cache, and periodically falls back to a full queue scan. |
 | UC-DAEMON-02-S16 | P1 | A daemon cycle reruns a handled issue when a linked open pull request's merge state changes to `DIRTY` or otherwise requires branch update work, and records daemon activity explaining the mergeability trigger. |
-| UC-DAEMON-02-S17 | P1 | A daemon cycle skips automatic queue runs whose issue creator is not trusted, while configured trusted authors can allow creators other than the authenticated `gh` user. |
+| UC-DAEMON-02-S17 | P1 | A daemon cycle skips automatic queue runs whose issue creator is not trusted, while explicit watched repository author policy can allow selected creators or all creators. |
 | UC-DAEMON-02-S18 | P1 | A long-running daemon obeys GitHub repository event `X-Poll-Interval` values, sends stored `ETag` values through `If-None-Match`, and treats `304 Not Modified` as unchanged repository events. |
 | UC-DAEMON-02-S19 | P1 | A daemon silently skips and advances handled state when an agent's only new effective activity is that same agent's own visible output, but still runs when the delta includes another agent's output. |
 | UC-DAEMON-02-S20 | P1 | A daemon cycle fans out runnable work to multiple local agents up to the global `maxConcurrentRuns` limit while preserving per `(issue, agent)` execution locks. |
