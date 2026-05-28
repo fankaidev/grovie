@@ -117,11 +117,11 @@ describe("CLI command registration", () => {
     expect(GROVIE_VERSION).toBe(packageVersion.version);
     expect(runCli(["--version"])).toEqual({
       exitCode: 0,
-      stdout: "0.2.0",
+      stdout: "0.2.1",
     });
     expect(runCli(["-v"])).toEqual({
       exitCode: 0,
-      stdout: "0.2.0",
+      stdout: "0.2.1",
     });
   });
 
