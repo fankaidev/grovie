@@ -59,7 +59,7 @@ export async function runDaemonRepositoryCycle(input: MultiRepositoryDaemonInput
   const runnableRepositories: {
     repository: string;
     label: string;
-    trustedAuthors: string[];
+    trustedAuthors: string[] | undefined;
     config: NonNullable<DaemonInput["config"]>;
     configPath: string;
     issueNumbers?: number[];

@@ -162,7 +162,7 @@ describe("CLI command registration", () => {
         }),
       }),
       runtimeAvailabilityChecker: fakeRuntimeAvailability,
-      terminal: fakeTerminal(["2", "1,2", ""]),
+      terminal: fakeTerminal(["2", "", "1,2", ""]),
     });
 
     expect(result).toEqual({
@@ -176,6 +176,8 @@ describe("CLI command registration", () => {
       ].join("\n"),
     });
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("repository: fankaidev/qstory");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("mode: current-user");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("login: fankaidev");
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("name: codex");
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("name: claude-code");
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("host: 127.0.0.1");
@@ -211,6 +213,7 @@ describe("CLI command registration", () => {
 
     expect(runCli(["init", "--force", "--yes", "--repo", "fankaidev/grovie", "--runtime", "codex", "--admin-console"], {
       localState,
+      github: fakeGitHubGateway(),
     })).toEqual({
       exitCode: 0,
       stdout: [
@@ -224,7 +227,19 @@ describe("CLI command registration", () => {
     });
     expect(readFileSync(`${configPath}.bak`, "utf8")).toBe("version: 1\nagents: []\nwatchedRepositories: []\n");
     expect(readFileSync(configPath, "utf8")).toContain("repository: fankaidev/grovie");
+    expect(readFileSync(configPath, "utf8")).toContain("login: fankaidev");
     expect(readFileSync(configPath, "utf8")).toContain("enabled: true");
+  });
+
+  it("[UC-DAEMON-01-S10] can initialize a watched repository that allows all issue creators", () => {
+    const globalRoot = createTmpDir();
+    const localState = new FakeLocalState(globalRoot);
+    const configPath = join(globalRoot, "config.yml");
+
+    expect(runCli(["init", "--yes", "--repo", "fankaidev/grovie", "--allow-all-authors"], {
+      localState,
+    }).exitCode).toBe(0);
+    expect(readFileSync(configPath, "utf8")).toContain("mode: all");
   });
 
   it("[UC-DAEMON-01-S06] reports invalid global config fields through doctor", () => {
@@ -596,7 +611,7 @@ describe("CLI command registration", () => {
     saveGlobalConfig(globalRoot, {
       version: 1,
       agents: [],
-      watchedRepositories: [{ repository: "fankaidev/grovie" }],
+      watchedRepositories: [watchedRepository("fankaidev/grovie")],
       adminConsole: {
         enabled: true,
         host: "localhost",
@@ -920,7 +935,7 @@ describe("CLI command registration", () => {
     saveGlobalConfig(localState.paths.root, {
       version: 1,
       agents: [],
-      watchedRepositories: [{ repository: "fankaidev/grovie" }],
+      watchedRepositories: [watchedRepository("fankaidev/grovie")],
       adminConsole: {
         enabled: false,
       },
@@ -1349,7 +1364,7 @@ function writeDaemonLogs(root: string, input: { stdout: string; stderr: string }
 function configureLocalAgent(
   localState: FakeLocalState,
   agentNames = ["coder"],
-  watchedRepositories: Array<{ repository: string; label?: string }> = [],
+  watchedRepositories: Array<{ repository: string; label?: string; trust: { allowedAuthors: { mode: "current-user"; login: string } } }> = [],
 ): void {
   saveGlobalConfig(localState.paths.root, {
     version: 1,
@@ -1363,6 +1378,19 @@ function configureLocalAgent(
       enabled: false,
     },
   });
+}
+
+function watchedRepository(repository: string, label?: string) {
+  return {
+    repository,
+    ...(label === undefined ? {} : { label }),
+    trust: {
+      allowedAuthors: {
+        mode: "current-user" as const,
+        login: "fankaidev",
+      },
+    },
+  };
 }
 
 class FakeLocalState implements RunLocalState {

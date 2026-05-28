@@ -70,7 +70,7 @@ describe("config helpers", () => {
     expect(loaded.config.safety.allowDefaultBranchPush).toBe(false);
   });
 
-  it("[UC-DAEMON-02-S12] allows watched repositories to omit trust policy", () => {
+  it("[UC-DAEMON-02-S12] requires watched repositories to configure author trust policy", () => {
     const root = createTmpDir();
     writeFileSync(
       join(root, "config.yml"),
@@ -84,9 +84,34 @@ describe("config helpers", () => {
       "utf8",
     );
 
+    expect(() => loadGlobalConfig(root)).toThrow("trust: Invalid input");
+  });
+
+  it("[UC-DAEMON-02-S12] loads watched repository explicit author trust policy", () => {
+    const root = createTmpDir();
+    writeFileSync(
+      join(root, "config.yml"),
+      [
+        "version: 1",
+        "agents: []",
+        "watchedRepositories:",
+        "  - repository: fankaidev/grovie",
+        "    trust:",
+        "      allowedAuthors:",
+        "        mode: all",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
     expect(loadGlobalConfig(root).config.watchedRepositories).toEqual([
       {
         repository: "fankaidev/grovie",
+        trust: {
+          allowedAuthors: {
+            mode: "all",
+          },
+        },
       },
     ]);
   });
@@ -238,6 +263,12 @@ describe("config helpers", () => {
     const added = addWatchedRepository(loadGlobalConfig(root).config, {
       repository: "fankaidev/grovie",
       label: "ready",
+      trust: {
+        allowedAuthors: {
+          mode: "current-user",
+          login: "fankaidev",
+        },
+      },
     });
 
     saveGlobalConfig(root, added);
@@ -249,6 +280,12 @@ describe("config helpers", () => {
         {
           repository: "fankaidev/grovie",
           label: "ready",
+          trust: {
+            allowedAuthors: {
+              mode: "current-user",
+              login: "fankaidev",
+            },
+          },
         },
       ],
       daemon: {
@@ -270,6 +307,12 @@ describe("config helpers", () => {
       watchedRepositories: [
         {
           repository: "fankaidev/grovie",
+          trust: {
+            allowedAuthors: {
+              mode: "current-user",
+              login: "fankaidev",
+            },
+          },
         },
       ],
       stateRepo: {
@@ -309,6 +352,12 @@ describe("config helpers", () => {
         {
           repository: "fankaidev/grovie",
           label: "ready #1",
+          trust: {
+            allowedAuthors: {
+              mode: "selected",
+              logins: ["fankaidev", "trusted-user"],
+            },
+          },
         },
       ],
       stateRepo: {
@@ -344,6 +393,12 @@ describe("config helpers", () => {
         {
           repository: "fankaidev/grovie",
           label: "ready #1",
+          trust: {
+            allowedAuthors: {
+              mode: "selected",
+              logins: ["fankaidev", "trusted-user"],
+            },
+          },
         },
       ],
       stateRepo: {

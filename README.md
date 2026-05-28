@@ -172,7 +172,7 @@ This keeps collaboration inspectable: humans and agents coordinate through norma
 
 ## Commands
 
-`grovie init` creates the global Grovie config at `~/.grovie/config.yml`. In an interactive terminal it can pick a watched repository from the current GitHub remote or recent GitHub repositories, enable detected local runtimes as agents, and enable the local-only admin console. Existing configs are kept unless you confirm replacement; scripts can use `grovie init --yes --repo owner/repo --runtime codex` or `grovie init --force --yes --repo owner/repo --runtime codex`.
+`grovie init` creates the global Grovie config at `~/.grovie/config.yml`. In an interactive terminal it can pick a watched repository from the current GitHub remote or recent GitHub repositories, choose which issue creators are allowed to trigger automatic runs, enable detected local runtimes as agents, and enable the local-only admin console. Existing configs are kept unless you confirm replacement; scripts can use `grovie init --yes --repo owner/repo --runtime codex` or `grovie init --force --yes --repo owner/repo --runtime codex`.
 
 Edit `watchedRepositories` in `~/.grovie/config.yml` after initialization to control the global daemon schedule. Each entry can include the repository, queue label, branch policy, and trusted authors in one visible config block.
 
@@ -180,7 +180,13 @@ Edit `watchedRepositories` in `~/.grovie/config.yml` after initialization to con
 watchedRepositories:
   - repository: owner/repo
     label: grovie
+    trust:
+      allowedAuthors:
+        mode: current-user
+        login: your-github-login
 ```
+
+To allow any issue creator for a watched repository, use `trust.allowedAuthors.mode: all` explicitly.
 
 `grovie doctor` validates the global Grovie config, then confirms the current `gh` login plus CLI runtime availability.
 
@@ -197,7 +203,7 @@ watchedRepositories:
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The safety boundary is intentionally simple:
 
 - `grovie daemon start` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
-- Automatic daemon queue runs require the issue creator to be trusted by watched repository policy; when no trusted authors are configured, the authenticated `gh` user is trusted by default.
+- Automatic daemon queue runs require the issue creator to match the watched repository author trust policy. `current-user` allows only the configured login; `selected` allows configured logins; `all` allows any issue creator.
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
 - It passes runtime child processes only a small baseline environment plus variables explicitly listed in the configured agent `envKeys`.
@@ -216,7 +222,7 @@ Use this checklist before trusting a new machine or repository:
 3. Run `grovie doctor` and confirm config, GitHub auth, and local agent runtime availability are green.
 4. Note the concrete agent id shown by `grovie doctor`, such as `codex@your-machine-id`.
 5. Edit `watchedRepositories` in `~/.grovie/config.yml` if you need to add or adjust repositories this machine should poll.
-6. Optionally set queue label, branch prefix, or trusted authors on each repository entry.
+6. Confirm each watched repository has the intended `trust.allowedAuthors` policy.
 7. Create a small test issue in GitHub and label it with the queue label, usually `grovie`.
 8. Start the daemon with `grovie daemon start`.
 9. Assign the issue with `grovie issue assign owner/repo#123 codex@your-machine-id`.

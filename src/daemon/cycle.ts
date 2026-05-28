@@ -1,3 +1,4 @@
+import { resolveAllowedIssueAuthors } from "../config.js";
 import { formatIssueReference } from "../github.js";
 import { resolveLocalIdentity } from "../identity.js";
 import { inspectQueue, renderSkippedQueueSummary, selectRunnableCandidates, type IssueActivity, type QueueCandidate, type QueueInspectionResult } from "../queue.js";
@@ -257,29 +258,22 @@ export function advanceSilentOwnOutputSkips(
   }
 }
 
-export function resolveTrustedIssueAuthors(input: Pick<DaemonInput, "config" | "github">): { ok: true; value: string[] } | { ok: false; message: string } {
-  const configured = input.config.trust?.trustedAuthors.filter((author) => author.trim().length > 0) ?? [];
+export function resolveTrustedIssueAuthors(input: Pick<DaemonInput, "config" | "github">): { ok: true; value: string[] | undefined } | { ok: false; message: string } {
+  return resolveAllowedIssueAuthors(input.config, () => {
+    const authenticated = input.github.getAuthenticatedUser();
 
-  if (configured.length > 0) {
+    if (!authenticated.ok) {
+      return {
+        ok: false,
+        message: `Could not resolve default trusted issue creator from gh login: ${authenticated.error.message}`,
+      };
+    }
+
     return {
       ok: true,
-      value: configured,
+      value: authenticated.value.login,
     };
-  }
-
-  const authenticated = input.github.getAuthenticatedUser();
-
-  if (!authenticated.ok) {
-    return {
-      ok: false,
-      message: `Could not resolve default trusted issue creator from gh login: ${authenticated.error.message}`,
-    };
-  }
-
-  return {
-    ok: true,
-    value: [authenticated.value.login],
-  };
+  });
 }
 
 function renderActivityTriggerMessage(trigger: IssueActivity["trigger"]): string {

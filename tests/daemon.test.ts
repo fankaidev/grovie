@@ -2544,6 +2544,45 @@ describe("runDaemonCycle", () => {
     expect(runs).toHaveLength(1);
   });
 
+  it("[UC-DAEMON-02-S17] can explicitly allow all issue creators", async () => {
+    const machineId = resolveMachineId(hostname());
+    const github = new FakeGitHub([
+      fakeIssue({
+        author: "external-user",
+        labels: ["grovie", `agent:coder@${machineId}`],
+      }),
+    ]);
+    const runs: RunIssueAsyncInput[] = [];
+
+    const result = await runDaemonCycle({
+      repository: "fankaidev/grovie",
+      label: "grovie",
+      config: {
+        ...defaultConfig(),
+        trust: {
+          allowedAuthors: {
+            mode: "all",
+          },
+        },
+      },
+      configPath: "/home/user/.grovie/config.yml",
+      github,
+      once: true,
+      localAgents: [configuredCodexAgent("coder", machineId)],
+      now: () => NOW,
+      issueRunner: (input) => {
+        runs.push(input);
+        return {
+          exitCode: 0,
+          stdout: "coder ran",
+        };
+      },
+    });
+
+    expect(result.processed).toBe(true);
+    expect(runs).toHaveLength(1);
+  });
+
   it("[UC-DAEMON-02-S11] skips canceled assignments without writing advisory claim comments", async () => {
     const machineId = resolveMachineId(hostname());
     const github = new FakeGitHub([
