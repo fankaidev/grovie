@@ -1,5 +1,0 @@
-{
-  "schemaVersion": 1,
-  "action": "no-op",
-  "reason": "Phase 1 (codex@kai-mini creating the README PR) is not yet complete. No PR exists for the README change. pi@kai-mini is responsible for Phase 2 (review) and Phase 4 (version bump), which both depend on Phase 1 being done first."
-}
