@@ -10,7 +10,7 @@
 | R2 | Execution locks are local and keyed by `(issue, agent)`. |
 | R3 | Different agents can work on the same issue independently. |
 | R4 | Fresh issue and pull request reads remain the source of truth before starting work. |
-| R5 | Automatic queue runs require an explicit watched repository author trust policy. `trust.allowedAuthors.mode: current-user` allows only the configured login, `selected` allows configured logins, and `all` allows any issue creator. |
+| R5 | Automatic queue runs require an explicit watched repository author trust policy. `trust.allowedAuthors` lists allowed GitHub logins, and a single `*` allows any issue creator. |
 
 ## Scenarios
 

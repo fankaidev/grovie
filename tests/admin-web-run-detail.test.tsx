@@ -92,10 +92,7 @@ describe("admin web home route", () => {
             repository: "fankaidev/grovie",
             label: "grovie",
             trust: {
-              allowedAuthors: {
-                mode: "current-user",
-                login: "fankaidev",
-              },
+              allowedAuthors: ["fankaidev"],
             },
           }],
         });
@@ -153,10 +150,7 @@ describe("admin web home route", () => {
         repository: "fankaidev/grovie",
         label: "grovie",
         trust: {
-          allowedAuthors: {
-            mode: "current-user",
-            login: "fankaidev",
-          },
+          allowedAuthors: ["fankaidev"],
         },
       }],
       activity: expect.arrayContaining([
@@ -242,10 +236,7 @@ describe("admin web home route", () => {
             repository: "fankaidev/grovie",
             label: "grovie",
             trust: {
-              allowedAuthors: {
-                mode: "current-user",
-                login: "fankaidev",
-              },
+              allowedAuthors: ["fankaidev"],
             },
           }],
           activity: [{

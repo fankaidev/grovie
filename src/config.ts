@@ -22,24 +22,13 @@ export const agentNameSchema = z.string()
   .refine((value) => slugifyIdentityPart(value).length > 0, "must contain at least one letter or number")
   .refine((value) => slugifyIdentityPart(value) !== "default", "default is reserved; configure a named local agent");
 
-export const allowedAuthorsSchema = z.discriminatedUnion("mode", [
-  z.strictObject({
-    mode: z.literal("current-user"),
-    login: z.string().min(1, "must not be empty"),
-  }),
-  z.strictObject({
-    mode: z.literal("all"),
-  }),
-  z.strictObject({
-    mode: z.literal("selected"),
-    logins: z.array(z.string().min(1, "must not be empty")).min(1, "must include at least one login"),
-  }),
-]);
+export const allowedAuthorsSchema = z.array(z.string().min(1, "must not be empty"))
+  .min(1, "must include at least one login or *")
+  .refine((value) => !value.includes("*") || value.length === 1, "* cannot be combined with GitHub logins");
 
 export const trustPolicySchema = z.strictObject({
-  allowedAuthors: allowedAuthorsSchema.optional(),
-  trustedAuthors: z.array(z.string().min(1, "must not be empty")).optional(),
-}).refine((value) => value.allowedAuthors !== undefined || value.trustedAuthors !== undefined, "must configure allowedAuthors");
+  allowedAuthors: allowedAuthorsSchema,
+});
 
 export const repositoryPolicySchema = z.strictObject({
   queue: z.strictObject({
@@ -175,49 +164,26 @@ export function resolveWatchedRepositoryConfig(watchedRepository: WatchedReposit
 
 export function resolveAllowedIssueAuthors(
   config: GrovieConfig,
-  readAuthenticatedUser: () => { ok: true; value: string } | { ok: false; message: string },
 ): { ok: true; value: string[] | undefined } | { ok: false; message: string } {
   const allowedAuthors = config.trust?.allowedAuthors;
 
   if (allowedAuthors !== undefined) {
-    if (allowedAuthors.mode === "all") {
+    if (allowedAuthors.includes("*")) {
       return {
         ok: true,
         value: undefined,
       };
     }
 
-    if (allowedAuthors.mode === "selected") {
-      return {
-        ok: true,
-        value: allowedAuthors.logins,
-      };
-    }
-
     return {
       ok: true,
-      value: [allowedAuthors.login],
+      value: allowedAuthors,
     };
-  }
-
-  const legacyTrustedAuthors = config.trust?.trustedAuthors?.filter((author) => author.trim().length > 0) ?? [];
-
-  if (legacyTrustedAuthors.length > 0) {
-    return {
-      ok: true,
-      value: legacyTrustedAuthors,
-    };
-  }
-
-  const authenticated = readAuthenticatedUser();
-
-  if (!authenticated.ok) {
-    return authenticated;
   }
 
   return {
-    ok: true,
-    value: [authenticated.value],
+    ok: false,
+    message: "Watched repository trust.allowedAuthors must be configured explicitly.",
   };
 }
 

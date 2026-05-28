@@ -233,10 +233,7 @@ describe("admin console server", () => {
           repository: "fankaidev/grovie",
           label: "grovie",
           trust: {
-            allowedAuthors: {
-              mode: "current-user",
-              login: "fankaidev",
-            },
+            allowedAuthors: ["fankaidev"],
           },
         },
       ],
@@ -274,10 +271,7 @@ describe("admin console server", () => {
         repository: "fankaidev/grovie",
         label: "ready",
         trust: {
-          allowedAuthors: {
-            mode: "current-user",
-            login: "fankaidev",
-          },
+          allowedAuthors: ["fankaidev"],
         },
       }],
       adminConsole: { enabled: true },
@@ -291,10 +285,7 @@ describe("admin console server", () => {
         repository: "fankaidev/grovie",
         label: "ready",
         trust: {
-          allowedAuthors: {
-            mode: "current-user",
-            login: "fankaidev",
-          },
+          allowedAuthors: ["fankaidev"],
         },
       }],
     });
@@ -443,10 +434,7 @@ describe("admin console server", () => {
         repository: "fankaidev/grovie",
         label: "ready",
         trust: {
-          allowedAuthors: {
-            mode: "current-user",
-            login: "fankaidev",
-          },
+          allowedAuthors: ["fankaidev"],
         },
       }],
       adminConsole: { enabled: true },

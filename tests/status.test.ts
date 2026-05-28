@@ -253,10 +253,7 @@ describe("local run status", () => {
           repository: "fankaidev/grovie",
           label: "grovie",
           trust: {
-            allowedAuthors: {
-              mode: "current-user",
-              login: "fankaidev",
-            },
+            allowedAuthors: ["fankaidev"],
           },
         },
       ],

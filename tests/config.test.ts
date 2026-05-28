@@ -40,7 +40,7 @@ describe("config helpers", () => {
         prefix: "ai/",
       },
       trust: {
-        trustedAuthors: ["fankaidev", "trusted-user"],
+        allowedAuthors: ["fankaidev", "trusted-user"],
       },
     });
 
@@ -52,7 +52,7 @@ describe("config helpers", () => {
         prefix: "ai/",
       },
       trust: {
-        trustedAuthors: ["fankaidev", "trusted-user"],
+        allowedAuthors: ["fankaidev", "trusted-user"],
       },
       safety: {
         allowDefaultBranchPush: false,
@@ -98,7 +98,7 @@ describe("config helpers", () => {
         "  - repository: fankaidev/grovie",
         "    trust:",
         "      allowedAuthors:",
-        "        mode: all",
+        "        - '*'",
         "",
       ].join("\n"),
       "utf8",
@@ -108,9 +108,7 @@ describe("config helpers", () => {
       {
         repository: "fankaidev/grovie",
         trust: {
-          allowedAuthors: {
-            mode: "all",
-          },
+          allowedAuthors: ["*"],
         },
       },
     ]);
@@ -264,10 +262,7 @@ describe("config helpers", () => {
       repository: "fankaidev/grovie",
       label: "ready",
       trust: {
-        allowedAuthors: {
-          mode: "current-user",
-          login: "fankaidev",
-        },
+        allowedAuthors: ["fankaidev"],
       },
     });
 
@@ -281,10 +276,7 @@ describe("config helpers", () => {
           repository: "fankaidev/grovie",
           label: "ready",
           trust: {
-            allowedAuthors: {
-              mode: "current-user",
-              login: "fankaidev",
-            },
+            allowedAuthors: ["fankaidev"],
           },
         },
       ],
@@ -308,10 +300,7 @@ describe("config helpers", () => {
         {
           repository: "fankaidev/grovie",
           trust: {
-            allowedAuthors: {
-              mode: "current-user",
-              login: "fankaidev",
-            },
+            allowedAuthors: ["fankaidev"],
           },
         },
       ],
@@ -353,10 +342,7 @@ describe("config helpers", () => {
           repository: "fankaidev/grovie",
           label: "ready #1",
           trust: {
-            allowedAuthors: {
-              mode: "selected",
-              logins: ["fankaidev", "trusted-user"],
-            },
+            allowedAuthors: ["fankaidev", "trusted-user"],
           },
         },
       ],
@@ -394,10 +380,7 @@ describe("config helpers", () => {
           repository: "fankaidev/grovie",
           label: "ready #1",
           trust: {
-            allowedAuthors: {
-              mode: "selected",
-              logins: ["fankaidev", "trusted-user"],
-            },
+            allowedAuthors: ["fankaidev", "trusted-user"],
           },
         },
       ],

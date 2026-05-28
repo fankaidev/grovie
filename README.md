@@ -182,11 +182,10 @@ watchedRepositories:
     label: grovie
     trust:
       allowedAuthors:
-        mode: current-user
-        login: your-github-login
+        - your-github-login
 ```
 
-To allow any issue creator for a watched repository, use `trust.allowedAuthors.mode: all` explicitly.
+To allow any issue creator for a watched repository, use `allowedAuthors: ["*"]` explicitly.
 
 `grovie doctor` validates the global Grovie config, then confirms the current `gh` login plus CLI runtime availability.
 
@@ -203,7 +202,7 @@ To allow any issue creator for a watched repository, use `trust.allowedAuthors.m
 Grovie is a local executor, so it runs with your local filesystem, GitHub credentials, and agent CLI permissions. The safety boundary is intentionally simple:
 
 - `grovie daemon start` polls repositories listed in `~/.grovie/config.yml`; that list is scheduling configuration, not an authorization boundary.
-- Automatic daemon queue runs require the issue creator to match the watched repository author trust policy. `current-user` allows only the configured login; `selected` allows configured logins; `all` allows any issue creator.
+- Automatic daemon queue runs require the issue creator to match the watched repository author trust policy. `allowedAuthors` lists allowed GitHub logins; a single `*` allows any issue creator.
 - It prepares issue work in isolated worktrees under `~/.grovie/worktrees/`.
 - It stores task handoff files and logs under `~/.grovie/runs/`.
 - It passes runtime child processes only a small baseline environment plus variables explicitly listed in the configured agent `envKeys`.

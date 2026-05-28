@@ -259,21 +259,7 @@ export function advanceSilentOwnOutputSkips(
 }
 
 export function resolveTrustedIssueAuthors(input: Pick<DaemonInput, "config" | "github">): { ok: true; value: string[] | undefined } | { ok: false; message: string } {
-  return resolveAllowedIssueAuthors(input.config, () => {
-    const authenticated = input.github.getAuthenticatedUser();
-
-    if (!authenticated.ok) {
-      return {
-        ok: false,
-        message: `Could not resolve default trusted issue creator from gh login: ${authenticated.error.message}`,
-      };
-    }
-
-    return {
-      ok: true,
-      value: authenticated.value.login,
-    };
-  });
+  return resolveAllowedIssueAuthors(input.config);
 }
 
 function renderActivityTriggerMessage(trigger: IssueActivity["trigger"]): string {

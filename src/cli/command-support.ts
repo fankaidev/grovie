@@ -130,22 +130,8 @@ export function renderGlobalConfigSource(path: string, watchedRepositoryCount: n
   return `${path} (${repositoryText}).`;
 }
 
-export function resolveQueueTrustedAuthors(config: GrovieConfig, github: GitHubGateway): { ok: true; value: string[] | undefined } | { ok: false; message: string } {
-  return resolveAllowedIssueAuthors(config, () => {
-    const authenticated = github.getAuthenticatedUser();
-
-    if (!authenticated.ok) {
-      return {
-        ok: false,
-        message: `Could not resolve default trusted issue creator from gh login: ${authenticated.error.message}`,
-      };
-    }
-
-    return {
-      ok: true,
-      value: authenticated.value.login,
-    };
-  });
+export function resolveQueueTrustedAuthors(config: GrovieConfig, _github: GitHubGateway): { ok: true; value: string[] | undefined } | { ok: false; message: string } {
+  return resolveAllowedIssueAuthors(config);
 }
 
 export function readStringOption(

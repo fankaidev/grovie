@@ -176,8 +176,7 @@ describe("CLI command registration", () => {
       ].join("\n"),
     });
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("repository: fankaidev/qstory");
-    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("mode: current-user");
-    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("login: fankaidev");
+    expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("- fankaidev");
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("name: codex");
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("name: claude-code");
     expect(readFileSync(join(globalRoot, "config.yml"), "utf8")).toContain("host: 127.0.0.1");
@@ -227,7 +226,7 @@ describe("CLI command registration", () => {
     });
     expect(readFileSync(`${configPath}.bak`, "utf8")).toBe("version: 1\nagents: []\nwatchedRepositories: []\n");
     expect(readFileSync(configPath, "utf8")).toContain("repository: fankaidev/grovie");
-    expect(readFileSync(configPath, "utf8")).toContain("login: fankaidev");
+    expect(readFileSync(configPath, "utf8")).toContain("- fankaidev");
     expect(readFileSync(configPath, "utf8")).toContain("enabled: true");
   });
 
@@ -239,7 +238,7 @@ describe("CLI command registration", () => {
     expect(runCli(["init", "--yes", "--repo", "fankaidev/grovie", "--allow-all-authors"], {
       localState,
     }).exitCode).toBe(0);
-    expect(readFileSync(configPath, "utf8")).toContain("mode: all");
+    expect(readFileSync(configPath, "utf8")).toContain('- "*"');
   });
 
   it("[UC-DAEMON-01-S06] reports invalid global config fields through doctor", () => {
@@ -1364,7 +1363,7 @@ function writeDaemonLogs(root: string, input: { stdout: string; stderr: string }
 function configureLocalAgent(
   localState: FakeLocalState,
   agentNames = ["coder"],
-  watchedRepositories: Array<{ repository: string; label?: string; trust: { allowedAuthors: { mode: "current-user"; login: string } } }> = [],
+  watchedRepositories: Array<{ repository: string; label?: string; trust: { allowedAuthors: string[] } }> = [],
 ): void {
   saveGlobalConfig(localState.paths.root, {
     version: 1,
@@ -1385,10 +1384,7 @@ function watchedRepository(repository: string, label?: string) {
     repository,
     ...(label === undefined ? {} : { label }),
     trust: {
-      allowedAuthors: {
-        mode: "current-user" as const,
-        login: "fankaidev",
-      },
+      allowedAuthors: ["fankaidev"],
     },
   };
 }
