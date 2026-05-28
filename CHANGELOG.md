@@ -2,7 +2,9 @@
 
 ## 0.2.1 - 2026-05-28
 
-- Updated README with demo issue links.
+- Added demo issue links to README documenting #338 (multi-agent turn-taking), #339 (discussion and consensus), and #340 (code-change workflow).
+- Made author trust explicit in daemon config and session management.
+- Improved README setup instructions to prefer `init`.
 - Bumped package version to 0.2.1.
 
 ## 0.2.0 - 2026-05-27
